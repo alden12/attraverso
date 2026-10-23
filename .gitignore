@@ -1,0 +1,12 @@
+node_modules/
+dist/
+standalone/
+*.local
+
+# Every dotenv file except the example, so a local .env with a database URL cannot be committed by accident.
+.env*
+!.env.example
+
+test-results/
+playwright-report/
+.DS_Store

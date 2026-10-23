@@ -1,0 +1,1 @@
+ALTER TABLE "allowed_emails" ALTER COLUMN "created_at" SET DEFAULT to_char(now() AT TIME ZONE 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"');

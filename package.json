@@ -1,0 +1,78 @@
+{
+  "name": "attraverso",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Durable, structured project memory that Claude reads and writes over MCP, stored as version-controlled YAML.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alden12/attraverso.git"
+  },
+  "homepage": "https://github.com/alden12/attraverso#readme",
+  "bugs": {
+    "url": "https://github.com/alden12/attraverso/issues"
+  },
+  "type": "module",
+  "packageManager": "yarn@1.22.22",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "attraverso": "./dist/server.js"
+  },
+  "scripts": {
+    "mcp": "node dist/server.js",
+    "mcp:dev": "vite-node src/mcp/server.ts",
+    "build": "vite build --ssr src/mcp/server.ts && yarn viewer:build",
+    "build:standalone": "yarn viewer:build && vite-node scripts/buildStandalone.ts",
+    "build:bundle": "yarn build:standalone && vite-node scripts/buildBundle.ts",
+    "viewer": "vite --config roadmap/vite.config.ts",
+    "viewer:build": "vite build --config roadmap/vite.config.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:pg": "APM_TEST_PG_URL=postgres://apm:apm@127.0.0.1:55432/apm_test vitest run",
+    "pg:up": "docker compose -f docker-compose.test.yml up -d --wait",
+    "pg:down": "docker compose -f docker-compose.test.yml down -v",
+    "typecheck": "tsc --noEmit",
+    "apm:check": "vite-node scripts/checkStore.ts",
+    "setup:desktop": "vite-node scripts/setupDesktop.ts",
+    "verify": "yarn typecheck && yarn viewer:build && yarn test",
+    "verify:all": "yarn verify && yarn test:e2e",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "db:generate": "drizzle-kit generate"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.5.4",
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "dotenv": "^17.4.2",
+    "drizzle-orm": "^0.45.2",
+    "fflate": "^0.8.3",
+    "pg": "^8",
+    "uuid": "^14.0.1",
+    "yaml": "^2.9.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@dagrejs/dagre": "^1.1.0",
+    "@playwright/test": "^1.61.1",
+    "@types/node": "^22.0.0",
+    "@types/pg": "^8.21.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "@xyflow/react": "^12.3.0",
+    "drizzle-kit": "^0.31.10",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0",
+    "react-markdown": "^9.0.0",
+    "remark-gfm": "^4.0.0",
+    "typescript": "^5.6.0",
+    "vite": "^5.4.0",
+    "vite-node": "^2.1.0",
+    "vitest": "^2.1.0"
+  },
+  "resolutions": {
+    "zod": "3.25.76"
+  }
+}

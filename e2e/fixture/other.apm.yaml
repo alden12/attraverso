@@ -1,0 +1,26 @@
+projects:
+  - key: other
+    name: The other half
+    type: software
+    status: active
+    id: 01a169c5-05a2-7108-a325-9397c6708a74
+    created_at: 2026-10-23T17:18:02.146Z
+    updated_at: 2026-10-23T17:18:02.146Z
+    areas: []
+    items:
+      - ref: OPS-1
+        area: OPS
+        title: Host the server
+        status: to-do
+        sort_path: "000001"
+        id: 01a169c5-05a5-776b-b3a7-2ea5a4308da9
+        created_at: 2026-10-23T17:18:02.149Z
+        updated_at: 2026-10-23T17:18:02.149Z
+      - ref: OPS-2
+        area: OPS
+        title: Sign people in
+        status: to-do
+        sort_path: "000002"
+        id: 01a169c5-05aa-731a-9a1a-8280db3b8bf2
+        created_at: 2026-10-23T17:18:02.155Z
+        updated_at: 2026-10-23T17:18:02.155Z

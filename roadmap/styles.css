@@ -1,0 +1,823 @@
+:root {
+  --bg: #0b0f14;
+  --panel: #131922;
+  --panel-2: #0f141b;
+  --line: #232c38;
+  --text: #dce3ec;
+  --muted: #8896a6;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font:
+    14px/1.5 ui-sans-serif,
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    sans-serif;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* Boot states (VIEW-11) ------------------------------------------------------
+   The plan is fetched, so there is a moment before the graph exists and a way for it never to arrive. */
+.boot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 100%;
+  padding: 24px;
+  text-align: center;
+  color: var(--muted);
+}
+.boot--error strong {
+  color: var(--text);
+  font-size: 15px;
+}
+.boot__hint {
+  max-width: 46em;
+}
+/* The sign-in button on the hosted viewer (VIEW-24). Deliberately the only control on that screen: it is a
+   decision with one option, and anything else competing with it is noise. */
+.boot__action {
+  margin-top: 8px;
+  padding: 8px 16px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+.boot__action:hover {
+  border-color: var(--text);
+}
+.boot code {
+  color: var(--text);
+  font-size: 12px;
+}
+
+/* Topbar + filters ---------------------------------------------------------- */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel-2);
+  flex-wrap: wrap;
+}
+
+.topbar__title {
+  font-size: 15px;
+}
+.topbar__title strong {
+  letter-spacing: -0.01em;
+}
+.topbar__sub {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+/* Project switcher (VIEW-4). It carries the project's name where the title used to be, so it is weighted like
+   a title - but lifted off the topbar rather than matching it, since a switcher nobody can find is a switcher
+   that does not exist. */
+.picker {
+  border: 1px solid #3a4759;
+  border-radius: 8px;
+  background: #1e2836;
+  color: var(--text);
+  font: inherit;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  padding: 3px 8px;
+  cursor: pointer;
+}
+.picker:hover {
+  border-color: #4d5e77;
+  background: #263243;
+}
+
+.filters {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+.filters__group {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+  transition:
+    opacity 0.12s,
+    border-color 0.12s;
+}
+.chip:hover {
+  border-color: #38455a;
+}
+.chip[data-off="true"] {
+  opacity: 0.4;
+}
+.chip__dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--area, var(--muted));
+}
+.chip__count {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+}
+
+/* Segmented colour-by control */
+.segmented {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+.segmented__label {
+  color: var(--muted);
+  font-size: 11px;
+  padding: 0 4px 0 2px;
+}
+.segmented__btn {
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.segmented__btn[data-on="true"] {
+  background: #263243;
+  color: var(--text);
+}
+
+/* Body: graph + detail ------------------------------------------------------ */
+.body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+.graph {
+  flex: 1;
+  min-width: 0;
+  position: relative; /* the notice below sits over the canvas rather than displacing it */
+}
+
+/* Why the graph is empty: no project chosen, an unknown one asked for, or an empty store (VIEW-4). */
+.graph__notice {
+  position: absolute;
+  z-index: 5;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  max-width: 34em;
+  padding: 14px 18px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel-2);
+  color: var(--muted);
+  text-align: center;
+  font-size: 14px;
+}
+
+/* A collapsible block in the detail pane, shared by every panel below the prose. The heading is a real
+   button so the disclosure is keyboard-reachable (VIEW-27); it is styled to read as a heading rather than a
+   control, since it is scanned far more often than it is clicked. */
+.section {
+  border-top: 1px solid var(--line);
+}
+.section__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 10px 16px;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-align: left;
+  cursor: pointer;
+}
+.section__head:hover {
+  color: var(--text);
+}
+.section__caret {
+  font-size: 9px;
+  width: 9px;
+}
+.section__count {
+  color: var(--muted);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+.section__body {
+  padding: 0 16px 12px;
+}
+
+/* An item's measurements, under its prose (METRIC-4). A table rather than a list: three columns that line
+   up are scannable, and the whole point is noticing at a glance that a number has moved. */
+.metrics__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.metrics__table td {
+  padding: 3px 0;
+  vertical-align: baseline;
+}
+.metrics__name {
+  color: var(--text);
+}
+.metrics__value {
+  text-align: right;
+  padding-left: 10px !important;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+/* A distribution is prose-shaped, so it wraps where a number must not. */
+.metrics__value[data-wrap="true"] {
+  white-space: normal;
+  font-variant-numeric: normal;
+}
+/* kg beside lb is a 2.2x step change; the human-facing surface should not be the one place that stays quiet
+   about it. */
+.metrics__value[data-mixed="true"] {
+  color: #e0a458;
+}
+.metrics__count {
+  text-align: right;
+  padding-left: 12px !important;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* The agreed order (PROJ-8), floated over the graph rather than docked beside it: it is short, it is opened
+   deliberately, and it should not permanently narrow the thing the viewer exists to show. Top-left, because
+   the detail pane already owns the right edge and the two are routinely open together. */
+.next {
+  position: absolute;
+  z-index: 5;
+  top: 12px;
+  left: 12px;
+  width: 300px;
+  max-height: calc(100% - 24px);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel-2);
+  overflow: hidden;
+}
+.next__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 8px 8px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.next__label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.next__close {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 6px;
+}
+.next__close:hover {
+  color: var(--text);
+}
+.next__list {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  overflow-y: auto;
+}
+.next__item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
+  color: var(--text);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.next__item:hover {
+  background: var(--panel);
+}
+.next__item[data-on="true"] {
+  border-color: #38455a;
+  background: var(--panel);
+}
+/* Filtered out of the graph, so clicking it would select something invisible. Dimmed rather than removed:
+   shortening the agreed order because of a view filter would misreport what was agreed. */
+.next__item[data-hidden="true"] {
+  opacity: 0.4;
+}
+.next__pos {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  min-width: 1.2em;
+}
+.next__id {
+  font-weight: 700;
+  white-space: nowrap;
+}
+.next__title {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* React Flow surface tuning */
+.react-flow {
+  background: var(--bg);
+}
+.react-flow__controls button {
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  color: var(--text);
+  fill: var(--text);
+}
+.react-flow__minimap {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+/* Box resize handles (NodeResizer on area + ticket boxes) -------------------- */
+.box-resize-line {
+  border-color: color-mix(in srgb, var(--area, #4f9dff) 70%, transparent) !important;
+  border-width: 1.5px !important;
+}
+.box-resize-handle {
+  width: 9px !important;
+  height: 9px !important;
+  border-radius: 2px !important;
+  background: var(--area, #4f9dff) !important;
+  border: 1px solid var(--bg) !important;
+}
+
+/* Area box (epic container) ------------------------------------------------- */
+.area-box {
+  width: 100%;
+  height: 100%;
+  border: 1px solid color-mix(in srgb, var(--area) 45%, var(--line));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--area) 8%, var(--panel-2));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--area) 12%, transparent);
+}
+.area-box__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.area-box__name {
+  color: var(--area);
+}
+.area-box__count {
+  color: var(--muted);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Ticket box (parent ticket with nested sub-tickets) ------------------------ */
+.ticket-box {
+  width: 100%;
+  height: 100%;
+  border: 1px solid color-mix(in srgb, var(--area) 60%, var(--line));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--area) 12%, var(--panel));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--area) 16%, transparent);
+  transition:
+    box-shadow 0.12s,
+    opacity 0.12s;
+}
+.ticket-box[data-selected="true"] {
+  box-shadow:
+    0 0 0 1px var(--area),
+    0 6px 22px rgba(0, 0, 0, 0.45);
+}
+.ticket-box[data-dimmed="true"] {
+  opacity: 0.34;
+}
+.ticket-box__title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 12px;
+  font-size: 12px;
+}
+.ticket-box__id {
+  font-weight: 700;
+  color: var(--area);
+  font-variant-numeric: tabular-nums;
+}
+.ticket-box__label {
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ticket-box__label[data-strike="true"] {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+.ticket-box__count {
+  margin-left: auto;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Item node ----------------------------------------------------------------- */
+.item-node {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel);
+  overflow: hidden;
+  transition:
+    box-shadow 0.12s,
+    opacity 0.12s,
+    border-color 0.12s;
+}
+.item-node[data-selected="true"] {
+  border-color: var(--area);
+  box-shadow:
+    0 0 0 1px var(--area),
+    0 6px 22px rgba(0, 0, 0, 0.45);
+}
+.item-node[data-dimmed="true"] {
+  opacity: 0.32;
+}
+.item-node__rail {
+  width: 4px;
+  background: var(--area);
+  flex: none;
+}
+.item-node__body {
+  padding: 8px 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.item-node__meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.item-node__id {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--area);
+  font-variant-numeric: tabular-nums;
+}
+.item-node__status {
+  font-size: 13px;
+  color: var(--muted);
+}
+.item-node__title {
+  font-size: 13px;
+  line-height: 1.3;
+  color: var(--text);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.item-node__title[data-strike="true"] {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+
+.react-flow__handle {
+  width: 6px;
+  height: 6px;
+  background: #46536a;
+  border: none;
+}
+/* A handle with a hidden connection (filtered-out endpoint, or a satisfied cross-group link): a brighter, larger
+ * dot in the area hue with a soft halo, so you can tell at a glance there is a link to reveal on hover. */
+.react-flow__handle.handle--hidden-link {
+  width: 10px;
+  height: 10px;
+  background: var(--area, #4f9dff);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--area, #4f9dff) 28%, transparent);
+}
+
+/* Detail panel -------------------------------------------------------------- */
+.detail {
+  width: 420px;
+  flex: none;
+  border-left: 1px solid var(--line);
+  background: var(--panel-2);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.detail__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.detail__id {
+  font-weight: 700;
+  font-size: 14px;
+  margin-right: 10px;
+}
+.detail__status {
+  color: var(--muted);
+  font-size: 12px;
+}
+/* Styled to read as the label it replaces until you reach for it, so the header does not gain a form control's
+   weight for a field that is usually only being read. */
+.detail__status--edit {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 2px 4px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.detail__status--edit:hover:not(:disabled),
+.detail__status--edit:focus {
+  border-color: var(--line);
+  color: var(--text);
+  outline: none;
+}
+.detail__status--edit:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+.detail__status--edit option {
+  background: var(--panel);
+  color: var(--text);
+}
+.detail__status-error {
+  color: #ff8a8a;
+  font-size: 12px;
+  margin-left: 8px;
+}
+.detail__close {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+}
+.detail__close:hover {
+  color: var(--text);
+}
+.detail__deps {
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+}
+.detail__dep {
+  background: none;
+  border: none;
+  color: #7fb2ff;
+  cursor: pointer;
+  padding: 0;
+  font-size: 12px;
+}
+.detail__dep:hover {
+  text-decoration: underline;
+}
+.detail__doc {
+  padding: 4px 16px 24px;
+  overflow: auto;
+  min-height: 0;
+}
+.detail__doc h1,
+.detail__doc h2,
+.detail__doc h3,
+.detail__doc h4 {
+  font-size: 14px;
+  margin: 16px 0 6px;
+}
+.detail__doc p,
+.detail__doc li {
+  color: #c3ccd8;
+  font-size: 13px;
+}
+.detail__doc code {
+  background: #1b232e;
+  padding: 1px 4px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+.detail__doc pre {
+  background: #1b232e;
+  padding: 10px;
+  border-radius: 6px;
+  overflow-x: auto;
+}
+.detail__doc pre code {
+  background: none;
+  padding: 0;
+}
+.detail__doc a {
+  color: #7fb2ff;
+}
+
+/* Attachments on a ticket (MEDIA-2). Sits below the prose in the detail pane, and stays out of the scrolling
+   document above it so the drop target does not move under the cursor mid-drag. */
+.attachments__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.attachments__item {
+  position: relative;
+  display: block;
+  border-radius: 6px;
+  overflow: hidden;
+  text-decoration: none;
+}
+.attachments__thumb {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.04);
+}
+.attachments__meta {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  font-size: 10px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+}
+.attachments__drop {
+  border: 1px dashed rgba(255, 255, 255, 0.22);
+  border-radius: 6px;
+  padding: 12px;
+  text-align: center;
+  font-size: 12px;
+  opacity: 0.75;
+  cursor: pointer;
+}
+.attachments__drop--over {
+  border-color: #4f9dff;
+  background: rgba(79, 157, 255, 0.08);
+  opacity: 1;
+}
+.attachments__readonly,
+.attachments__error {
+  font-size: 12px;
+  margin: 8px 0 0;
+  opacity: 0.75;
+}
+.attachments__error {
+  color: #ff8a8a;
+  opacity: 1;
+}
+.attachments__remove {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 18px;
+  height: 18px;
+  line-height: 1;
+  border: 0;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  font-size: 11px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.attachments__item:hover .attachments__remove,
+.attachments__remove:focus-visible {
+  opacity: 1;
+}
+.attachments__remove:disabled {
+  cursor: default;
+}
+
+/* A dependency naming another project (PROJ-11). Muted and not a link: the item it names may not be loaded,
+   so there is nothing to select, and a blue ref that did nothing when clicked would read as broken. */
+.detail__dep--elsewhere {
+  color: var(--muted);
+  cursor: help;
+  border-bottom: 1px dotted var(--line);
+}
+
+/* Another project's items, as placeholders (PROJ-11) ------------------------ */
+
+/* Same frame as an area box, drawn as absent: a dashed border and no fill, so it reads at a glance as
+   "not from here" rather than as one more area you have forgotten about. */
+.area-box[data-foreign="true"] {
+  border-style: dashed;
+  background: transparent;
+  box-shadow: none;
+}
+.area-box[data-foreign="true"] .area-box__name {
+  color: var(--muted);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: none; /* a project key is a name, not an area prefix */
+}
+
+/* A chip, not a card. There is nothing to open, so it must not look clickable: no status colour, no title,
+   no hover lift. The ref is the whole payload. */
+.ghost-node {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  padding: 0 12px;
+  border: 1px dashed color-mix(in srgb, var(--muted) 55%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--muted) 6%, transparent);
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  cursor: default;
+}
+.ghost-node[data-dimmed="true"] {
+  opacity: 0.35;
+}
+.ghost-node__ref {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

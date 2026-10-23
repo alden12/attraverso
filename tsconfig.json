@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    // "bundler", not "NodeNext": vite is the toolchain for both the server (ssr build) and the viewer,
+    // so imports stay extensionless (`./roadmapParse`) rather than needing the `.js` suffix NodeNext wants.
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    // An unused import or local is nearly always a leftover from an edit that changed direction - as one was
+    // in `DATA-16`, where a type import survived a signature being reverted. tsc already runs on every
+    // `yarn verify`, so this costs nothing and needs no linter. Parameters prefixed `_` stay allowed, which is
+    // how a signature required by an interface says "deliberately ignored".
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "verbatimModuleSyntax": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    // vite emits; tsc is only ever a checker here.
+    "noEmit": true,
+    "types": ["node", "vite/client"]
+  },
+  "include": ["src", "scripts", "roadmap", "e2e", "vite.config.ts", "playwright.config.ts"]
+}

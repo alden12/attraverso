@@ -1,0 +1,104 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1784899598232,
+      "tag": "0000_burly_firestar",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1784913815072,
+      "tag": "0001_sleepy_gorilla_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785248894876,
+      "tag": "0002_smart_ikaris",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1785494222282,
+      "tag": "0003_pink_zodiak",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1788127474688,
+      "tag": "0004_loose_hitman",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1788191498092,
+      "tag": "0005_glamorous_typhoid_mary",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1788192487724,
+      "tag": "0006_slow_deadpool",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1788275809877,
+      "tag": "0007_jittery_tag",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1788298194195,
+      "tag": "0008_daily_firestar",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1788299093758,
+      "tag": "0009_cute_marvex",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1788375271316,
+      "tag": "0010_acoustic_pixie",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1788377979673,
+      "tag": "0011_orange_rawhide_kid",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1788381139129,
+      "tag": "0012_smiling_butterfly",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1790032589899,
+      "tag": "0013_kind_bloodscream",
+      "breakpoints": true
+    }
+  ]
+}

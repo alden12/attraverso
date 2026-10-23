@@ -1,0 +1,35 @@
+# The Postgres the suite runs against when it is not running against PGlite (OPS-2).
+#
+# Local only, and disposable: `yarn pg:up`, `yarn test:pg`, `yarn pg:down`. CI does the same thing with a
+# `services:` block instead, so this file exists for the developer loop rather than for the pipeline.
+#
+# Pinned to the major version the cloud runs. Measured against the real hosted database on 2026-08-13: it
+# reported PostgreSQL 18.4, so this is 18 - it was 17 on the strength of a guess, which is exactly the kind
+# of drift this pin exists to prevent. The point of the target is to catch what the embedded engine forgives,
+# so a major version away from production would undermine it.
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: apm
+      POSTGRES_PASSWORD: apm
+      POSTGRES_DB: apm_test
+    # Not 5432: a developer machine usually already has one, and a silent connection to the wrong database is
+    # a bad way to find that out. The suite creates and drops a database per test, so it must not land on one
+    # that matters.
+    ports:
+      - "55432:5432"
+    # So `up --wait` blocks until it can actually take a connection, rather than until the container exists.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U apm -d apm_test"]
+      interval: 1s
+      timeout: 3s
+      retries: 20
+    # No volume on purpose: nothing here should survive a `down`.
+    #
+    # Mounted at `/var/lib/postgresql`, not `/var/lib/postgresql/data`. The 18 image changed convention and
+    # puts the cluster in a *subdirectory* of that path, so the old mount point lands on a boundary the image
+    # refuses to start across ("usually the result of upgrading the Docker image without upgrading the
+    # underlying database"). Cost us one failed `pg:up` when moving 17 -> 18.
+    tmpfs:
+      - /var/lib/postgresql
