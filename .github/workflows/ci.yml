@@ -1,0 +1,105 @@
+# The gate on every pull request (OPS). Until this existed, `yarn verify` was the only check and it depended
+# on a person remembering to run it - which is how the e2e suite went a week broken without anyone noticing.
+#
+# The steps are the same scripts `yarn verify:all` runs locally, listed individually rather than as the
+# aggregate so a failure names its stage in the GitHub UI instead of making someone read a log.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+# A second push to a PR makes the first run pointless, so cancel it rather than pay for both. Never on master,
+# where each commit's result is the record of whether that commit was good.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    # Pinned to the same major version as `docker-compose.test.yml`, and mapped to the same non-default
+    # port it uses, so `yarn test:pg` needs no different configuration here than it
+    # does locally. The suite creates and drops a database per test, so this needs the default superuser.
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: apm
+          POSTGRES_PASSWORD: apm
+          POSTGRES_DB: apm_test
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U apm -d apm_test"
+          --health-interval 1s
+          --health-timeout 3s
+          --health-retries 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: yarn
+
+      - run: yarn install --frozen-lockfile
+
+      - name: Typecheck
+        run: yarn typecheck
+
+      # The viewer host refuses to bind without a built viewer, deliberately (VIEW-12): a missing build should
+      # be an actionable tool error rather than a URL onto an apology. That makes `roadmap/dist` a real
+      # prerequisite of the unit suite, and it is gitignored - so a fresh clone could never run `yarn test`
+      # green. It only ever passed on machines that happened to have a build lying around, which is precisely
+      # the class of thing CI exists to find. `yarn verify` builds it for the same reason.
+      - name: Build the viewer
+        run: yarn viewer:build
+
+      - name: Test
+        run: yarn test
+
+      # The same suite again, against a server Postgres (OPS-2). Not a duplicate: PGlite
+      # serialises every statement on one connection, so it silently forgives concurrency bugs that server
+      # Postgres does not - the first run of this found a real read-modify-write race in ref allocation that
+      # had a passing test asserting it could not happen.
+      #
+      # Both runs are tens of seconds, so they stay in this job rather than earning one each. Measured
+      # 2026-08-09: splitting the e2e steps into a parallel job would save ~36s of wall clock and cost a
+      # duplicate ~22s `yarn install`, which is not worth the second place for a CI failure to hide.
+      - name: Test against server Postgres
+        run: yarn test:pg
+        env:
+          APM_TEST_PG_URL: postgres://apm:apm@127.0.0.1:55432/apm_test
+
+      # Keyed on the resolved Playwright version, not on `yarn.lock`: a version bump must miss the cache, or
+      # the run silently reuses browsers built for a different client and fails looking like a test bug.
+      - name: Resolve the Playwright version
+        id: playwright
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+
+      # Chromium only - the suite declares one project, and installing the other engines would triple the
+      # download for nothing. `--with-deps` every time, cached or not: the OS libraries are not in the cache.
+      - name: Install the browser
+        run: npx playwright install --with-deps chromium
+
+      # No build step: the suite starts the Vite dev server itself (see playwright.config.ts).
+      - name: End-to-end
+        run: yarn test:e2e
+
+      # Traces are retained on failure, and a screenshot of a graph is worth more than its DOM assertions.
+      - name: Keep the failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results
+          path: test-results/
+          retention-days: 7
