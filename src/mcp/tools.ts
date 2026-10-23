@@ -952,8 +952,15 @@ export function registerTools(server: McpServer, db: Database, store: StoreAcces
         // words are stripped before the AND applies, so an English question collapses to two or three terms
         // and matches fine, while a list of nouns keeps all of them and cannot. Saying "every word has to
         // appear in the same document" is both the mechanism and the fix, in one clause.
+        //
+        // With the structured half too, and an empty `hits`: a tool that declares an output schema must send
+        // structured content on every success, or the SDK turns the reply into an error - which is what a miss
+        // was until a consumer reported it (`MCP-30`), and an error is the one reading a miss must never have.
         if (hits.length === 0) {
-          return text(`no matches for "${query}".\nIf that is surprising, try fewer or more distinctive words - every word has to appear in the same document.`);
+          return {
+            ...text(`no matches for "${query}".\nIf that is surprising, try fewer or more distinctive words - every word has to appear in the same document.`),
+            structuredContent: { query, relaxed, hits: [] },
+          };
         }
         // Said out loud when the fallback fired, because the caller's precision silently dropped: these hits
         // contain *some* of the terms, not all, so a weak one should not read like a strong one.
