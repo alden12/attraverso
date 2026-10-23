@@ -18,8 +18,10 @@ import { delimiter } from "node:path";
  * would be silently accepted and the whole suite would run against the wrong application (that happened, and
  * it looked like five real failures). A port nothing else claims is the fix. `strictPort` in the viewer's vite
  * config still applies to this one, so a genuine collision here fails loudly rather than drifting elsewhere.
+ *
+ * `E2E_PORT` overrides it, for a second run beside the first - a background check in another worktree, say.
  */
-const PORT = 5188;
+const PORT = Number(process.env.E2E_PORT ?? 5188);
 
 export default defineConfig({
   testDir: "./e2e",
