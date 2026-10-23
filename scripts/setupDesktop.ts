@@ -14,7 +14,13 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 
-const SERVER_NAME = "ai-project-manager";
+/**
+ * `-dev` because this runs the server from a checkout, and Desktop may also have the published package under
+ * plain `attraverso` (docs/claude-desktop.md). One key each, so setting up a checkout never overwrites it.
+ */
+const SERVER_NAME = "attraverso-dev";
+/** What this script registered as before the rename (`DIST-5`), removed so Desktop does not run both. */
+const LEGACY_NAMES = ["ai-project-manager"];
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const nodePath = process.execPath;
 // Found by resolution, not by path: hoisted to the workspace root's `node_modules` in development, beside this
@@ -43,6 +49,7 @@ function writeConfig(path: string): void {
     }
   }
   const servers = (config.mcpServers as Record<string, unknown> | undefined) ?? {};
+  for (const legacy of LEGACY_NAMES) delete servers[legacy];
   servers[SERVER_NAME] = { command: nodePath, args: launchArgs };
   config.mcpServers = servers;
   writeFileSync(path, `${JSON.stringify(config, null, 2)}\n`);

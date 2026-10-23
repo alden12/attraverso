@@ -100,4 +100,5 @@ toolbar switches between projects and the URL follows, so a link is worth bookma
 
 For working on attraverso itself, `yarn setup:desktop` in a checkout writes a config that runs the server from
 source and checks that stdout stays clean. It points at that checkout, so it is for development, not for using
-the published package.
+the published package. It registers as `attraverso-dev`, so it sits beside a published `attraverso` entry
+rather than replacing it, and removes the `ai-project-manager` entry older versions wrote.

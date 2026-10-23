@@ -40,11 +40,11 @@ async function main(): Promise<void> {
 
   const manifest = {
     manifest_version: MANIFEST_VERSION,
-    name: "ai-project-manager",
-    display_name: "AI Project Manager",
+    name: "attraverso",
+    display_name: "attraverso",
     version: pkg.version,
     description: "Durable, structured project memory that Claude reads and writes: the plan, what happened, and the facts learned along the way.",
-    author: { name: "ai-project-manager" },
+    author: { name: "Alden Laslett", url: "https://github.com/alden12/attraverso" },
     server: {
       type: "node",
       entry_point: "server.js",
