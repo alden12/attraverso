@@ -626,8 +626,12 @@ export function parseStore(text: string): Store {
  *      the working directory. This names the file, so a project can be `spanish.yaml`, anywhere.
  *   2. the nearest `attraverso.yaml` (or legacy `*.apm.yaml`, `IMP-20`) found by walking up from the working
  *      directory - a repo-embedded project, committed at the repo root. Auto-discovery like tsconfig/yarn.lock,
- *      so there is usually nothing to specify.
- *   3. the home dir - a personal project (a language, houseplants) with no repo to live in.
+ *      so there is usually nothing to specify. Inside a git repo the walk stops at the repo's root.
+ *   3. inside a git repo with no plan yet, `attraverso.yaml` at the repo's root, created on first run - the main
+ *      use, so it needs nothing configured (`IMP-20`, the user's call: a plan wanted somewhere else, such as one
+ *      shared across repos, is named with `--store`).
+ *   4. outside any repo, the home dir - a personal project (a language, houseplants) with no repo to live in,
+ *      and where Claude Desktop lands, since launchd starts it at `/`.
  * A missing file at the resolved path is a first run, handled by `openStore`, not an error here.
  *
  * The primary store, when there are several (`IMP-17`): see `resolveStorePaths`.
@@ -656,9 +660,23 @@ export function resolveStorePath(explicit?: string): string {
 export function resolveStorePaths(explicit?: string[]): [string, ...string[]] {
   const listed = pathList(explicit) ?? pathList([process.env.APM_STORE_PATH]);
   if (listed !== undefined) return listed;
-  const [first, ...rest] = findStoreUp(process.cwd());
+  const repo = repoRootAbove(process.cwd());
+  const [first, ...rest] = findStoreUp(process.cwd(), repo);
   if (first !== undefined) return [first, ...rest];
-  return [homeStorePath()];
+  return [repo === undefined ? homeStorePath() : join(repo, STORE_FILE)];
+}
+
+/**
+ * The root of the git repo `start` is in, or undefined outside one. `.git` is a directory in a clone and a file
+ * in a worktree or submodule, and either marks the root.
+ */
+function repoRootAbove(start: string): string | undefined {
+  for (let dir = start; ; ) {
+    if (existsSync(join(dir, ".git"))) return dir;
+    const parent = dirname(dir);
+    if (parent === dir) return undefined;
+    dir = parent;
+  }
 }
 
 /**
@@ -727,13 +745,15 @@ function usable(path: string | undefined): string | undefined {
  * The same goes for a directory holding both namings, which is one in the middle of moving to the new one.
  *
  * It stops at the first directory with any match rather than collecting up the whole tree, so a nested
- * checkout does not silently absorb its parent's plan.
+ * checkout does not silently absorb its parent's plan. And it never walks above `ceiling`, the repo's root
+ * when there is one: a repo without a plan gets one of its own (`resolveStorePaths`) rather than quietly using a
+ * plan file that happens to sit in a folder above it.
  *
  * **`attraverso.yaml` comes first, then the rest alphabetically**, so the primary is the new file wherever there
  * is one - which decides only where a project created at runtime lands. Where that matters, name the files
  * with `--store` and the given order wins.
  */
-function findStoreUp(start: string): string[] {
+function findStoreUp(start: string, ceiling?: string): string[] {
   for (let dir = start; ; ) {
     let names: string[] = [];
     try {
@@ -746,7 +766,7 @@ function findStoreUp(start: string): string[] {
       .sort((a, b) => Number(b === STORE_FILE) - Number(a === STORE_FILE) || a.localeCompare(b));
     if (matches.length > 0) return matches.map((name) => join(dir, name));
     const parent = dirname(dir);
-    if (parent === dir) return []; // reached the root
+    if (dir === ceiling || parent === dir) return []; // reached the repo's root, or the filesystem's
     dir = parent;
   }
 }

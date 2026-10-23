@@ -359,6 +359,27 @@ describe("resolving the store path", () => {
     await rm(dir, { recursive: true, force: true });
   });
 
+  it("gives a repo with no plan yet an attraverso.yaml at its root, from anywhere inside it (IMP-20)", async () => {
+    // The main use needs nothing configured: the first run creates the plan where it will be committed.
+    const outer = await mkdtemp(join(tmpdir(), "apm-repo-"));
+    const repo = join(outer, "repo");
+    await mkdir(join(repo, ".git"), { recursive: true });
+    await mkdir(join(repo, "packages", "app"), { recursive: true });
+    await within({ cwd: repo }, () => expect(resolveStorePaths()).toEqual([join(repo, "attraverso.yaml")]));
+    await within({ cwd: join(repo, "packages", "app") }, () =>
+      expect(resolveStorePaths()).toEqual([join(repo, "attraverso.yaml")]),
+    );
+    // A plan in a folder above the repo is someone else's, not this repo's: the walk stops at the repo root.
+    await writeFile(join(outer, "attraverso.yaml"), "projects: []\n");
+    await within({ cwd: repo }, () => expect(resolveStorePaths()).toEqual([join(repo, "attraverso.yaml")]));
+    // A worktree's `.git` is a file, and marks the root the same way.
+    const worktree = join(outer, "worktree");
+    await mkdir(worktree);
+    await writeFile(join(worktree, ".git"), "gitdir: ../repo/.git/worktrees/worktree\n");
+    await within({ cwd: worktree }, () => expect(resolveStorePaths()).toEqual([join(worktree, "attraverso.yaml")]));
+    await rm(outer, { recursive: true, force: true });
+  });
+
   it("falls back to the home directory when there is nothing to discover", async () => {
     // The Claude Desktop condition: launchd starts it at `/`, so the tree walk finds nothing.
     const home = await mkdtemp(join(tmpdir(), "apm-home-"));

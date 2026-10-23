@@ -23,14 +23,15 @@ Add it to the `.mcp.json` at the root of your repo:
   "mcpServers": {
     "attraverso": {
       "command": "npx",
-      "args": ["-y", "attraverso", "--store", "attraverso.yaml"]
+      "args": ["-y", "attraverso"]
     }
   }
 }
 ```
 
-The plan file is created on first run, beside `.mcp.json`. Commit it: it is the source of truth, and its diffs
-are the history of the plan. Readings and attachments go in an `.attraverso/` folder beside it, committed too.
+The plan, `attraverso.yaml`, is created at the root of the repo on first run. Commit it: it is the source of
+truth, and its diffs are the history of the plan. Readings and attachments go in an `.attraverso/` folder
+beside it, committed too.
 
 Then ask the agent to call `get_project`, or just to create a project and start planning. The tools describe
 themselves, and `get_project` returns the project's protocol - its operating manual - first.
@@ -40,8 +41,19 @@ themselves, and `get_project` returns the project's protocol - its operating man
 In order of precedence:
 
 1. `--store <path>` (repeatable: a plan can span several files), or `APM_STORE_PATH`.
-2. The nearest `attraverso.yaml` found walking up from the working directory, like `tsconfig.json`.
-3. `~/.ai-project-manager/attraverso.yaml`, for a personal project with no repo to live in.
+2. The nearest `attraverso.yaml` found walking up from the working directory, like `tsconfig.json`. Inside a git
+   repo the search stops at the repo's root.
+3. In a git repo with no plan yet, `attraverso.yaml` at the repo's root, created on first run.
+4. Outside any repo, `~/.ai-project-manager/attraverso.yaml`, for a personal project with no repo to live in.
+
+To keep the plan somewhere else - under another name, in a subfolder, or one file shared by several repos -
+name it with `--store`. A relative path is resolved from the repo root, where Claude Code starts the server:
+
+```json
+"args": ["-y", "attraverso", "--store", "../plans/shared.yaml"]
+```
+
+Repeat `--store` to load a plan split across files; the first one named is where new projects go.
 
 **Plan files from before 0.1.2 are named `*.apm.yaml`**, with their data in `.apm/`. They are still found and
 loaded, and always will be. To move one over, rename both: `git mv roadmap.apm.yaml attraverso.yaml` and
