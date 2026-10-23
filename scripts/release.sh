@@ -16,6 +16,11 @@
 # Named `release` because `yarn publish` is a Yarn builtin, which would shadow a script of that name.
 set -euo pipefail
 
+# `yarn run` points npm at Yarn's mirror (npm_config_registry=https://registry.yarnpkg.com) for every script it
+# starts, and an `npm login` is saved for registry.npmjs.org, so under `yarn release` npm would report "not
+# logged in" and publish to the wrong place. The registry is named here rather than inherited.
+export npm_config_registry="https://registry.npmjs.org/"
+
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
 dry_run=0
