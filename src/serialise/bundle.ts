@@ -1,24 +1,28 @@
 /**
  * The export/import bundle: a project's plan file and its measurement months in one zip (`OPS-19.3`).
  *
- * The upload route (`VIEW-24`) took a bare `.apm.yaml`, which carries the plan and nothing else. That was
+ * The upload route (`VIEW-24`) took a bare plan file, which carries the plan and nothing else. That was
  * right while the move was one-way, and wrong the moment a project comes *back*: measurements live in
- * `.apm/measurements/YYYY-MM.yaml` by `IMP-7`'s split-by-volatility rule, so a plan file alone is a partial
+ * `.attraverso/measurements/YYYY-MM.yaml` by `IMP-7`'s split-by-volatility rule, so a plan file alone is a partial
  * copy, and writing a partial copy over a complete one loses the difference silently.
  *
  * **The layout inside the zip is the repo's own layout**, not a format of its own:
  *
  * ```
- * apm.apm.yaml
- * .apm/measurements/2026-08.yaml
- * .apm/measurements/2026-09.yaml
+ * attraverso.yaml
+ * .attraverso/measurements/2026-08.yaml
+ * .attraverso/measurements/2026-09.yaml
  * ```
+ *
+ * An export from before `IMP-20` holds `<key>.apm.yaml` and `.apm/measurements/` instead, and still imports:
+ * the measurements are read from whichever folder belongs to the plan file's name, by the same rule a
+ * checkout uses (`dataDirFor`).
  *
  * so unzipping it over the checkout puts every file where that file already lives, and `git diff` is the
  * review. A manifest describing where things should go would be a second source of truth about a layout the
  * repo already defines.
  *
- * **A bare `.apm.yaml` is still accepted on import**, detected by the zip magic number rather than by the
+ * **A bare plan file is still accepted on import**, detected by the zip magic number rather than by the
  * file extension or the content type, both of which are the caller's word for it. Someone with a plan file
  * on their phone should not have to zip it first to bring it over, and an old export stays importable.
  *
@@ -32,13 +36,14 @@ import { unzipSync, zipSync, strFromU8, strToU8 } from "fflate";
 import type { Database } from "../db/client";
 import { measurements as measurementsTable } from "../db/schema";
 import { measurementFiles, parseMeasurementFile, toRecords, type MeasurementRecord } from "./measurements";
-import { exportStore, restrict, STORE_SUFFIX, stringifyStore } from "./store";
+import { dataDirFor, isStoreFile, STORE_FILE } from "./paths";
+import { exportStore, restrict, stringifyStore } from "./store";
 
-/** Where measurement months sit inside the bundle, mirroring `measurementsDirFor` beside a plan file. */
-const MEASUREMENTS_DIR = ".apm/measurements/";
+/** Where a plan file's measurement months sit inside the bundle, mirroring `measurementsDirFor` beside it. */
+const measurementsDirIn = (planName: string): string => `${dataDirFor(planName)}/measurements/`;
 
 export interface Bundle {
-  /** The plan file's name, as it should land in a checkout (`apm.apm.yaml`). */
+  /** The plan file's name, as it should land in a checkout (`attraverso.yaml`). */
   name: string;
   /** The plan file's contents, exactly as `stringifyStore` wrote them. */
   text: string;
@@ -52,7 +57,7 @@ export function looksLikeZip(bytes: Uint8Array): boolean {
 
 export function packBundle(bundle: Bundle): Uint8Array {
   const files: Record<string, Uint8Array> = { [bundle.name]: strToU8(bundle.text) };
-  for (const [name, text] of measurementFiles(bundle.measurements)) files[MEASUREMENTS_DIR + name] = strToU8(text);
+  for (const [name, text] of measurementFiles(bundle.measurements)) files[measurementsDirIn(bundle.name) + name] = strToU8(text);
   // `mtime` is left at fflate's default rather than set to now, so exporting an unchanged project twice
   // produces the same bytes. Nothing depends on that today; a diffable export is the habit this whole
   // serialisation layer is built on and there is no reason to break it here.
@@ -72,19 +77,20 @@ export function unpackBundle(bytes: Uint8Array, fallbackName: string): Bundle {
 
   const entries = unzipSync(bytes, {
     // Directory entries carry no content, and macOS's Finder writes an `__MACOSX/` shadow tree of resource
-    // forks beside the real files - one of which is `._apm.apm.yaml`, which would otherwise read as a second
+    // forks beside the real files - one of which is `._attraverso.yaml`, which would otherwise read as a second
     // plan file and make every Finder-zipped bundle ambiguous.
     filter: (file) => file.size > 0 && !file.name.startsWith("__MACOSX/") && !file.name.split("/").pop()?.startsWith("._"),
   });
 
-  const plans = Object.keys(entries).filter((name) => !name.includes("/") && name.endsWith(STORE_SUFFIX));
-  if (plans.length === 0) throw new Error(`no ${STORE_SUFFIX} file at the top of that zip - it is not a plan export`);
+  const plans = Object.keys(entries).filter((name) => !name.includes("/") && isStoreFile(name));
+  if (plans.length === 0) throw new Error(`no ${STORE_FILE} at the top of that zip - it is not a plan export`);
   if (plans.length > 1) throw new Error(`that zip holds ${plans.length} plan files (${plans.join(", ")}) - import one project at a time`);
   const name = plans[0] as string;
+  const measurementsDir = measurementsDirIn(name);
 
   const measurements: MeasurementRecord[] = [];
   for (const [path, content] of Object.entries(entries)) {
-    if (!path.startsWith(MEASUREMENTS_DIR) || !path.endsWith(".yaml")) continue;
+    if (!path.startsWith(measurementsDir) || !path.endsWith(".yaml")) continue;
     try {
       measurements.push(...parseMeasurementFile(strFromU8(content)));
     } catch (cause) {
@@ -105,16 +111,17 @@ export function unpackBundle(bytes: Uint8Array, fallbackName: string): Bundle {
  * way back out. An export of everything the caller owns would be one file holding both, which is precisely
  * the shape the split exists to avoid.
  *
- * **The plan file is named after the project key**, because the database does not know what the file was
- * called in the checkout it came from - `roadmap.apm.yaml` holds project `apm`, and nothing records the
- * connection. So a returning bundle is renamed once by hand. Storing the source filename would remove that
- * step and costs a column; not worth it while this path is the stopgap `OPS-19.2` replaces.
+ * **The plan file is `attraverso.yaml`**, the name a checkout looks for (`IMP-20`), because the database does not
+ * know what the file was called in the checkout it came from, and nothing records the connection. A plan kept
+ * under another name, or split across files, is renamed once by hand on the way back. Storing the source
+ * filename would remove that step and costs a column; not worth it while this path is the stopgap `OPS-19.2`
+ * replaces.
  */
 export async function buildBundle(db: Database, ownerId: string, project: { id: string; key: string }): Promise<Bundle> {
   const store = restrict(await exportStore(db, ownerId), new Set([project.id]));
   const rows = await db.select().from(measurementsTable).where(eq(measurementsTable.projectId, project.id));
   return {
-    name: `${project.key}${STORE_SUFFIX}`,
+    name: STORE_FILE,
     text: stringifyStore(store),
     measurements: await toRecords(db, project.key, rows),
   };

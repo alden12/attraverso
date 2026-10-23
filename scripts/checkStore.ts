@@ -1,7 +1,7 @@
 /**
  * Validate the project store (the `apm:check` in `yarn verify`, replacing the old `roadmap:check` now that
  * the store, not `ROADMAP.md`, is the source of truth). It resolves the store the same way the server does
- * (the nearest `*.apm.yaml`, or `--store <path>`), parses it against the store schema, and loads it into a
+ * (the nearest `attraverso.yaml` or legacy `*.apm.yaml`, or `--store <path>`), parses it against the store schema, and loads it into a
  * throwaway in-memory database via `importStore` - the boot path - so a schema violation, a duplicate ref, or
  * a dependency/parent pointing at no item fails here, in CI, rather than at read time. A CLI, so stdout is fine.
  *

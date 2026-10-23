@@ -18,6 +18,7 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { dataDirFor } from "../serialise/paths";
 
 /** What may be uploaded. Deliberately a short list of things every browser can render: an image nobody can
  *  display is worse than a rejected upload, and HEIC from an iPhone is exactly that case. */
@@ -99,9 +100,9 @@ export function createFileMediaStore(dir: string): MediaStore {
   };
 }
 
-/** Where blobs live for a given plan file: `.apm/media/` beside it, per the split-by-volatility rule that
- *  already puts the journal and the event log there (`IMP-7`). */
-export const mediaDirFor = (storePath: string): string => join(storePath, "..", ".apm", "media");
+/** Where blobs live for a given plan file: `media/` in its data folder (`.attraverso/`, or `.apm/` for a legacy
+ *  plan file - `IMP-20`), per the split-by-volatility rule that puts the event log there too (`IMP-7`). */
+export const mediaDirFor = (storePath: string): string => join(dataDirFor(storePath), "media");
 
 /**
  * A store that holds nothing and says so (`OPS-11`).

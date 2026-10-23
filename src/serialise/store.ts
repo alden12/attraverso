@@ -20,6 +20,7 @@ import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { existsSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { delimiter, dirname, isAbsolute, join } from "node:path";
+import { isStoreFile, LEGACY_STORE_SUFFIX, STORE_FILE } from "./paths";
 import { parse, stringify } from "yaml";
 import { clearAll, type Database, type Tx } from "../db/client";
 import { areas, attachments, comments, contextSections, dependencies, items, projectNext, projects, scopedDependencies } from "../db/schema";
@@ -618,19 +619,14 @@ export function parseStore(text: string): Store {
   return storeSchema.parse(parse(text));
 }
 
-/** The store-file suffix, and the default name for a project that never picked one. Files are `<name>.apm.yaml`
- *  - a distinctive suffix (like `tsconfig.json` or `yarn.lock`) so walking up the tree for one can't
- *  false-match an unrelated `project.yaml`. */
-export const STORE_SUFFIX = ".apm.yaml";
-const DEFAULT_STORE_FILE = `project${STORE_SUFFIX}`;
 
 /**
  * Where the project's YAML lives (IMP-5, repo file mode). In precedence:
  *   1. `explicit` (the server's `--store` CLI arg) or `APM_STORE_PATH` - a file path, absolute or relative to
- *      the working directory. This names the file, so a project can be `spanish.apm.yaml`, anywhere.
- *   2. the nearest `*.apm.yaml` found by walking up from the working directory - a repo-embedded project,
- *      committed at the repo root (this repo's `roadmap.apm.yaml`). Auto-discovery like tsconfig/yarn.lock, so
- *      there is usually nothing to specify.
+ *      the working directory. This names the file, so a project can be `spanish.yaml`, anywhere.
+ *   2. the nearest `attraverso.yaml` (or legacy `*.apm.yaml`, `IMP-20`) found by walking up from the working
+ *      directory - a repo-embedded project, committed at the repo root. Auto-discovery like tsconfig/yarn.lock,
+ *      so there is usually nothing to specify.
  *   3. the home dir - a personal project (a language, houseplants) with no repo to live in.
  * A missing file at the resolved path is a first run, handled by `openStore`, not an error here.
  *
@@ -662,7 +658,20 @@ export function resolveStorePaths(explicit?: string[]): [string, ...string[]] {
   if (listed !== undefined) return listed;
   const [first, ...rest] = findStoreUp(process.cwd());
   if (first !== undefined) return [first, ...rest];
-  return [join(homedir(), ".ai-project-manager", DEFAULT_STORE_FILE)];
+  return [homeStorePath()];
+}
+
+/**
+ * The home store: `attraverso.yaml`, unless only the pre-rename `project.apm.yaml` is there (`IMP-20`), which is
+ * then the one in use - a personal plan must not seem to vanish because the default name changed.
+ */
+function homeStorePath(): string {
+  // The directory keeps its pre-rename name for now: moving it is a migration of its own. Read on each call
+  // rather than once at import, so a test can point `HOME` somewhere disposable.
+  const dir = join(homedir(), ".ai-project-manager");
+  const current = join(dir, STORE_FILE);
+  const legacy = join(dir, `project${LEGACY_STORE_SUFFIX}`);
+  return !existsSync(current) && existsSync(legacy) ? legacy : current;
 }
 
 /**
@@ -708,19 +717,21 @@ function usable(path: string | undefined): string | undefined {
 }
 
 /**
- * Walk up from `start` for the nearest directory holding `*.apm.yaml` files, and return **all** of them,
- * sorted. Empty if none exists up to the filesystem root.
+ * Walk up from `start` for the nearest directory holding plan files - `attraverso.yaml`, or legacy `*.apm.yaml`
+ * (`IMP-20`) - and return **all** of them. Empty if none exists up to the filesystem root.
  *
  * All of them, not the first alphabetically, because a split plan is two files side by side in one repo
  * (`DIST-3`) and picking one of them would silently serve half a plan - which is what happened the moment
  * `cloud.apm.yaml` appeared beside `roadmap.apm.yaml`: `yarn apm:check` reported the cloud half and nothing
  * else, cheerfully. A tool that finds a plan by looking around it should find the plan, not a file from it.
+ * The same goes for a directory holding both namings, which is one in the middle of moving to the new one.
  *
  * It stops at the first directory with any match rather than collecting up the whole tree, so a nested
  * checkout does not silently absorb its parent's plan.
  *
- * **Order is alphabetical, so the primary is whichever sorts first** - which decides only where a project
- * created at runtime lands. Where that matters, name the files with `--store` and the given order wins.
+ * **`attraverso.yaml` comes first, then the rest alphabetically**, so the primary is the new file wherever there
+ * is one - which decides only where a project created at runtime lands. Where that matters, name the files
+ * with `--store` and the given order wins.
  */
 function findStoreUp(start: string): string[] {
   for (let dir = start; ; ) {
@@ -730,7 +741,9 @@ function findStoreUp(start: string): string[] {
     } catch {
       names = []; // an unreadable directory just means "keep walking up"
     }
-    const matches = names.filter((name) => name.endsWith(STORE_SUFFIX)).sort();
+    const matches = names
+      .filter(isStoreFile)
+      .sort((a, b) => Number(b === STORE_FILE) - Number(a === STORE_FILE) || a.localeCompare(b));
     if (matches.length > 0) return matches.map((name) => join(dir, name));
     const parent = dirname(dir);
     if (parent === dir) return []; // reached the root

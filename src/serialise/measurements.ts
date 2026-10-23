@@ -26,9 +26,10 @@ import type { Database, Tx } from "../db/client";
 import { summariseReadings, type MetricSummary } from "../domain/measurements";
 import { items, measurements, projects } from "../db/schema";
 import { YAML_FORMAT } from "./format";
+import { dataDirFor } from "./paths";
 
-/** Where measurements live for a plan file: `.apm/measurements/` beside it, matching `mediaDirFor`. */
-export const measurementsDirFor = (storePath: string): string => join(storePath, "..", ".apm", "measurements");
+/** Where measurements live for a plan file: `measurements/` in its data folder, beside `mediaDirFor`'s (`IMP-20`). */
+export const measurementsDirFor = (storePath: string): string => join(dataDirFor(storePath), "measurements");
 
 /**
  * One recorded reading, as it appears in the file.

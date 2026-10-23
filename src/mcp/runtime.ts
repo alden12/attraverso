@@ -6,14 +6,17 @@
  * import from it - including a second entry point and a test. The split is `OPS-3`'s, and it moves no logic:
  * the two arrangements below are exactly as they were.
  */
+import { basename } from "node:path";
 import { createInMemoryDb, type Database } from "../db/client";
 import { requireCurrentSchema } from "../db/schemaVersion";
 import { accessTo, createStoreFile, resolveStorePaths, storePathsIn, type StoreAccess } from "../serialise/store";
 import { createUnavailableMediaStore } from "../media/store";
+import { isLegacyStore } from "../serialise/paths";
 import { fileSources, type ViewerSources } from "./viewer";
 
 /**
- * `--store <path>` overrides where the plan lives; otherwise it is auto-discovered (nearest `*.apm.yaml`).
+ * `--store <path>` overrides where the plan lives; otherwise it is auto-discovered (nearest `attraverso.yaml`,
+ * or legacy `*.apm.yaml`).
  *
  * Repeatable, because a plan can span several files (`IMP-17`): the first wins where one answer is needed
  * (it is the primary, and where a project created at runtime lands). Collected by scanning rather than
@@ -44,8 +47,19 @@ export async function fileBacked(): Promise<Runtime> {
     access: accessTo(store, db),
     // Media resolves against the primary store, which is also where a project created at runtime lands.
     sources: fileSources(store.path),
-    describe: `store: ${store.paths.join(", ")}${created ? ", created" : ""}`,
+    describe: `store: ${store.paths.join(", ")}${created ? ", created" : ""}${legacyNote(store.paths)}`,
   };
+}
+
+/**
+ * Said once at startup when a plan file has its pre-`IMP-20` name: it still loads and always will, so this is
+ * a pointer rather than a warning, and nothing is renamed for anyone - the file is committed and the move is
+ * theirs to make.
+ */
+function legacyNote(paths: string[]): string {
+  const legacy = paths.filter(isLegacyStore).map((path) => basename(path));
+  if (legacy.length === 0) return "";
+  return `; ${legacy.join(", ")} ${legacy.length === 1 ? "has" : "have"} the old naming, which still works - to move a plan over, git mv it to attraverso.yaml and its .apm/ folder to .attraverso/`;
 }
 
 /**

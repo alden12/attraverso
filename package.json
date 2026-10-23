@@ -1,6 +1,6 @@
 {
   "name": "attraverso",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "description": "Durable, structured project memory that Claude reads and writes over MCP, stored as version-controlled YAML.",
   "license": "Apache-2.0",

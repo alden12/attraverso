@@ -31,10 +31,22 @@ describe("the export bundle (OPS-19.3)", () => {
 
   it("round-trips the plan file and its measurements", () => {
     const measurements = [reading("2026-08-30T08:00:00.000Z", 81), reading("2026-09-01T08:00:00.000Z", 80)];
-    const out = unpackBundle(packBundle({ name: "health.apm.yaml", text: plan, measurements }), "unused.apm.yaml");
-    expect(out.name).toBe("health.apm.yaml");
+    const out = unpackBundle(packBundle({ name: "attraverso.yaml", text: plan, measurements }), "unused.yaml");
+    expect(out.name).toBe("attraverso.yaml");
     expect(out.text).toBe(plan);
     expect(out.measurements).toEqual(measurements);
+  });
+
+  it("still imports an export from before the rename, readings and all (IMP-20)", () => {
+    // `<key>.apm.yaml` beside `.apm/measurements/`: the layout every export had until the plan file was renamed.
+    // Built by hand rather than with packBundle, so this is the old format itself and not today's code's idea of it.
+    const zip = zipSync({
+      "health.apm.yaml": strToU8(plan),
+      ".apm/measurements/2026-09.yaml": unzipSync(packBundle({ name: "health.apm.yaml", text: plan, measurements: [reading("2026-09-01T08:00:00.000Z", 80)] }))[".apm/measurements/2026-09.yaml"]!,
+    });
+    const out = unpackBundle(zip, "unused.yaml");
+    expect(out.name).toBe("health.apm.yaml");
+    expect(out.measurements.map((r) => r.value)).toEqual([80]);
   });
 
   it("buckets readings by the month they happened in, not the month they were written", () => {
@@ -42,15 +54,15 @@ describe("the export bundle (OPS-19.3)", () => {
     // reading has to land in the month of `at` or a month ends up split across two files and neither one is
     // the record of it.
     const zip = packBundle({
-      name: "health.apm.yaml",
+      name: "attraverso.yaml",
       text: plan,
       measurements: [reading("2026-08-30T08:00:00.000Z", 81), reading("2026-09-01T08:00:00.000Z", 80)],
     });
     // Re-read through fflate directly, because the assertion is about the layout inside the zip rather than
     // about what `unpackBundle` chooses to surface.
     const names = Object.keys(unzipSync(zip));
-    expect(names).toContain(".apm/measurements/2026-08.yaml");
-    expect(names).toContain(".apm/measurements/2026-09.yaml");
+    expect(names).toContain(".attraverso/measurements/2026-08.yaml");
+    expect(names).toContain(".attraverso/measurements/2026-09.yaml");
   });
 
   it("packs the same project to the same bytes, however long apart", () => {
@@ -119,9 +131,9 @@ describe("building a bundle from the database (OPS-19.3)", () => {
     );
 
     const bundle = await buildBundle(db, ownerId, health);
-    // Named after the key, because the database does not know what the file was called in the checkout it
-    // came from - the one manual step in the round trip, and the reason it is worth stating here.
-    expect(bundle.name).toBe("health.apm.yaml");
+    // The name a checkout looks for (`IMP-20`): the database does not know what the file was called in the
+    // checkout it came from, so a plan kept under another name is renamed by hand on the way back.
+    expect(bundle.name).toBe("attraverso.yaml");
     // Scoped to one project, which is what keeps a split plan (`IMP-17`) in separate files on the way back.
     expect(bundle.text).toContain("key: health");
     expect(bundle.text).not.toContain("key: spanish");

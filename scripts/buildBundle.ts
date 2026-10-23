@@ -10,8 +10,8 @@
  *   then silently ignored on install, with no error anywhere. Validation is a syntax check, never a
  *   compatibility one.
  * - **`user_config` is the only way the store path is visible to the user.** Claude Desktop is started by
- *   launchd at `cwd: /`, so the tree-walk that finds a repo's `*.apm.yaml` cannot work and the home-dir
- *   fallback always applies. Without this field a user silently gets `~/.ai-project-manager/project.apm.yaml`
+ *   launchd at `cwd: /`, so the tree-walk that finds a repo's `attraverso.yaml` cannot work and the home-dir
+ *   fallback always applies. Without this field a user silently gets `~/.ai-project-manager/attraverso.yaml`
  *   with no indication a choice existed.
  */
 import { spawnSync } from "node:child_process";
@@ -60,8 +60,8 @@ async function main(): Promise<void> {
         type: "file",
         title: "Plan file",
         description:
-          "Where this project's plan is kept, as a committed `*.apm.yaml` in a repo or a file in your home directory. " +
-          "Leave blank to use ~/.ai-project-manager/project.apm.yaml, which is created on first run. One file can hold several projects.",
+          "Where this project's plan is kept, as a committed `attraverso.yaml` in a repo or a file in your home directory. " +
+          "Leave blank to use ~/.ai-project-manager/attraverso.yaml, which is created on first run. One file can hold several projects.",
         required: false,
       },
     },

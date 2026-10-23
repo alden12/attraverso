@@ -56,28 +56,29 @@ file, written atomically after each change.
 Under Claude Desktop that file is:
 
 ```
-~/.ai-project-manager/project.apm.yaml
+~/.ai-project-manager/attraverso.yaml
 ```
 
-It is created empty the first time the server starts, so the path exists before you have written anything.
+It is created empty the first time the server starts, so the path exists before you have written anything. If
+that folder holds a `project.apm.yaml` from before 0.1.2 and no `attraverso.yaml`, the older file is used.
 
-**Why not the nearest `*.apm.yaml`, as in Claude Code.** The server normally finds its store by walking up
+**Why not the nearest `attraverso.yaml`, as in Claude Code.** The server normally finds its store by walking up
 from the working directory. launchd starts Desktop at `/`, so there is nothing to find and the home-dir
 fallback applies.
 
 **One file holds many projects.** The store is a list of projects, so `create_project` adds to it: a software
-project, a language and a houseplant schedule can share `project.apm.yaml`, and questions across projects work
+project, a language and a houseplant schedule can share `attraverso.yaml`, and questions across projects work
 because they are all in the one rebuilt database. A second file is for when you want a different home for it,
 such as a plan committed to its own repo.
 
 To point Desktop at a specific store instead, add either of these to the `mcpServers` entry:
 
 ```json
-"args": ["/absolute/path/to/node_modules/attraverso/server.js", "--store", "/absolute/path/to/plan.apm.yaml"]
+"args": ["/absolute/path/to/node_modules/attraverso/server.js", "--store", "/absolute/path/to/attraverso.yaml"]
 ```
 
 ```json
-"env": { "APM_STORE_PATH": "/absolute/path/to/plan.apm.yaml" }
+"env": { "APM_STORE_PATH": "/absolute/path/to/attraverso.yaml" }
 ```
 
 Be deliberate about that: pointing Desktop at a store committed to a repo means any personal project you create

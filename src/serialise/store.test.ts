@@ -21,8 +21,8 @@ import { YAML_FORMAT } from "./format";
 import { parse, stringify } from "yaml";
 import { adoptStore, asPlan, canonicalForms, createStoreFile, exportStore, ImportConflict, importStore, openStore, parseStore, resolveStorePath, resolveStorePaths, saveStore, stringifyStore } from "./store";
 import { existsSync } from "node:fs";
-import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
-import { homedir, tmpdir } from "node:os";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 
 const ACTOR = "test";
@@ -305,7 +305,19 @@ describe("opening the store", () => {
 });
 
 describe("resolving the store path", () => {
-  const home = join(homedir(), ".ai-project-manager", "project.apm.yaml");
+  /** Run `body` with the working directory at `cwd` and the home directory at `home`. */
+  const within = async (dirs: { cwd: string; home?: string }, body: () => void | Promise<void>): Promise<void> => {
+    const cwd = process.cwd;
+    const home = process.env.HOME;
+    process.cwd = () => dirs.cwd;
+    if (dirs.home !== undefined) process.env.HOME = dirs.home;
+    try {
+      await body();
+    } finally {
+      process.cwd = cwd;
+      process.env.HOME = home;
+    }
+  };
 
   it("treats a blank or unsubstituted override as unset", () => {
     // Both arrive from the .mcpb manifest, which wires APM_STORE_PATH to an optional user_config field: an
@@ -335,15 +347,37 @@ describe("resolving the store path", () => {
     }
   });
 
-  it("falls back to the home directory when there is nothing to discover", () => {
+  it("discovers attraverso.yaml, and puts it first beside legacy files (IMP-20)", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "apm-discover-"));
+    await writeFile(join(dir, "attraverso.yaml"), "projects: []\n");
+    await within({ cwd: dir }, () => expect(resolveStorePaths()).toEqual([join(dir, "attraverso.yaml")]));
+    // Mid-move: both namings in one directory are one plan, and the new file is the primary.
+    await writeFile(join(dir, "old.apm.yaml"), "projects: []\n");
+    await within({ cwd: dir }, () =>
+      expect(resolveStorePaths()).toEqual([join(dir, "attraverso.yaml"), join(dir, "old.apm.yaml")]),
+    );
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it("falls back to the home directory when there is nothing to discover", async () => {
     // The Claude Desktop condition: launchd starts it at `/`, so the tree walk finds nothing.
-    const cwd = process.cwd;
-    process.cwd = () => "/";
-    try {
-      expect(resolveStorePath("")).toBe(home);
-    } finally {
-      process.cwd = cwd;
-    }
+    const home = await mkdtemp(join(tmpdir(), "apm-home-"));
+    await within({ cwd: "/", home }, () =>
+      expect(resolveStorePath("")).toBe(join(home, ".ai-project-manager", "attraverso.yaml")),
+    );
+    await rm(home, { recursive: true, force: true });
+  });
+
+  it("keeps using a home store that only has the old name, so it does not seem to vanish (IMP-20)", async () => {
+    const home = await mkdtemp(join(tmpdir(), "apm-home-"));
+    const dir = join(home, ".ai-project-manager");
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, "project.apm.yaml"), "projects: []\n");
+    await within({ cwd: "/", home }, () => expect(resolveStorePath("")).toBe(join(dir, "project.apm.yaml")));
+    // Once the new file exists it wins, which is how someone moves over: by renaming.
+    await writeFile(join(dir, "attraverso.yaml"), "projects: []\n");
+    await within({ cwd: "/", home }, () => expect(resolveStorePath("")).toBe(join(dir, "attraverso.yaml")));
+    await rm(home, { recursive: true, force: true });
   });
 });
 
