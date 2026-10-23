@@ -26,6 +26,7 @@
     "build": "vite build --ssr src/mcp/server.ts && yarn viewer:build",
     "build:standalone": "yarn viewer:build && vite-node scripts/buildStandalone.ts",
     "build:bundle": "yarn build:standalone && vite-node scripts/buildBundle.ts",
+    "release": "bash scripts/release.sh",
     "viewer": "vite --config roadmap/vite.config.ts",
     "viewer:build": "vite build --config roadmap/vite.config.ts",
     "test": "vitest run",

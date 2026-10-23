@@ -41,7 +41,7 @@ async function main(): Promise<void> {
   const manifest = {
     manifest_version: MANIFEST_VERSION,
     name: "attraverso",
-    display_name: "attraverso",
+    display_name: "Attraverso",
     version: pkg.version,
     description: "Durable, structured project memory that Claude reads and writes: the plan, what happened, and the facts learned along the way.",
     author: { name: "Alden Laslett", url: "https://github.com/alden12/attraverso" },

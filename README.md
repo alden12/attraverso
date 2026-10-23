@@ -67,8 +67,9 @@ yarn viewer          # the graph on http://localhost:5176
 To try a change against a real plan, run the server from source over any store: `yarn mcp:dev --store
 <path>`, or point a `.mcp.json` at `node_modules/.bin/vite-node src/mcp/server.ts`.
 
-Releasing is `yarn build:standalone`, then `npm publish standalone/`: the published package is a single
-self-contained build that needs nothing installed but Node.
+Releasing is `yarn release` (`--dry-run` to rehearse), from an up-to-date checkout of this repo: it verifies,
+builds, checks the build starts with clean stdout, publishes to npm and tags the version. The published package
+is a single self-contained build that needs nothing installed but Node.
 
 ## How this repo is maintained
 
