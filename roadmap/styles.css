@@ -149,6 +149,10 @@ body {
 .chip:hover {
   border-color: #38455a;
 }
+.chip[data-on="true"] {
+  background: #263243;
+  border-color: #3a4a60;
+}
 .chip[data-off="true"] {
   opacity: 0.4;
 }
@@ -194,6 +198,72 @@ body {
 }
 
 /* Body: graph + detail ------------------------------------------------------ */
+
+/* Calendar (CAL-3) -----------------------------------------------------------
+   FullCalendar injects its own stylesheet and exposes these variables for theming; everything else here is
+   the items drawn into it, which match how an item looks on the graph. */
+.cal {
+  height: 100%;
+  padding: 12px 16px;
+  --fc-border-color: var(--line);
+  --fc-page-bg-color: var(--bg);
+  --fc-neutral-bg-color: var(--panel-2);
+  --fc-today-bg-color: rgba(79, 157, 255, 0.08);
+  --fc-button-bg-color: var(--panel);
+  --fc-button-border-color: var(--line);
+  --fc-button-text-color: var(--text);
+  --fc-button-hover-bg-color: #1b2330;
+  --fc-button-hover-border-color: var(--line);
+  --fc-button-active-bg-color: #263243;
+  --fc-button-active-border-color: var(--line);
+  --fc-event-text-color: #0b0f14;
+}
+.cal .fc .fc-toolbar-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+.cal .fc .fc-button {
+  font-size: 12px;
+  padding: 3px 10px;
+}
+.cal .fc .fc-col-header-cell-cushion,
+.cal .fc .fc-daygrid-day-number {
+  color: var(--muted);
+  font-size: 12px;
+  text-decoration: none;
+}
+.cal .fc .fc-daygrid-more-link {
+  color: var(--muted);
+}
+.cal .fc .fc-popover {
+  background: var(--panel);
+}
+.cal__event {
+  display: flex;
+  gap: 5px;
+  align-items: baseline;
+  padding: 1px 4px;
+  font-size: 12px;
+  overflow: hidden;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.cal__event[data-on="true"] {
+  outline: 2px solid var(--text);
+  outline-offset: 1px;
+  border-radius: 3px;
+}
+.cal__event[data-strike="true"] .cal__title {
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+.cal__ref {
+  font-weight: 600;
+}
+.cal__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .body {
   flex: 1;
   display: flex;

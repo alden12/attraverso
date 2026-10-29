@@ -280,3 +280,84 @@ test.describe("several projects in one store", () => {
     await expect(page.locator(".item-node")).toHaveCount(0); // never a silent fallback to the first project
   });
 });
+
+/**
+ * The calendar (`CAL-3`). From a route mock, with dates relative to today, so the items land in the month the
+ * calendar opens on whatever day the suite runs.
+ */
+test.describe("the calendar", () => {
+  // Tall enough that four items on one day fit without FullCalendar folding them into "+N more".
+  test.use({ viewport: { width: 1280, height: 1400 } });
+  const day = (offset: number): string => new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
+  const DATED = {
+    path: "/tmp/dated.yaml",
+    store: {
+      projects: [
+        {
+          key: "apm",
+          name: "AI PM",
+          items: [
+            { ref: "CAL-1", area: "CAL", title: "Dates on items", status: "done", due: day(0), body: "Calendar days, not timestamps." },
+            { ref: "CAL-3", area: "CAL", title: "The calendar view", status: "in-progress", start: day(0), due: day(1) },
+            { ref: "MCP-1", area: "MCP", title: "undated, so not on the calendar", status: "to-do" },
+            // Done with no planned date: placed on the day it closed.
+            { ref: "CAL-2", area: "CAL", title: "Finished, never planned", status: "done", closed_at: new Date().toISOString() },
+          ],
+        },
+        { key: "spanish", name: "Spanish", items: [{ ref: "GRAM-1", area: "GRAM", title: "the subjunctive", status: "to-do", due: day(0) }] },
+      ],
+    },
+  };
+
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => window.localStorage.clear());
+    await page.route("**/api/store", (route) => route.fulfill({ json: DATED }));
+    await page.goto("/#apm");
+    await page.locator(".segmented__btn", { hasText: "calendar" }).click();
+  });
+
+  test("shows every project by default, and leaves undated items off", async ({ page }) => {
+    // Status filters apply across projects. Also makes room: three items on one day at this window size put
+    // the third behind FullCalendar's "+1 more".
+    await page.locator(".chip", { hasText: "done" }).click();
+    await expect(page.locator(".cal__event", { hasText: "apm:CAL-3" }).first()).toBeVisible();
+    await expect(page.locator(".cal__event", { hasText: "spanish:GRAM-1" })).toBeVisible();
+    await expect(page.locator(".cal__event", { hasText: "MCP-1" })).toHaveCount(0);
+    await page.screenshot({ path: "test-results/calendar-all.png", fullPage: false });
+  });
+
+  test("puts finished work on the day it closed", async ({ page }) => {
+    await expect(page.locator(".cal__event", { hasText: "apm:CAL-2" })).toBeVisible();
+  });
+
+  test("narrows to one project on request", async ({ page }) => {
+    await page.locator(".chip", { hasText: "all projects" }).click();
+    await expect(page.locator(".cal__event", { hasText: "CAL-1" })).toBeVisible();
+    await expect(page.locator(".cal__event", { hasText: "GRAM-1" })).toHaveCount(0);
+    await page.screenshot({ path: "test-results/calendar.png", fullPage: false });
+  });
+
+  test("opens an item in the same detail pane, with its dates", async ({ page }) => {
+    await page.locator(".chip", { hasText: "to-do" }).click(); // room for CAL-1, by hiding GRAM-1
+    await page.locator(".cal__event", { hasText: "CAL-1" }).click();
+    await expect(page.locator(".detail__id")).toHaveText("CAL-1");
+    await expect(page.locator(".detail")).toContainText("due");
+    await expect(page.locator(".detail__doc")).toContainText("Calendar days, not timestamps.");
+  });
+
+  test("opens another project's item by switching to it", async ({ page }) => {
+    await page.locator(".chip", { hasText: "done" }).click(); // room for all three, as above
+    await page.locator(".cal__event", { hasText: "spanish:GRAM-1" }).click();
+    await expect(page).toHaveURL(/#spanish\/GRAM-1$/);
+    await expect(page.locator(".detail__id")).toHaveText("GRAM-1");
+    // Still the calendar: the view is a viewer preference, not a per-project one, so the switch keeps it.
+    await expect(page.locator(".cal")).toBeVisible();
+  });
+
+  test("says why it is empty when nothing has a date", async ({ page }) => {
+    // Areas are per-project, so their chips only appear with the calendar narrowed to one.
+    await page.locator(".chip", { hasText: "all projects" }).click();
+    await page.locator(".chip", { hasText: "CAL" }).click(); // hide the dated area
+    await expect(page.locator(".graph__notice")).toContainText("Nothing here has a date yet");
+  });
+});

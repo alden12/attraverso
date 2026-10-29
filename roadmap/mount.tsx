@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import "@xyflow/react/dist/style.css";
 import "./styles.css";
 import { App } from "./App";
-import { fetchPlan, selectProject, STORE_ENDPOINT, type Plan } from "./store";
+import { fetchPlan, parseHash, selectProject, STORE_ENDPOINT, type Plan } from "./store";
 import { startSession, type Session } from "./session";
 import { ExtensionsContext, type ViewerExtensions } from "./extensions";
 
@@ -70,18 +70,19 @@ function Root({ extensions }: { extensions: ViewerExtensions }) {
   }
   if (!plan) return <div className="boot">Loading the plan...</div>;
 
-  const selection = selectProject(plan.projects, requested);
+  const selection = selectProject(plan.projects, requested.project);
   // Keyed by project so switching remounts: filters, selection and the manual-layout refs are all per-project,
   // and a remount resets them together rather than each needing its own effect to notice the change.
   return (
     <ExtensionsContext.Provider value={extensions}>
-      <App key={selection.project?.key ?? "none"} plan={plan} selection={selection} reload={load} />
+      <App key={selection.project?.key ?? "none"} plan={plan} selection={selection} focus={requested.item} reload={load} />
     </ExtensionsContext.Provider>
   );
 }
 
 /**
- * The project asked for in the URL hash (`#spanish`), or null for none.
+ * The project asked for in the URL hash (`#spanish`), or null for none, and an item in it if the hash names one
+ * (`#spanish/GRAM-3`, see `parseHash`).
  *
  * A hash rather than a path route, deliberately. The viewer is served by two hosts - the Vite dev server's
  * middleware and the MCP server's static host - and the static host 404s anything that is not a real file on
@@ -89,11 +90,11 @@ function Root({ extensions }: { extensions: ViewerExtensions }) {
  * giving up honest 404s on genuinely missing assets, in exchange for nothing the hash does not provide. The
  * hash is also never sent to the server, so it cannot collide with `/api/store` or an asset path.
  *
- * No router library either: this is one parameter, not navigation between views. Revisit when VIEW-5 wants
- * `#spanish/MCP-3` with back-button behaviour through ticket selections.
+ * No router library either: this is a project and an item read from the URL, not navigation between views.
+ * Revisit when VIEW-5 wants back-button behaviour through item selections.
  */
-function useHashProject(): string | null {
-  const read = (): string | null => decodeURIComponent(window.location.hash.replace(/^#/, "")) || null;
+function useHashProject(): ReturnType<typeof parseHash> {
+  const read = (): ReturnType<typeof parseHash> => parseHash(window.location.hash);
   const [requested, setRequested] = useState(read);
   useEffect(() => {
     const onHashChange = (): void => setRequested(read());

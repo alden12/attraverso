@@ -36,6 +36,9 @@ export interface RoadmapItem {
   /** Planned dates as `YYYY-MM-DD` (`CAL-1`), absent on an undated item, which is most of them. */
   start?: string;
   due?: string;
+  /** When it was marked done, as an ISO timestamp, absent while it is open. An instant, unlike the two above:
+   *  it records when something happened rather than which day was planned. */
+  closed?: string;
 }
 
 /**

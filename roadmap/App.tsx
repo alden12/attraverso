@@ -32,6 +32,8 @@ import { loadPositions, savePositions, loadSizes, saveSizes, clearLayout, type B
 import { LockContext } from "./lockContext";
 import { StatusPicker } from "./StatusPicker";
 import type { RoadmapItem } from "../scripts/tickets";
+import { Calendar, type CalendarEntry } from "./Calendar";
+import { countDated } from "./calendarDates";
 
 const nodeTypes = { item: ItemNodeView, area: AreaGroupNode, ticket: TicketGroupNode, ghost: GhostNodeView };
 const STATUS_KEYS = Object.keys(STATUSES) as Status[];
@@ -46,12 +48,44 @@ const EMPTY: never[] = [];
 const NO_ITEMS: RoadmapItem[] = [];
 const NO_REFS: string[] = [];
 
+type View = "graph" | "calendar";
+const VIEWS: View[] = ["graph", "calendar"];
+
+/**
+ * A per-viewer preference that outlives a remount (`CAL-3`). Switching project remounts `App`, which resets
+ * all of its state by design; which view you were in and whether the calendar spans every project are not
+ * per-project choices, so they would otherwise reset every time you switched. Wrapped, because storage can be
+ * unavailable, and a preference is not worth an error over.
+ */
+function usePreference<T extends string>(key: string, fallback: T, allowed: readonly T[]): [T, (value: T) => void] {
+  const [value, setValue] = useState<T>(() => {
+    try {
+      const stored = localStorage.getItem(key);
+      return allowed.includes(stored as T) ? (stored as T) : fallback;
+    } catch {
+      return fallback;
+    }
+  });
+  const set = useCallback(
+    (next: T) => {
+      setValue(next);
+      try {
+        localStorage.setItem(key, next);
+      } catch {
+        // unavailable storage: the choice still holds until the next remount
+      }
+    },
+    [key],
+  );
+  return [value, set];
+}
+
 /** A planned date (`CAL-1`) as a reader says it, "Mon 2 Nov 2026". Formatted in UTC because the date is a day,
  *  not an instant: in local time, midnight UTC is still the previous evening for anyone west of Greenwich. */
 const fmtDay = (day: string): string =>
   new Date(`${day}T00:00:00Z`).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 
-export function App({ plan, selection, reload }: { plan: Plan; selection: Selection; reload: () => void }) {
+export function App({ plan, selection, focus, reload }: { plan: Plan; selection: Selection; focus: string | null; reload: () => void }) {
   const project = selection.project;
   const { ToolbarActions, EmptyPlan } = useExtensions();
   // Manual layout is stored per project, since a node id is a ticket ref and those repeat across projects.
@@ -64,7 +98,15 @@ export function App({ plan, selection, reload }: { plan: Plan; selection: Select
   const [hiddenStatuses, setHiddenStatuses] = useState<Set<Status>>(new Set());
   const [colourMode, setColourMode] = useState<ColourMode>("area");
   const [locked, setLocked] = useState(false);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Seeded from the URL (`#apm/CAL-1`), which is how the calendar opens another project's item: it switches
+  // project, which remounts this, so the item has to arrive with the new mount.
+  const [selectedId, setSelectedId] = useState<string | null>(focus);
+  useEffect(() => setSelectedId(focus), [focus]);
+  const [view, setView] = usePreference<View>("attraverso.view", "graph", VIEWS);
+  // Every project by default: a calendar is where you see what else is happening that week, and that is rarely
+  // confined to one plan. One project is a click away and remembered.
+  const [span, setSpan] = usePreference<"project" | "all">("attraverso.calendar.span", "all", ["project", "all"]);
+  const allProjects = span === "all" && plan.projects.length > 1;
   const [hoveredId, setHoveredId] = useState<string | null>(null); // a ticket with a dependency path, hovered
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null); // a dependency edge, hovered directly
   const [layoutNonce, setLayoutNonce] = useState(0); // bump to force a fresh auto-layout (e.g. after reset)
@@ -241,6 +283,34 @@ export function App({ plan, selection, reload }: { plan: Plan; selection: Select
   }, [hoveredId, previewReveal, hiddenIds, setNodes]);
 
   const selected = selectedId ? (items.find((item) => item.id === selectedId) ?? null) : null;
+
+  /**
+   * What the calendar places (`CAL-3`). For one project it is exactly what the graph shows - the filters apply
+   * and the colour follows the colour toggle. Across every project, the area filters are dropped, since areas
+   * are per-project and the chips only list this one's, while the status filters still apply, since status is
+   * one vocabulary everywhere. Colour is then by project, which is the question a combined view raises first.
+   */
+  const projectColours = useMemo(() => areaColours(plan.projects.map((p) => p.key)), [plan.projects]);
+  const calendarEntries = useMemo((): CalendarEntry[] => {
+    if (allProjects) {
+      return plan.projects.flatMap((p) =>
+        p.items.filter((item) => !hiddenStatuses.has(item.status)).map((item) => ({ project: p.key, item, colour: projectColours[p.key]! })),
+      );
+    }
+    if (!project) return [];
+    return visibleItems.map((item) => ({
+      project: project.key,
+      item,
+      colour: colourMode === "status" ? STATUSES[item.status].colour : colours[item.area]!,
+    }));
+  }, [allProjects, plan.projects, hiddenStatuses, projectColours, project, visibleItems, colourMode, colours]);
+  const datedCount = useMemo(() => countDated(calendarEntries.map((entry) => entry.item)), [calendarEntries]);
+
+  // Another project's item switches project through the URL, which remounts with that item open.
+  const selectFromCalendar = (key: string, ref: string) => {
+    if (key === project?.key) setSelectedId(ref);
+    else window.location.hash = `${encodeURIComponent(key)}/${encodeURIComponent(ref)}`;
+  };
   const detail = selected ? (project?.bodies.get(selected.id) ?? "") : "";
 
   const toggle = <T,>(set: Set<T>, value: T): Set<T> => {
@@ -315,21 +385,25 @@ export function App({ plan, selection, reload }: { plan: Plan; selection: Select
           </span>
         </div>
         <div className="filters">
-          <div className="filters__group">
-            {areas.map((area) => (
-              <button
-                key={area}
-                className="chip"
-                data-off={hiddenAreas.has(area)}
-                style={{ "--area": colours[area] } as React.CSSProperties}
-                onClick={() => setHiddenAreas((set) => toggle(set, area))}
-              >
-                <span className="chip__dot" />
-                {area}
-                <span className="chip__count">{counts.byArea.get(area)}</span>
-              </button>
-            ))}
-          </div>
+          {/* Areas and the colour toggle are this project's, so they go while the calendar spans every project,
+              rather than staying as controls that do nothing. */}
+          {!(view === "calendar" && allProjects) && (
+            <div className="filters__group">
+              {areas.map((area) => (
+                <button
+                  key={area}
+                  className="chip"
+                  data-off={hiddenAreas.has(area)}
+                  style={{ "--area": colours[area] } as React.CSSProperties}
+                  onClick={() => setHiddenAreas((set) => toggle(set, area))}
+                >
+                  <span className="chip__dot" />
+                  {area}
+                  <span className="chip__count">{counts.byArea.get(area)}</span>
+                </button>
+              ))}
+            </div>
+          )}
           <div className="filters__group">
             {STATUS_KEYS.map((status) => (
               <button
@@ -345,30 +419,53 @@ export function App({ plan, selection, reload }: { plan: Plan; selection: Select
               </button>
             ))}
           </div>
-          <div className="segmented" role="group" aria-label="Colour by">
-            <span className="segmented__label">colour</span>
-            {COLOUR_MODES.map((mode) => (
-              <button
-                key={mode}
-                className="segmented__btn"
-                data-on={colourMode === mode}
-                onClick={() => setColourMode(mode)}
-              >
+          <div className="segmented" role="group" aria-label="View">
+            {VIEWS.map((mode) => (
+              <button key={mode} className="segmented__btn" data-on={view === mode} onClick={() => setView(mode)}>
                 {mode}
               </button>
             ))}
           </div>
-          <button
-            className="chip"
-            data-on={locked}
-            onClick={() => setLocked((value) => !value)}
-            title={locked ? "Unlock to drag / resize nodes" : "Lock the layout: pan without moving nodes"}
-          >
-            {locked ? "🔒 locked" : "🔓 lock"}
-          </button>
-          <button className="chip" onClick={resetLayout} title="Clear saved positions and re-run auto-layout">
-            reset layout
-          </button>
+          {view === "calendar" && plan.projects.length > 1 && (
+            <button
+              className="chip"
+              data-on={allProjects}
+              onClick={() => setSpan(allProjects ? "project" : "all")}
+              title="Show every project's dated items on one calendar, coloured by project"
+            >
+              all projects
+            </button>
+          )}
+          {!(view === "calendar" && allProjects) && (
+            <div className="segmented" role="group" aria-label="Colour by">
+              <span className="segmented__label">colour</span>
+              {COLOUR_MODES.map((mode) => (
+                <button
+                  key={mode}
+                  className="segmented__btn"
+                  data-on={colourMode === mode}
+                  onClick={() => setColourMode(mode)}
+                >
+                  {mode}
+                </button>
+              ))}
+            </div>
+          )}
+          {view === "graph" && (
+            <button
+              className="chip"
+              data-on={locked}
+              onClick={() => setLocked((value) => !value)}
+              title={locked ? "Unlock to drag / resize nodes" : "Lock the layout: pan without moving nodes"}
+            >
+              {locked ? "🔒 locked" : "🔓 lock"}
+            </button>
+          )}
+          {view === "graph" && (
+            <button className="chip" onClick={resetLayout} title="Clear saved positions and re-run auto-layout">
+              reset layout
+            </button>
+          )}
           {/* The count rides on the chip, so closing the panel still leaves the fact that an order exists (and
               how long it is) on screen. */}
           {next.length > 0 && (
@@ -395,12 +492,21 @@ export function App({ plan, selection, reload }: { plan: Plan; selection: Select
             <div className="graph__notice">
               <EmptyPlan reload={reload} />
             </div>
+          ) : selection.notice !== null && !(view === "calendar" && allProjects) ? (
+            <div className="graph__notice">{selection.notice}</div>
           ) : (
-            selection.notice !== null && <div className="graph__notice">{selection.notice}</div>
+            // An empty calendar looks broken unless it says why. Most items have no date, by design (`CAL-1`).
+            view === "calendar" &&
+            datedCount === 0 && (
+              <div className="graph__notice">
+                Nothing here has a date yet. Give an item a <code>due</code> (or a <code>start</code>) with{" "}
+                <code>edit_item</code> and it appears on the calendar.
+              </div>
+            )
           )}
           {/* Open by default: this is the answer to "what now", which is the question someone opens the viewer
               with. Dismissible rather than hidden - see the state above. */}
-          {nextOpen && next.length > 0 && (
+          {view === "graph" && nextOpen && next.length > 0 && (
             <aside className="next">
               <div className="next__head">
                 <span className="next__label">Next</span>
@@ -432,39 +538,48 @@ export function App({ plan, selection, reload }: { plan: Plan; selection: Select
               </ol>
             </aside>
           )}
-          <LockContext.Provider value={locked}>
-            <ReactFlow
-              nodes={nodes}
-              edges={edges}
-              nodeTypes={nodeTypes}
-              onNodesChange={handleNodesChange}
-              onEdgesChange={onEdgesChange}
-              onNodeClick={onNodeClick}
-              onNodeMouseEnter={onNodeMouseEnter}
-              onNodeMouseLeave={onNodeMouseLeave}
-              onEdgeMouseEnter={onEdgeMouseEnter}
-              onEdgeMouseLeave={onEdgeMouseLeave}
-              onPaneClick={() => setSelectedId(null)}
-              nodesDraggable={!locked}
-              fitView
-              snapToGrid
-              snapGrid={[GRID, GRID]}
-              minZoom={0.2}
-              maxZoom={1.75}
-              proOptions={{ hideAttribution: true }}
-            >
-              <Background gap={GRID} color="#232a33" />
-              <MiniMap
-                pannable
-                zoomable
-                nodeColor={(node) => (node.data as { colour?: string }).colour ?? "#2b3644"}
-                nodeStrokeColor="#0b0f14"
-                nodeBorderRadius={4}
-                maskColor="rgba(11,15,20,0.6)"
-              />
-              <Controls />
-            </ReactFlow>
-          </LockContext.Provider>
+          {view === "calendar" ? (
+            <Calendar
+              entries={calendarEntries}
+              multiProject={allProjects}
+              selected={project && selectedId ? { project: project.key, ref: selectedId } : null}
+              onSelect={selectFromCalendar}
+            />
+          ) : (
+            <LockContext.Provider value={locked}>
+              <ReactFlow
+                nodes={nodes}
+                edges={edges}
+                nodeTypes={nodeTypes}
+                onNodesChange={handleNodesChange}
+                onEdgesChange={onEdgesChange}
+                onNodeClick={onNodeClick}
+                onNodeMouseEnter={onNodeMouseEnter}
+                onNodeMouseLeave={onNodeMouseLeave}
+                onEdgeMouseEnter={onEdgeMouseEnter}
+                onEdgeMouseLeave={onEdgeMouseLeave}
+                onPaneClick={() => setSelectedId(null)}
+                nodesDraggable={!locked}
+                fitView
+                snapToGrid
+                snapGrid={[GRID, GRID]}
+                minZoom={0.2}
+                maxZoom={1.75}
+                proOptions={{ hideAttribution: true }}
+              >
+                <Background gap={GRID} color="#232a33" />
+                <MiniMap
+                  pannable
+                  zoomable
+                  nodeColor={(node) => (node.data as { colour?: string }).colour ?? "#2b3644"}
+                  nodeStrokeColor="#0b0f14"
+                  nodeBorderRadius={4}
+                  maskColor="rgba(11,15,20,0.6)"
+                />
+                <Controls />
+              </ReactFlow>
+            </LockContext.Provider>
+          )}
         </div>
 
         {selected && (

@@ -4,7 +4,7 @@
  * again by accident.
  */
 import { describe, expect, it } from "vitest";
-import { selectProject, type ProjectPlan } from "./store";
+import { parseHash, selectProject, type ProjectPlan } from "./store";
 
 const project = (key: string): ProjectPlan => ({ key, name: key.toUpperCase(), items: [], next: [], bodies: new Map(), attachments: new Map(), metrics: new Map() });
 const apm = project("apm");
@@ -38,5 +38,16 @@ describe("selectProject", () => {
       expect(selection.project).toBeNull();
       expect(selection.notice).toContain("no projects yet");
     }
+  });
+});
+
+describe("parseHash", () => {
+  it("reads a project, and an item in it when one is named (CAL-3)", () => {
+    expect(parseHash("")).toEqual({ project: null, item: null });
+    expect(parseHash("#apm")).toEqual({ project: "apm", item: null });
+    expect(parseHash("#apm/CAL-1.2")).toEqual({ project: "apm", item: "CAL-1.2" });
+    // A trailing slash names no item, rather than an item called "".
+    expect(parseHash("#apm/")).toEqual({ project: "apm", item: null });
+    expect(parseHash("#my%20plan/CAL-1")).toEqual({ project: "my plan", item: "CAL-1" });
   });
 });

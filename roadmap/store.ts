@@ -104,6 +104,7 @@ interface StoreItem {
   parent?: string;
   start?: string;
   due?: string;
+  closed_at?: string;
   body?: string;
   attachments?: Attachment[];
 }
@@ -214,6 +215,7 @@ export async function fetchPlan(): Promise<Plan> {
         parent: item.parent ?? null,
         start: item.start,
         due: item.due,
+        closed: item.closed_at,
       })),
       // Refs that name no rendered item are dropped: the served store is a projection, and a panel row that
       // selects nothing would be a dead link rather than a jump.
@@ -224,6 +226,22 @@ export async function fetchPlan(): Promise<Plan> {
       metrics: groupBy(metrics?.[project.key] ?? [], (m) => m.ref ?? ""),
     })),
   };
+}
+
+/**
+ * What the URL hash asks for: a project (`#spanish`), and optionally an item in it (`#spanish/GRAM-3`).
+ *
+ * The item half arrived with the calendar (`CAL-3`), which shows several projects at once: clicking another
+ * project's item has to switch project *and* open that item, and the switch remounts the viewer, so the item
+ * has to survive it - the URL is the one thing that does. It is also a link to an item, which `VIEW-4`
+ * anticipated. A ref never contains a `/`, so the first one is the split.
+ */
+export function parseHash(hash: string): { project: string | null; item: string | null } {
+  const raw = decodeURIComponent(hash.replace(/^#/, ""));
+  const cut = raw.indexOf("/");
+  const project = (cut === -1 ? raw : raw.slice(0, cut)) || null;
+  const item = cut === -1 ? null : raw.slice(cut + 1) || null;
+  return { project, item };
 }
 
 /** What the viewer should render, given the store and the project asked for in the URL hash. */
