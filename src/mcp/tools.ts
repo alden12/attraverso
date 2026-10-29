@@ -85,7 +85,7 @@ const buildStamp = (): string =>
 /** The dependency field, shared by create and edit so the two cannot describe it differently. Declarative on
  *  purpose: the array is the whole set, which is what lets a wrong edit be corrected rather than only added to. */
 /** A planned date (`CAL-1`). Validated in the domain, which names what was wrong with it. */
-const date = (what: string) => z.string().describe(`${what}, as YYYY-MM-DD: a calendar day, not a time.`);
+const date = (what: string, more?: string) => z.string().describe(`${what}, as YYYY-MM-DD: a calendar day, not a time.${more ? ` ${more}` : ""}`);
 
 const DEPS = z
   .array(z.string())
@@ -709,8 +709,8 @@ export function registerTools(server: McpServer, db: Database, store: StoreAcces
         body: z.string().describe("The item's description, in markdown.").optional(),
         status: z.enum(STATUS_VALUES).describe("Defaults to to-do.").optional(),
         deps: DEPS,
-        start: date("When work on it is planned to begin. Optional; most items have no dates").optional(),
-        due: date("When it is due. Optional; most items have no dates").optional(),
+        start: date("When work on it is planned to begin", "Optional; most items have no dates.").optional(),
+        due: date("When it is due", "Optional; most items have no dates.").optional(),
       },
     },
     async ({ project, area, parent, ref, title, body, status, deps, start, due }): Promise<CallToolResult> =>
@@ -727,9 +727,16 @@ export function registerTools(server: McpServer, db: Database, store: StoreAcces
     {
       annotations: READ,
       description:
-        "List items in a project, optionally filtered by area or status. Leads with a count of what matched, and of the project as a whole when a filter narrowed it. " +
+        "List items in a project, optionally filtered by area, status or a window of dates. Leads with a count of what matched, and of the project as a whole when a filter narrowed it. " +
+        "For \"what is on this week\", pass `from` and `to`: an item matches when its start-to-due span overlaps the window (an item with one date covers that day), undated items never match, and the result comes in date order. " +
         "An item is anything you work on or keep up: work to ship, a skill to practise, a plant to water. What varies is whether it carries a schedule, not what kind of thing it is.",
-      inputSchema: { project: z.string(), area: z.string().optional(), status: z.enum(STATUS_VALUES).optional() },
+      inputSchema: {
+        project: z.string(),
+        area: z.string().optional(),
+        status: z.enum(STATUS_VALUES).optional(),
+        from: date("First day of the window, inclusive", "Leave out for no lower bound.").optional(),
+        to: date("Last day of the window, inclusive", "Leave out for no upper bound.").optional(),
+      },
       /**
        * The board, as records (`MCP-26`). This is the reply the artifact report was actually about: something
        * rendering every item wants ref, status, title and the edges, and wants none of the prose.
@@ -759,20 +766,21 @@ export function registerTools(server: McpServer, db: Database, store: StoreAcces
         ),
       },
     },
-    async ({ project, area, status }): Promise<CallToolResult> =>
+    async ({ project, area, status, from, to }): Promise<CallToolResult> =>
       guarded(async () => {
         const p = await resolveProject(db, caller, project);
-        const list = await listItems(db, { projectId: p.id, area, status });
+        const list = await listItems(db, { projectId: p.id, area, status, from, to });
         // A count, because a listing that only returns lines lets a total carried in a comment or in working
         // memory drift for a whole session with nothing ever contradicting it (MCP-21). The unfiltered total
         // rides along whenever a filter was applied: "12 items" and "12 of 116" are different facts, and
         // only the second is safe to write down.
-        const filtered = area !== undefined || status !== undefined;
+        const filtered = area !== undefined || status !== undefined || from !== undefined || to !== undefined;
         // `countItems`, not a second listing: this is one integer, and building 151 rows to read `.length`
         // was the same waste as selecting bodies nobody reads.
         const total = filtered ? await countItems(db, { projectId: p.id }) : list.length;
         const scope = [status, area].filter(Boolean).join(" ");
-        const header = `${list.length} ${scope ? `${scope} ` : ""}item${list.length === 1 ? "" : "s"}${filtered ? ` of ${total} in ${p.key}` : ` in ${p.key}`}`;
+        const window = from !== undefined && to !== undefined ? ` dated ${from} to ${to}` : from !== undefined ? ` dated from ${from}` : to !== undefined ? ` dated up to ${to}` : "";
+        const header = `${list.length} ${scope ? `${scope} ` : ""}item${list.length === 1 ? "" : "s"}${window}${filtered ? ` of ${total} in ${p.key}` : ` in ${p.key}`}`;
         const deps = await dependencyRefsByItem(db, p.id);
         return {
           content: [{ type: "text", text: list.length ? `${header}\n${list.map(fmtItem).join("\n")}` : `${header} - nothing matches` }],

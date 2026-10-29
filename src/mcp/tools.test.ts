@@ -926,3 +926,33 @@ describe("planned dates on items (CAL-1)", () => {
     expect(said(refused)).toMatch(/not a calendar date/);
   });
 });
+
+describe("listing a window of dates (CAL-2)", () => {
+  let tools: Map<string, Handler>;
+
+  beforeAll(async () => {
+    const { db, ownerId } = await freshDb();
+    await createProjectWithDefaults(db, { key: "apm", name: "AI PM", type: "software", ownerId }, ACTOR);
+    tools = toolsOf(db, ownerId);
+    const create = tools.get("create_item")!;
+    await create({ project: "apm", area: "CAL", title: "undated" });
+    await create({ project: "apm", area: "CAL", title: "friday deadline", due: "2026-11-06" });
+    await create({ project: "apm", area: "CAL", title: "spans into the week", start: "2026-10-28", due: "2026-11-03" });
+    await create({ project: "apm", area: "CAL", title: "kicks off monday", start: "2026-11-02" });
+    await create({ project: "apm", area: "CAL", title: "next week", due: "2026-11-10" });
+  });
+
+  it("lists what overlaps a week, in date order, and leaves undated items out", async () => {
+    const week = await tools.get("list_items")!({ project: "apm", from: "2026-11-02", to: "2026-11-08" });
+    expect(said(week)).toMatch(/^3 items dated 2026-11-02 to 2026-11-08 of 5 in apm/);
+    expect((week.structuredContent as { items: { title: string }[] }).items.map((i) => i.title)).toEqual(["spans into the week", "kicks off monday", "friday deadline"]);
+  });
+
+  it("takes an open-ended window, and refuses a backwards or malformed one", async () => {
+    const after = await tools.get("list_items")!({ project: "apm", from: "2026-11-07" });
+    expect((after.structuredContent as { items: { title: string }[] }).items.map((i) => i.title)).toEqual(["next week"]);
+    expect(said(await tools.get("list_items")!({ project: "apm", to: "2026-10-31" }))).toMatch(/^1 item dated up to 2026-10-31/);
+    expect(said(await tools.get("list_items")!({ project: "apm", from: "2026-11-08", to: "2026-11-02" }))).toMatch(/from 2026-11-08 is after to/);
+    expect(said(await tools.get("list_items")!({ project: "apm", from: "this week" }))).toMatch(/not a calendar date/);
+  });
+});

@@ -164,6 +164,13 @@ export interface ItemFilter {
   projectId: OwnedProjectId;
   status?: string;
   area?: string;
+  /**
+   * A window of calendar days, inclusive at both ends (`CAL-2`). Either bound may be left open. An item matches
+   * when the days it covers overlap the window, by the calendar's own rule: start to due, or the one day when
+   * only one is set. Undated items never match a window, which is most of them and is the point of asking.
+   */
+  from?: string;
+  to?: string;
 }
 
 /**
@@ -199,6 +206,18 @@ const listConditions = (filter: ItemFilter) => {
   const conditions = [eq(items.projectId, filter.projectId), isNull(items.deletedAt)];
   if (filter.status) conditions.push(eq(items.status, filter.status));
   if (filter.area) conditions.push(eq(items.areaKey, filter.area.toUpperCase()));
+  if (windowed(filter)) {
+    for (const [name, value] of [["from", filter.from], ["to", filter.to]] as const) {
+      if (value !== undefined && !isCalendarDate(value)) throw new Error(`${name} "${value}" is not a calendar date; expected YYYY-MM-DD, like 2026-11-02`);
+    }
+    if (filter.from !== undefined && filter.to !== undefined && filter.from > filter.to) throw new Error(`from ${filter.from} is after to ${filter.to}`);
+    // Each side falls back to the other, so a one-date item is a one-day span. Fixed-width dates order as text,
+    // so these are date comparisons, and an undated item's null drops it out of both.
+    const first = sql`coalesce(${items.startOn}, ${items.dueOn})`;
+    const last = sql`coalesce(${items.dueOn}, ${items.startOn})`;
+    if (filter.to !== undefined) conditions.push(sql`${first} <= ${filter.to}`);
+    if (filter.from !== undefined) conditions.push(sql`${last} >= ${filter.from}`);
+  }
   return and(...conditions);
 };
 
@@ -209,8 +228,11 @@ export async function listItems(db: Database, filter: ItemFilter): Promise<ItemS
     .select(SUMMARY_COLUMNS)
     .from(items)
     .where(listConditions(filter))
-    .orderBy(asc(items.areaKey), asc(items.sortPath));
+    // A window is a question about when, so its answer reads in date order; the ref order breaks ties.
+    .orderBy(...(windowed(filter) ? [sql`coalesce(${items.startOn}, ${items.dueOn})`] : []), asc(items.areaKey), asc(items.sortPath));
 }
+
+const windowed = (filter: ItemFilter) => filter.from !== undefined || filter.to !== undefined;
 
 /**
  * How many items match, without fetching them.
