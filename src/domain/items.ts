@@ -14,7 +14,7 @@ import type { OwnedProjectId } from "./owned";
 import { mutate, type Actor } from "./events";
 import { dependencyRefs, setDependencies } from "./dependencies";
 import { listComments, type Comment } from "./comments";
-import { areaOf, isRef, parentRef, STATUSES, type Status } from "../../scripts/tickets";
+import { areaOf, isCalendarDate, isRef, parentRef, STATUSES, type Status } from "../../scripts/tickets";
 
 export type Item = typeof items.$inferSelect;
 
@@ -23,6 +23,19 @@ const isStatus = (value: string): value is Status => Object.prototype.hasOwnProp
 /** Validate against the fixed vocabulary in one place; the schema leaves `status` an open string on purpose. */
 function assertStatus(value: string): asserts value is Status {
   if (!isStatus(value)) throw new Error(`unknown status "${value}"; expected one of ${Object.keys(STATUSES).join(", ")}`);
+}
+
+/**
+ * Check an item's planned dates (`CAL-1`), as they will stand after the write: each a real calendar day, and a
+ * start no later than its due. Checked against the *resulting* pair, so moving a due date earlier than an
+ * existing start is caught by an edit that only names the due date.
+ */
+function assertDates(start: string | null, due: string | null): void {
+  for (const [name, value] of [["start", start], ["due", due]] as const) {
+    if (value !== null && !isCalendarDate(value)) throw new Error(`${name} "${value}" is not a calendar date; expected YYYY-MM-DD, like 2026-11-02`);
+  }
+  // Fixed-width dates order as text, so this is a date comparison.
+  if (start !== null && due !== null && start > due) throw new Error(`start ${start} is after due ${due}`);
 }
 
 /** The highest `sort_path` among a set of siblings, as the number of its last segment. Because a `sort_path`
@@ -121,17 +134,23 @@ export interface NewItem {
   status?: string;
   /** Refs this item depends on. Validated and cycle-checked like any other dependency edit. */
   deps?: string[];
+  /** Planned dates, `YYYY-MM-DD` (`CAL-1`). Both optional: an undated item is the normal case. */
+  start?: string | null;
+  due?: string | null;
 }
 
 export async function createItem(db: Database, input: NewItem, actor: Actor): Promise<Item> {
   const status = input.status ?? "to-do";
   assertStatus(status);
+  const startOn = input.start ?? null;
+  const dueOn = input.due ?? null;
+  assertDates(startOn, dueOn);
   return mutate(db, actor, async (tx) => {
     const { ref, path, area, parentId } = await allocate(tx, input.projectId, input);
     const item = one(
       await tx
         .insert(items)
-        .values({ projectId: input.projectId, ref, areaKey: area, sortPath: path, parentId, title: input.title, body: input.body ?? null, status })
+        .values({ projectId: input.projectId, ref, areaKey: area, sortPath: path, parentId, title: input.title, body: input.body ?? null, status, startOn, dueOn })
         .returning(),
     );
     // After the insert, so a pair of tickets created together can reference each other and so the cycle check
@@ -158,7 +177,7 @@ export interface ItemFilter {
  * Reach for `getItem` or `getItemDetail` when a whole ticket is wanted. That the two are different calls is
  * the point: a listing is an index, and an index that carries its documents is not saving anyone anything.
  */
-export type ItemSummary = Pick<Item, "id" | "ref" | "areaKey" | "sortPath" | "parentId" | "title" | "status" | "createdAt" | "updatedAt" | "closedAt">;
+export type ItemSummary = Pick<Item, "id" | "ref" | "areaKey" | "sortPath" | "parentId" | "title" | "status" | "createdAt" | "updatedAt" | "closedAt" | "startOn" | "dueOn">;
 
 const SUMMARY_COLUMNS = {
   id: items.id,
@@ -171,6 +190,9 @@ const SUMMARY_COLUMNS = {
   createdAt: items.createdAt,
   updatedAt: items.updatedAt,
   closedAt: items.closedAt,
+  // Small, and what a listing line shows (`CAL-1`): "what is due" is the question a date exists to answer.
+  startOn: items.startOn,
+  dueOn: items.dueOn,
 } as const;
 
 const listConditions = (filter: ItemFilter) => {
@@ -253,14 +275,17 @@ export interface EditItem {
   body?: string;
   /** Replaces the whole dependency set; `[]` clears it. See `setDependencies` for why it is not add/remove. */
   deps?: string[];
+  /** Planned dates (`CAL-1`): a `YYYY-MM-DD` sets one, `null` clears it, absent leaves it alone. */
+  start?: string | null;
+  due?: string | null;
 }
 
-/** Revise a ticket's title, body and/or dependencies. Status has its own path (`setStatus`), so this never
+/** Revise a ticket's title, body, dependencies and/or planned dates. Status has its own path (`setStatus`), so this never
  *  touches it; at least one field must be given. The whole before/after is logged, so the edit is auditable
  *  and reversible like any other mutation. */
 export async function editItem(db: Database, input: EditItem, actor: Actor): Promise<Item> {
-  if (input.title === undefined && input.body === undefined && input.deps === undefined) {
-    throw new Error("nothing to edit: provide a title, body and/or deps");
+  if (input.title === undefined && input.body === undefined && input.deps === undefined && input.start === undefined && input.due === undefined) {
+    throw new Error("nothing to edit: provide a title, body, deps, start and/or due");
   }
   return mutate(db, actor, async (tx) => {
     const before = maybeOne(await tx.select().from(items).where(and(eq(items.projectId, input.projectId), eq(items.ref, input.ref))));
@@ -268,6 +293,9 @@ export async function editItem(db: Database, input: EditItem, actor: Actor): Pro
     const changes: Partial<typeof items.$inferInsert> = { updatedAt: timestamp() };
     if (input.title !== undefined) changes.title = input.title;
     if (input.body !== undefined) changes.body = input.body;
+    if (input.start !== undefined) changes.startOn = input.start;
+    if (input.due !== undefined) changes.dueOn = input.due;
+    assertDates(input.start === undefined ? before.startOn : input.start, input.due === undefined ? before.dueOn : input.due);
     const after = one(await tx.update(items).set(changes).where(eq(items.id, before.id)).returning());
     // Dep refs ride along in the event payload when they changed, because the item row does not carry them:
     // without this a deps-only edit logs a before and after that differ by nothing but `updated_at`.

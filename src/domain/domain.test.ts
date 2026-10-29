@@ -129,6 +129,31 @@ describe("items", () => {
     await close();
   });
 
+  it("sets, moves and clears planned dates, and refuses impossible ones (CAL-1)", async () => {
+    const { db, ownerId, close } = await freshDb();
+    const p = await createProject(db, { key: "apm", name: "AI PM", type: "software", ownerId }, ACTOR);
+    const undated = await createItem(db, { projectId: p.id, area: "CAL", title: "backlog" }, ACTOR);
+    expect([undated.startOn, undated.dueOn]).toEqual([null, null]); // the normal case
+    const dated = await createItem(db, { projectId: p.id, area: "CAL", title: "trip", start: "2026-11-02", due: "2026-11-06" }, ACTOR);
+    expect([dated.startOn, dated.dueOn]).toEqual(["2026-11-02", "2026-11-06"]);
+    expect((await listItems(db, { projectId: p.id })).find((i) => i.ref === "CAL-2")?.dueOn).toBe("2026-11-06");
+
+    // Absent leaves a date alone, null clears it.
+    const moved = await editItem(db, { projectId: p.id, ref: "CAL-2", due: "2026-11-09" }, ACTOR);
+    expect([moved.startOn, moved.dueOn]).toEqual(["2026-11-02", "2026-11-09"]);
+    const cleared = await editItem(db, { projectId: p.id, ref: "CAL-2", start: null }, ACTOR);
+    expect([cleared.startOn, cleared.dueOn]).toEqual([null, "2026-11-09"]);
+
+    await expect(createItem(db, { projectId: p.id, area: "CAL", title: "x", due: "2026-02-30" }, ACTOR)).rejects.toThrow(/not a calendar date/);
+    await expect(createItem(db, { projectId: p.id, area: "CAL", title: "x", due: "2026-13-01" }, ACTOR)).rejects.toThrow(/not a calendar date/);
+    await expect(createItem(db, { projectId: p.id, area: "CAL", title: "x", due: "2026-11-02T09:00:00Z" }, ACTOR)).rejects.toThrow(/not a calendar date/);
+    await expect(createItem(db, { projectId: p.id, area: "CAL", title: "x", start: "2026-11-03", due: "2026-11-02" }, ACTOR)).rejects.toThrow(/after due/);
+    // Checked against the pair as it would stand, so an edit naming only one side still cannot cross them.
+    await editItem(db, { projectId: p.id, ref: "CAL-2", start: "2026-11-05" }, ACTOR);
+    await expect(editItem(db, { projectId: p.id, ref: "CAL-2", due: "2026-11-04" }, ACTOR)).rejects.toThrow(/after due/);
+    await close();
+  });
+
   it("rejects an unknown status and a missing ref", async () => {
     const { db, ownerId, close } = await freshDb();
     const p = await createProject(db, { key: "apm", name: "AI PM", type: "software", ownerId }, ACTOR);

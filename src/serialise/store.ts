@@ -84,6 +84,10 @@ const itemSchema = z.object({
   priority: z.number().optional(),
   parent: z.string().optional(),
   deps: z.array(z.string()).optional(),
+  /** Planned dates, `YYYY-MM-DD` (`CAL-1`). Not validated here: the importer restores rows rather than
+   *  judging them, so a hand-edited date loads and `edit_item` is where it gets corrected. */
+  start: z.string().optional(),
+  due: z.string().optional(),
   body: z.string().optional(),
   id: z.string(),
   created_at: z.string(),
@@ -323,6 +327,9 @@ export async function exportStore(db: Database, ownerId: string): Promise<Store>
           sort_path: i.sortPath,
           parent: i.parentId ? opt(idToRef.get(i.parentId)) : undefined,
           deps: deps && deps.length > 0 ? [...deps].sort() : undefined,
+          // Above the body, beside the other one-line fields, so a dated item reads its dates before its prose.
+          start: opt(i.startOn),
+          due: opt(i.dueOn),
           body: opt(i.body),
           id: i.id,
           created_at: i.createdAt,
@@ -517,6 +524,8 @@ async function insertStore(tx: Tx, store: Store, owner?: string): Promise<void> 
         updatedAt: i.updated_at,
         closedAt: i.closed_at ?? null,
         deletedAt: i.deleted_at ?? null,
+        startOn: i.start ?? null,
+        dueOn: i.due ?? null,
       });
     }
 

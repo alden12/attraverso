@@ -84,6 +84,9 @@ const buildStamp = (): string =>
 
 /** The dependency field, shared by create and edit so the two cannot describe it differently. Declarative on
  *  purpose: the array is the whole set, which is what lets a wrong edit be corrected rather than only added to. */
+/** A planned date (`CAL-1`). Validated in the domain, which names what was wrong with it. */
+const date = (what: string) => z.string().describe(`${what}, as YYYY-MM-DD: a calendar day, not a time.`);
+
 const DEPS = z
   .array(z.string())
   .describe(
@@ -111,7 +114,20 @@ const text = (body: string): CallToolResult => ({ content: [{ type: "text", text
 const errorText = (body: string): CallToolResult => ({ content: [{ type: "text", text: body }], isError: true });
 
 const fmtProject = (p: { key: string; name: string; type: string; direction: string | null }): string => `${p.key} - ${p.name} (${p.type})${p.direction ? `\n  direction: ${p.direction}` : ""}`;
-const fmtItem = (i: { ref: string; status: string; title: string }): string => `${i.ref} [${i.status}] ${i.title}`;
+const fmtItem = (i: { ref: string; status: string; title: string; startOn?: string | null; dueOn?: string | null }): string =>
+  `${i.ref} [${i.status}] ${i.title}${fmtDates(i.startOn ?? null, i.dueOn ?? null)}`;
+
+/**
+ * An item's planned dates as a suffix on its line (`CAL-1`), and nothing for an undated one, which is most of
+ * them. On the line rather than in `get_item` alone, because "what is due" is the question a date exists to
+ * answer, and a listing that hides it sends every reader to open every item.
+ */
+function fmtDates(start: string | null, due: string | null): string {
+  if (start !== null && due !== null) return ` (${start} to ${due})`;
+  if (due !== null) return ` (due ${due})`;
+  if (start !== null) return ` (from ${start})`;
+  return "";
+}
 
 /**
  * A blocker, with its own status. `DATA-1 [review]` and `DATA-1 [planning]` are very different situations - one
@@ -693,12 +709,14 @@ export function registerTools(server: McpServer, db: Database, store: StoreAcces
         body: z.string().describe("The item's description, in markdown.").optional(),
         status: z.enum(STATUS_VALUES).describe("Defaults to to-do.").optional(),
         deps: DEPS,
+        start: date("When work on it is planned to begin. Optional; most items have no dates").optional(),
+        due: date("When it is due. Optional; most items have no dates").optional(),
       },
     },
-    async ({ project, area, parent, ref, title, body, status, deps }): Promise<CallToolResult> =>
+    async ({ project, area, parent, ref, title, body, status, deps, start, due }): Promise<CallToolResult> =>
       guarded(async () => {
         const p = await resolveProject(db, caller, project);
-        const item = await createItem(db, { projectId: p.id, area, parent, ref, title, body, status, deps }, ACTOR);
+        const item = await createItem(db, { projectId: p.id, area, parent, ref, title, body, status, deps, start, due }, ACTOR);
         await store.persist();
         return text(`created ${fmtItem(item)}${deps?.length ? `\ndepends on: ${deps.join(", ")}` : ""}`);
       }),
@@ -735,6 +753,8 @@ export function registerTools(server: McpServer, db: Database, store: StoreAcces
             title: z.string(),
             deps: z.array(z.string()).describe("Refs this item depends on."),
             parent: z.string().nullable().describe("Parent ref for a nested item, from the dotted id."),
+            start: z.string().nullable().describe("Planned start, YYYY-MM-DD, or null."),
+            due: z.string().nullable().describe("Due date, YYYY-MM-DD, or null."),
           }),
         ),
       },
@@ -765,6 +785,8 @@ export function registerTools(server: McpServer, db: Database, store: StoreAcces
               title: i.title,
               deps: deps.get(i.id) ?? [],
               parent: parentRef(i.ref),
+              start: i.startOn,
+              due: i.dueOn,
             })),
           },
         };
@@ -817,7 +839,7 @@ export function registerTools(server: McpServer, db: Database, store: StoreAcces
     {
       annotations: WRITE,
       description:
-        "Revise a item's title, body (its prose - the design, rationale or a note on why it moved) and/or its dependencies. " +
+        "Revise a item's title, body (its prose - the design, rationale or a note on why it moved), its dependencies and/or its planned start and due dates. " +
         "Pass only the fields to change; status has its own tool (set_status).",
       inputSchema: {
         project: z.string(),
@@ -825,9 +847,11 @@ export function registerTools(server: McpServer, db: Database, store: StoreAcces
         title: z.string().optional(),
         body: z.string().describe("The item's description, in markdown.").optional(),
         deps: DEPS,
+        start: date("When work on it is planned to begin; null clears it").nullable().optional(),
+        due: date("When it is due; null clears it").nullable().optional(),
       },
     },
-    async ({ project, ref, title, body, deps }): Promise<CallToolResult> =>
+    async ({ project, ref, title, body, deps, start, due }): Promise<CallToolResult> =>
       guarded(async () => {
         const p = await resolveProject(db, caller, project);
         await resolveRef(db, p, ref);
@@ -837,7 +861,7 @@ export function registerTools(server: McpServer, db: Database, store: StoreAcces
         // wrong thing to suggest, and an unresolved one is valid by design. `setDependencies` owns that case,
         // including the error for a scoped ref whose project *is* loaded and lacks it.
         for (const dep of deps ?? []) if (splitScope(dep) === null) await resolveRef(db, p, dep);
-        const item = await editItem(db, { projectId: p.id, ref, title, body, deps }, ACTOR);
+        const item = await editItem(db, { projectId: p.id, ref, title, body, deps, start, due }, ACTOR);
         await store.persist();
         return text(`edited ${fmtItem(item)}${deps ? `\ndepends on: ${deps.length ? deps.join(", ") : "(nothing)"}` : ""}`);
       }),

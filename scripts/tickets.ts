@@ -33,6 +33,9 @@ export interface RoadmapItem {
   /** Parent ticket id for a nested (sub-)ticket, derived from a dotted id (`HOST-6.1` -> `HOST-6`); null for
    *  a top-level ticket. A ticket with children renders as a nested box in the viewer. */
   parent: string | null;
+  /** Planned dates as `YYYY-MM-DD` (`CAL-1`), absent on an undated item, which is most of them. */
+  start?: string;
+  due?: string;
 }
 
 /**
@@ -89,6 +92,20 @@ export function parentRef(ref: string): string | null {
  * kind of bug that only shows up once a project has thirty tickets in one area.
  */
 export const isNestedUnder = (ancestor: string, ref: string): boolean => ref.startsWith(`${ancestor}.`);
+
+/**
+ * A calendar date, `2026-11-02`, as an item's `start` and `due` are written (`CAL-1`).
+ *
+ * The shape alone would pass `2026-02-30`, so the date is round-tripped through `Date` and has to come back
+ * unchanged. Parsed as UTC on purpose: a bare date is a day, not an instant, and reading it in local time is
+ * how a due date drifts by one for whoever is west of Greenwich. Here, so the viewer and the domain agree.
+ */
+export function isCalendarDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const day = new Date(`${value}T00:00:00Z`);
+  // A month of 13 is an invalid Date, whose `toISOString` throws rather than answering.
+  return !Number.isNaN(day.getTime()) && day.toISOString().startsWith(value);
+}
 
 /** The distinct areas present, in first-seen order (areas are open, so this is derived, not configured). */
 export function areasOf(items: RoadmapItem[]): string[] {

@@ -201,6 +201,12 @@ export const items = pgTable(
     updatedAt: text("updated_at").notNull().$defaultFn(timestamp),
     closedAt: text("closed_at"),
     deletedAt: text("deleted_at"), // soft delete; there is no hard-delete path
+    // Planned dates (`CAL-1`), both optional and hand-set. A calendar day (`2026-11-02`), not a timestamp: a
+    // due date stored as UTC midnight lands on the previous day for anyone west of Greenwich, so `_on` here
+    // where every instant above is `_at`. Distinct from the scheduling layer's computed `due_at`, which a
+    // recompute owns; this one is a stated intention and nothing overwrites it.
+    startOn: text("start_on"),
+    dueOn: text("due_on"),
     // Full-text search (DATA-11). Maintained by Postgres inside the same write, never by us.
     tsv: tsvector("tsv").generatedAlwaysAs(() => searchVector(["title", "A"], ["body", "B"])),
   },
@@ -212,6 +218,8 @@ export const items = pgTable(
     index("items_project_area").on(t.projectId, t.areaKey),
     index("items_project_sort").on(t.projectId, t.sortPath),
     index("items_parent").on(t.parentId),
+    // A calendar asks for a window of days, which this answers without reading the plan.
+    index("items_project_due").on(t.projectId, t.dueOn),
     index("items_tsv").using("gin", t.tsv),
   ],
 );

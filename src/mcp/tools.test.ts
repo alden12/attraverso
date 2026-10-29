@@ -904,3 +904,25 @@ describe("the tool surface speaks to a caller who does not have this backlog", (
     }
   });
 });
+
+// Its own database, because the shared one above backs near-miss tests that list every ref in the project.
+describe("planned dates on items (CAL-1)", () => {
+  let dated: Map<string, Handler>;
+
+  beforeAll(async () => {
+    const { db, ownerId } = await freshDb();
+    await createProjectWithDefaults(db, { key: "apm", name: "AI PM", type: "software", ownerId }, ACTOR);
+    dated = toolsOf(db, ownerId);
+  });
+
+  it("takes planned dates on create and edit, and shows them on the item's line (CAL-1)", async () => {
+    const created = await dated.get("create_item")!({ project: "apm", area: "CAL", title: "trip", start: "2026-11-02", due: "2026-11-06" });
+    expect(said(created)).toContain("CAL-1 [to-do] trip (2026-11-02 to 2026-11-06)");
+    expect(said(await dated.get("edit_item")!({ project: "apm", ref: "CAL-1", start: null }))).toContain("trip (due 2026-11-06)");
+    expect(said(await dated.get("list_items")!({ project: "apm", area: "CAL" }))).toContain("trip (due 2026-11-06)");
+    expect(said(await dated.get("get_item")!({ project: "apm", ref: "CAL-1" }))).toContain("trip (due 2026-11-06)");
+    const refused = await dated.get("edit_item")!({ project: "apm", ref: "CAL-1", due: "next tuesday" });
+    expect(refused.isError).toBe(true);
+    expect(said(refused)).toMatch(/not a calendar date/);
+  });
+});

@@ -46,6 +46,11 @@ const EMPTY: never[] = [];
 const NO_ITEMS: RoadmapItem[] = [];
 const NO_REFS: string[] = [];
 
+/** A planned date (`CAL-1`) as a reader says it, "Mon 2 Nov 2026". Formatted in UTC because the date is a day,
+ *  not an instant: in local time, midnight UTC is still the previous evening for anyone west of Greenwich. */
+const fmtDay = (day: string): string =>
+  new Date(`${day}T00:00:00Z`).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+
 export function App({ plan, selection, reload }: { plan: Plan; selection: Selection; reload: () => void }) {
   const project = selection.project;
   const { ToolbarActions, EmptyPlan } = useExtensions();
@@ -475,6 +480,11 @@ export function App({ plan, selection, reload }: { plan: Plan; selection: Select
                 ×
               </button>
             </div>
+            {(selected.start !== undefined || selected.due !== undefined) && (
+              <div className="detail__deps">
+                {[selected.start && `starts ${fmtDay(selected.start)}`, selected.due && `due ${fmtDay(selected.due)}`].filter(Boolean).join(", ")}
+              </div>
+            )}
             {selected.deps.length > 0 && (
               <div className="detail__deps">
                 depends on:{" "}

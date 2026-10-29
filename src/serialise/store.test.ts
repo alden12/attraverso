@@ -35,7 +35,8 @@ async function seed(db: Awaited<ReturnType<typeof freshDb>>["db"], ownerId: stri
   await setSection(db, { projectId: p.id, heading: "Goals", content: "ship it, then dogfood" }, ACTOR);
   await setSection(db, { projectId: p.id, heading: "Open questions", content: "split the journal files?" }, ACTOR);
   const mcp1 = await createItem(db, { projectId: p.id, area: "MCP", title: "server", body: "the stdio server" }, ACTOR);
-  const mcp2 = await createItem(db, { projectId: p.id, area: "MCP", title: "tools", status: "in-progress" }, ACTOR);
+  // Dated (`CAL-1`), so the byte-identical round trip below covers both date keys.
+  const mcp2 = await createItem(db, { projectId: p.id, area: "MCP", title: "tools", status: "in-progress", start: "2026-11-02", due: "2026-11-06" }, ACTOR);
   const data1 = await createItem(db, { projectId: p.id, area: "DATA", title: "storage", status: "done" }, ACTOR);
   // A nested child MCP-1.1 and a dependency MCP-2 -> DATA-1.
   await db.insert(items).values({
@@ -96,6 +97,19 @@ describe("YAML store", () => {
     const out = await exportStore(db, ownerId);
     expect(out.projects[0]?.items[0]?.ref).toBe("MCP-1");
     expect(stringifyStore(out)).not.toContain("priority");
+    await close();
+  });
+
+  it("writes planned dates as plain days, and reads one typed by hand without quotes (CAL-1)", async () => {
+    const { db, ownerId, close } = await freshDb();
+    await seed(db, ownerId);
+    const text = stringifyStore(await exportStore(db, ownerId));
+    expect(text).toMatch(/start: "?2026-11-02"?\n\s+due: "?2026-11-06"?\n/);
+    // A YAML 1.1 parser reads a bare 2026-11-06 as a timestamp, which would fail the schema or shift the day.
+    // Pinned with the unquoted form a person would actually type.
+    const handTyped = parseStore(text.replace(/"(2026-11-0\d)"/g, "$1"));
+    const mcp2 = handTyped.projects[0]?.items.find((i) => i.ref === "MCP-2");
+    expect([mcp2?.start, mcp2?.due]).toEqual(["2026-11-02", "2026-11-06"]);
     await close();
   });
 

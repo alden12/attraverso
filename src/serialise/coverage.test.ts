@@ -68,7 +68,7 @@ const COVERAGE: Record<string, Coverage> = {
   },
   items: {
     table: items,
-    exported: ["id", "ref", "areaKey", "sortPath", "parentId", "title", "body", "status", "createdAt", "updatedAt", "closedAt", "deletedAt"],
+    exported: ["id", "ref", "areaKey", "sortPath", "parentId", "title", "body", "status", "createdAt", "updatedAt", "closedAt", "deletedAt", "startOn", "dueOn"],
     // projectId is implied by nesting under the project; `tsv` is never exported: a generated column, derived from columns that *are* exported and
     // rebuilt by Postgres on import (DATA-11).
     omitted: ["projectId", "tsv"],

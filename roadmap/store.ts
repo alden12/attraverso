@@ -102,6 +102,8 @@ interface StoreItem {
   status: string;
   deps?: string[];
   parent?: string;
+  start?: string;
+  due?: string;
   body?: string;
   attachments?: Attachment[];
 }
@@ -210,6 +212,8 @@ export async function fetchPlan(): Promise<Plan> {
         title: item.title,
         deps: item.deps ?? [],
         parent: item.parent ?? null,
+        start: item.start,
+        due: item.due,
       })),
       // Refs that name no rendered item are dropped: the served store is a projection, and a panel row that
       // selects nothing would be a dead link rather than a jump.
