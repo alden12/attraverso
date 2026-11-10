@@ -15,7 +15,8 @@
  * at - PGlite serialises every statement on a single connection, so the concurrency it has been quietly
  * forgiving shows up as a red test the first time this runs.
  */
-import { clearAll, createInMemoryDb, type DbHandle } from "./client";
+import { clearAll, type DbHandle } from "./client";
+import { createInMemoryDb } from "./memory";
 import { createPostgresDb } from "./postgres";
 import { randomUUID } from "node:crypto";
 import { Pool } from "pg";

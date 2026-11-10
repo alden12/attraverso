@@ -69,6 +69,24 @@ Ask the agent to open the viewer (the `open_viewer` tool). It serves the plan as
 Claude Desktop starts servers without your shell's `PATH`, so a bare `npx` or `node` is often not found. See
 [docs/claude-desktop.md](docs/claude-desktop.md) for the setup and the three ways it silently breaks.
 
+### From a program
+
+A program can open a plan in-process and call it with typed functions, without the MCP server. It runs in Node
+and in a browser: the plan comes in as YAML text and goes out through a callback after every change, so where
+it is kept (a file, IndexedDB, the origin-private file system) is up to you.
+
+```ts
+import { openPlan } from "attraverso/library";
+
+const plan = await openPlan({ yaml: savedText, save: (yaml) => store(yaml) });
+const project = await plan.project("spanish");
+const item = await project.createItem({ area: "VERB", title: "The subjunctive" });
+await project.addComment(item.ref, "Mixed it up with the conditional again.");
+```
+
+Keep one writer per plan: don't run the MCP server on the same file while a program has it open. In a Vite app,
+add `optimizeDeps: { exclude: ["@electric-sql/pglite"] }` to the config so the dev server serves PGlite's WASM.
+
 ## Developing
 
 ```sh
@@ -76,6 +94,7 @@ yarn install
 yarn verify          # typecheck, viewer build, unit tests
 yarn verify:all      # plus the end-to-end suite (once: npx playwright install chromium)
 yarn viewer          # the graph on http://localhost:5176
+yarn build:standalone && yarn test:package   # the packed package, used from Node, NodeNext types and a browser
 ```
 
 `yarn test:pg` runs the same suite against a server Postgres (`yarn pg:up` starts one in Docker).
@@ -84,8 +103,9 @@ To try a change against a real plan, run the server from source over any store: 
 <path>`, or point a `.mcp.json` at `node_modules/.bin/vite-node src/mcp/server.ts`.
 
 Releasing is `yarn release` (`--dry-run` to rehearse), from an up-to-date checkout of this repo: it verifies,
-builds, checks the build starts with clean stdout, publishes to npm and tags the version. The published package
-is a single self-contained build that needs nothing installed but Node.
+builds, checks the build starts with clean stdout and that the library works once installed, publishes to npm
+and tags the version. The server in the published package is a single self-contained build that needs nothing
+installed but Node; the library beside it declares its own dependencies.
 
 ## How this repo is maintained
 

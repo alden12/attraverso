@@ -62,6 +62,10 @@ grep -q "ready on stdio" "$scratch/stderr" || { cat "$scratch/stderr" >&2; fail 
 [ ! -s "$scratch/stdout" ] || { head -5 "$scratch/stdout" >&2; fail "the built server wrote to stdout"; }
 echo "The built server starts and keeps stdout clean."
 
+# And the library half (`DIST-6`): pack this build, install it outside the repo and use it from Node, a
+# NodeNext type check and a browser. Needs the Playwright browser `test:e2e` already does.
+yarn test:package
+
 if [ "$dry_run" -eq 1 ]; then
   npm publish standalone/ --dry-run
   echo "Dry run: nothing published, nothing tagged."

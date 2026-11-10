@@ -2,7 +2,7 @@
  * The server-Postgres driver, kept in its own module so that **importing it is a choice** (`VIEW-24`, found
  * 2026-08-31).
  *
- * It was in `client.ts` beside the PGlite factory, which is where it belongs conceptually and is wrong
+ * It was in `client.ts` beside the PGlite factory (since moved to `memory.ts`, `DIST-6`), which is where it belongs conceptually and is wrong
  * mechanically: `runtime.ts` imports that module for `createInMemoryDb`, so `pg` and
  * `drizzle-orm/node-postgres` entered the eager module graph of the **file-backed** path, which never touches
  * them. Under vite-node nothing showed, because Node's ESM interop tolerates it. In the bundled standalone

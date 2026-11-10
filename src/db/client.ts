@@ -9,12 +9,8 @@
  * empty in-memory database that is simply schema creation, not the durable-data upgrade that "migration"
  * means in the cloud.
  */
-import { PGlite } from "@electric-sql/pglite";
-import { drizzle } from "drizzle-orm/pglite";
-import { migrate } from "drizzle-orm/pglite/migrator";
 import { getTableName, is, sql } from "drizzle-orm";
 import { PgDatabase, PgTable, type PgQueryResultHKT } from "drizzle-orm/pg-core";
-import { fileURLToPath } from "node:url";
 import * as schema from "./schema";
 
 /**
@@ -49,22 +45,6 @@ export type Tx = Pick<Database, "insert" | "select" | "update" | "delete" | "exe
 export interface DbHandle {
   db: Database;
   close(): Promise<void>;
-}
-
-const migrationsFolder = fileURLToPath(new URL("./migrations", import.meta.url));
-
-/**
- * A fresh in-memory database with the schema built. Each call is independent, so tests share nothing; in the
- * server this is called once and the handle kept alive for the process.
- */
-export async function createInMemoryDb(): Promise<DbHandle> {
-  const client = new PGlite();
-  const db = drizzle(client, { schema });
-  await migrate(db, { migrationsFolder });
-  return {
-    db,
-    close: () => client.close(),
-  };
 }
 
 /** Every table in the schema, discovered rather than listed. A hand-maintained list is the kind that goes one

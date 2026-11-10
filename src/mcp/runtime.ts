@@ -7,7 +7,8 @@
  * the two arrangements below are exactly as they were.
  */
 import { basename } from "node:path";
-import { createInMemoryDb, type Database } from "../db/client";
+import type { Database } from "../db/client";
+import { createInMemoryDb } from "../db/memory";
 import { requireCurrentSchema } from "../db/schemaVersion";
 import { accessTo, createStoreFile, resolveStorePaths, storePathsIn, type StoreAccess } from "../serialise/store";
 import { createUnavailableMediaStore } from "../media/store";

@@ -19,7 +19,7 @@
  */
 import { existsSync, readFileSync } from "node:fs";
 import { relative } from "node:path";
-import { createInMemoryDb } from "../src/db/client";
+import { createInMemoryDb } from "../src/db/memory";
 import { assertDistinctProjects, canonicalForms, importStore, parseStore, resolveStorePaths, storePathsIn, writeAtomic } from "../src/serialise/store";
 
 async function main(): Promise<void> {

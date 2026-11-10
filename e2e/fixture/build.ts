@@ -13,7 +13,7 @@
  * a second project, which is a second file here as it is in a real split plan (`PROJ-11`).
  */
 import { fileURLToPath } from "node:url";
-import { createInMemoryDb } from "../../src/db/client";
+import { createInMemoryDb } from "../../src/db/memory";
 import { createItem, deleteItem, setStatus } from "../../src/domain/items";
 import { createProject } from "../../src/domain/projects";
 import { ensureUser, LOCAL_IDENTITY } from "../../src/domain/users";

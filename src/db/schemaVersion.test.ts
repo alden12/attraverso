@@ -8,7 +8,8 @@
  */
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import { sql } from "drizzle-orm";
-import { createInMemoryDb, type DbHandle } from "./client";
+import type { DbHandle } from "./client";
+import { createInMemoryDb } from "./memory";
 import { EXPECTED_MIGRATIONS, requireCurrentSchema } from "./schemaVersion";
 
 describe("requireCurrentSchema (OPS-11)", () => {

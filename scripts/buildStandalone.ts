@@ -21,6 +21,7 @@ import { existsSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
+import { buildLibrary } from "./buildLibrary";
 
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 const outDir = join(repoRoot, "standalone");
@@ -67,7 +68,12 @@ async function main(): Promise<void> {
     ssr: { noExternal: true, target: "node" },
   });
 
-  const built = await chunks(outDir);
+  // The in-process library (`DIST-6`), into `lib/`, before the chunks are listed: it carries no runtime assets,
+  // so nothing below should go looking in it, and the scan skips it.
+  const dependencies = await buildLibrary(outDir);
+  console.error(`  library -> lib (depends on ${Object.keys(dependencies).join(", ")})`);
+
+  const built = (await chunks(outDir)).filter((path) => !path.startsWith(join(outDir, "lib")));
   const contents = new Map(await Promise.all(built.map(async (path) => [path, await readFile(path, "utf8")] as const)));
 
   for (const asset of RUNTIME_ASSETS) {
@@ -132,10 +138,16 @@ async function main(): Promise<void> {
         // Both names point at the one bundle: the full word is the package, the short one is what anyone
         // actually types. A bin name is a field here, not a registered thing, so the alias costs nothing.
         bin: { [PACKAGE_NAME]: "server.js", attra: "server.js" },
+        // The library is the one importable thing (`DIST-6`), and the map is the whole public API: nothing else
+        // in the folder is reachable by import, so the bundle's internals can change freely.
+        exports: { "./library": { types: "./lib/index.d.ts", default: "./lib/index.js" }, "./package.json": "./package.json" },
+        // Only the library's: the server bundle inlines everything and needs none of them. Taken from what the
+        // library build actually imported, so the list cannot drift from the code (see `buildLibrary.ts`).
+        dependencies,
         engines: root.engines,
         // Everything in the directory ships: the WASM payload, the migrations and the viewer are all read
         // from disk at runtime, and a missing one is an ENOENT the user meets rather than the build does.
-        files: ["server.js", "assets", "migrations", "viewer", "*.wasm", "pglite.data", "README.md", "LICENSE"],
+        files: ["server.js", "assets", "migrations", "viewer", "lib", "*.wasm", "pglite.data", "README.md", "LICENSE"],
       },
       null,
       2,

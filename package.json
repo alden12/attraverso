@@ -1,6 +1,6 @@
 {
   "name": "attraverso",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "Durable, structured project memory that Claude reads and writes over MCP, stored as version-controlled YAML.",
   "license": "Apache-2.0",
@@ -26,6 +26,7 @@
     "build": "vite build --ssr src/mcp/server.ts && yarn viewer:build",
     "build:standalone": "yarn viewer:build && vite-node scripts/buildStandalone.ts",
     "build:bundle": "yarn build:standalone && vite-node scripts/buildBundle.ts",
+    "test:package": "vite-node scripts/packageSmoke.ts",
     "release": "bash scripts/release.sh",
     "viewer": "vite --config roadmap/vite.config.ts",
     "viewer:build": "vite build --config roadmap/vite.config.ts",
