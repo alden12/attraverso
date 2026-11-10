@@ -20,6 +20,7 @@
 import { execFileSync } from "node:child_process";
 import { mkdir, mkdtemp, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -28,7 +29,9 @@ import { chromium } from "playwright";
 
 const coreRoot = fileURLToPath(new URL("..", import.meta.url));
 const standalone = join(coreRoot, "standalone");
-const typescript = fileURLToPath(new URL("../../../node_modules/typescript/bin/tsc", import.meta.url));
+// Resolved as Node would, not by a relative path: core sits at `packages/core` here and at the root of the public
+// repo, so `../../../node_modules` only ever pointed at the right place from one of them.
+const typescript = createRequire(import.meta.url).resolve("typescript/bin/tsc");
 
 /**
  * What both runtimes do, as plain JavaScript so Node runs it as written and vite bundles it unchanged. Returns a
