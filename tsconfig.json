@@ -25,5 +25,5 @@
     "noEmit": true,
     "types": ["node", "vite/client"]
   },
-  "include": ["src", "scripts", "roadmap", "e2e", "vite.config.ts", "playwright.config.ts"]
+  "include": ["src", "scripts", "roadmap", "e2e", "package-test", "vite.config.ts", "playwright.config.ts"]
 }

@@ -230,6 +230,11 @@ export interface Series {
  * is the safety net `METRIC-1` asks for - no agent has to remember to shape a tree correctly for the numbers
  * to come out right.
  *
+ * **Buckets are cut at UTC midnight, named in the call.** Two-argument `date_trunc` on a `timestamptz` cuts in
+ * the session's time zone, and PGlite takes that from the machine, so on a Mac set to PST a reading recorded for
+ * the plain day `2026-08-14` (stored as UTC midnight) landed in the 13th's bucket, the trap `CAL-1` names for due
+ * dates - and the same plan bucketed differently on every machine. UTC is the zone plain days are stored in.
+ *
  * Written as raw SQL because `date_trunc` on a text timestamp needs a cast and a `GROUP BY` over the result,
  * which no query builder expresses. The ticket flagged this as the query most likely to drift dialect-
  * specific; since the storage pivot both backends are Postgres, so there is one dialect and the concern is
@@ -251,7 +256,7 @@ export async function aggregateSeries(
   const expression = aggregate === "count" ? sql`count(*)::double precision` : sql.raw(`${aggregate}(value)`);
 
   const result = await db.execute(sql`
-    SELECT to_char(date_trunc(${bucket}, at::timestamptz) AT TIME ZONE 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS at,
+    SELECT to_char(date_trunc(${bucket}, at::timestamptz, 'utc') AT TIME ZONE 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS at,
            ${expression} AS value,
            count(*)::int AS n,
            count(value)::int AS numeric_n

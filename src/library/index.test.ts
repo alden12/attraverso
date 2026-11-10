@@ -1,7 +1,7 @@
 /**
  * The in-process library (`DIST-6`) against its own promises: typed records rather than text, a write-through to
  * `save` after every change, and a plan that reopens from what was saved exactly as it was. The packed-package
- * smoke test (`scripts/packageSmoke.ts`) runs the same calls against the built tarball in Node and a browser;
+ * smoke test (`package-test/smoke.ts`) runs the same calls against the built tarball in Node and a browser;
  * this is the fast version over the source.
  */
 import { afterEach, describe, expect, it } from "vitest";

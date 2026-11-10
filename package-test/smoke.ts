@@ -18,7 +18,7 @@
  * filesystem, reached only when given a path, and the warning is the same in any vite app that uses PGlite.
  */
 import { execFileSync } from "node:child_process";
-import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -87,7 +87,9 @@ function check(where: string, actual: unknown): void {
 
 async function main(): Promise<void> {
   if (!existsSync(join(standalone, "lib", "index.js"))) throw new Error("no library in standalone/ - run `yarn build:standalone` first");
-  const scratch = await mkdtemp(join(tmpdir(), "attraverso-package-"));
+  // Resolved, because macOS's temp directory is a symlink (`/var` -> `/private/var`) and vite's HTML build then
+  // names the page by a path relative to the other spelling, which rollup refuses as an asset name.
+  const scratch = await realpath(await mkdtemp(join(tmpdir(), "attraverso-package-")));
   try {
     // 1. Pack and install, as a consumer would.
     const tarball = run("npm", ["pack", "--silent", "--pack-destination", scratch], standalone).trim().split("\n").at(-1)!;
