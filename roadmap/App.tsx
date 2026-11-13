@@ -29,7 +29,6 @@ import { AreaGroupNode } from "./AreaGroupNode";
 import { TicketGroupNode } from "./TicketGroupNode";
 import { GhostNodeView } from "./GhostNode";
 import { loadMemory, saveMemory, loadSizes, saveSizes, clearLayout, type BoxSize } from "./positions";
-import { LockContext } from "./lockContext";
 import { StatusPicker } from "./StatusPicker";
 import type { RoadmapItem } from "../scripts/tickets";
 import { Calendar, type CalendarEntry } from "./Calendar";
@@ -95,9 +94,21 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
   const colours = useMemo(() => areaColours(areas), [areas]);
 
   const [hiddenAreas, setHiddenAreas] = useState<Set<string>>(new Set());
-  const [hiddenStatuses, setHiddenStatuses] = useState<Set<Status>>(new Set());
+  // Finished work is hidden by default: on a plan that has been running a while it is most of the map, and the
+  // question the graph answers is what is left. One click in the view settings brings it back.
+  const [hiddenStatuses, setHiddenStatuses] = useState<Set<Status>>(new Set<Status>(["done"]));
   const [colourMode, setColourMode] = useState<ColourMode>("area");
-  const [locked, setLocked] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  useEffect(() => {
+    if (!settingsOpen) return;
+    const close = (event: KeyboardEvent) => event.key === "Escape" && setSettingsOpen(false);
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, [settingsOpen]);
+  // Locked by default (VIEW-41): only the selected card or box moves, so panning on a touch screen cannot drag a
+  // card by accident. "free" is the old behaviour, for a big rearrangement.
+  const [lockMode, setLockMode] = usePreference<"selected" | "free">("attraverso.lock", "selected", ["selected", "free"]);
+  const locked = lockMode === "selected";
   // Seeded from the URL (`#apm/CAL-1`), which is how the calendar opens another project's item: it switches
   // project, which remounts this, so the item has to arrive with the new mount.
   const [selectedId, setSelectedId] = useState<string | null>(focus);
@@ -290,8 +301,27 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
       memory.current = next;
       remember(next);
     }
+    // With anything filtered out, what is drawn is the visible items laid out again from that same memory, so
+    // the map closes up around what is left instead of showing holes, and opens back out when the filter goes.
+    // The memory itself only ever comes from the whole plan, above, so a filter never moves anything for good:
+    // `arrange` keeps every visible pair's order, and switching the filter off restores the full map exactly.
+    // The filtered-out nodes are still passed, hidden, from the full layout, because hovering a neighbour
+    // previews them in place (the ghost effect below) and a hidden child needs its box to exist.
+    const shown = items.filter((item) => !hiddenIds.has(item.id));
+    let drawn = nodes;
+    if (shown.length < items.length) {
+      const full = new Map(nodes.map((node) => [node.id, node]));
+      const compact = buildGraph(shown, areasOf(shown), colours, colourMode, selectedId, new Set(), next);
+      const compactIds = new Set(compact.map((node) => node.id));
+      // Data from the full pass: it alone knows which links lead to something filtered out (the handle hints)
+      // and counts an area's hidden items. Positions and box sizes from the compact one.
+      drawn = [
+        ...compact.map((node) => ({ ...node, data: full.get(node.id)?.data ?? node.data }) as RoadmapNode),
+        ...nodes.filter((node) => !compactIds.has(node.id)),
+      ];
+    }
     setNodes(
-      nodes.map((node) => {
+      drawn.map((node) => {
         const resized = resizedSizes.current[node.id];
         return resized ? { ...node, style: { ...node.style, width: resized.width, height: resized.height } } : node;
       }),
@@ -325,6 +355,13 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
     );
     ghostedRef.current = ghosts;
   }, [hoveredId, previewReveal, hiddenIds, setNodes]);
+
+  // While locked, the one node that moves is the selected one: the open item, or whatever React Flow has
+  // selected (an area box, which opens nothing). A per-node `draggable` overrides `nodesDraggable`.
+  const flowNodes = useMemo(
+    () => (locked ? nodes.map((node) => (node.selected || node.id === selectedId ? { ...node, draggable: true } : node)) : nodes),
+    [nodes, locked, selectedId],
+  );
 
   const selected = selectedId ? (items.find((item) => item.id === selectedId) ?? null) : null;
 
@@ -388,6 +425,7 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
     }
     return { byArea, byStatus };
   }, [items]);
+  const hiddenCount = items.length - visibleItems.length;
 
   return (
     <div className="app">
@@ -429,40 +467,6 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
           </span>
         </div>
         <div className="filters">
-          {/* Areas and the colour toggle are this project's, so they go while the calendar spans every project,
-              rather than staying as controls that do nothing. */}
-          {!(view === "calendar" && allProjects) && (
-            <div className="filters__group">
-              {areas.map((area) => (
-                <button
-                  key={area}
-                  className="chip"
-                  data-off={hiddenAreas.has(area)}
-                  style={{ "--area": colours[area] } as React.CSSProperties}
-                  onClick={() => setHiddenAreas((set) => toggle(set, area))}
-                >
-                  <span className="chip__dot" />
-                  {area}
-                  <span className="chip__count">{counts.byArea.get(area)}</span>
-                </button>
-              ))}
-            </div>
-          )}
-          <div className="filters__group">
-            {STATUS_KEYS.map((status) => (
-              <button
-                key={status}
-                className="chip"
-                data-off={hiddenStatuses.has(status)}
-                style={{ "--area": STATUSES[status].colour } as React.CSSProperties}
-                onClick={() => setHiddenStatuses((set) => toggle(set, status))}
-              >
-                <span className="chip__dot" />
-                {STATUSES[status].label}
-                <span className="chip__count">{counts.byStatus.get(status) ?? 0}</span>
-              </button>
-            ))}
-          </div>
           <div className="segmented" role="group" aria-label="View">
             {VIEWS.map((mode) => (
               <button key={mode} className="segmented__btn" data-on={view === mode} onClick={() => setView(mode)}>
@@ -470,46 +474,6 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
               </button>
             ))}
           </div>
-          {view === "calendar" && plan.projects.length > 1 && (
-            <button
-              className="chip"
-              data-on={allProjects}
-              onClick={() => setSpan(allProjects ? "project" : "all")}
-              title="Show every project's dated items on one calendar, coloured by project"
-            >
-              all projects
-            </button>
-          )}
-          {!(view === "calendar" && allProjects) && (
-            <div className="segmented" role="group" aria-label="Colour by">
-              <span className="segmented__label">colour</span>
-              {COLOUR_MODES.map((mode) => (
-                <button
-                  key={mode}
-                  className="segmented__btn"
-                  data-on={colourMode === mode}
-                  onClick={() => setColourMode(mode)}
-                >
-                  {mode}
-                </button>
-              ))}
-            </div>
-          )}
-          {view === "graph" && (
-            <button
-              className="chip"
-              data-on={locked}
-              onClick={() => setLocked((value) => !value)}
-              title={locked ? "Unlock to drag / resize nodes" : "Lock the layout: pan without moving nodes"}
-            >
-              {locked ? "🔒 locked" : "🔓 lock"}
-            </button>
-          )}
-          {view === "graph" && (
-            <button className="chip" onClick={resetLayout} title="Lay the map out afresh, forgetting where everything was">
-              reset layout
-            </button>
-          )}
           {/* The count rides on the chip, so closing the panel still leaves the fact that an order exists (and
               how long it is) on screen. */}
           {next.length > 0 && (
@@ -522,9 +486,107 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
               next<span className="chip__count">{next.length}</span>
             </button>
           )}
+          {/* Everything set occasionally lives in one dialog (VIEW-37): on a phone the toolbar was most of the screen.
+              The button says how much is filtered out, because a filter set last week and tucked behind a menu
+              otherwise reads as items gone missing. */}
+          <button
+            className="chip"
+            data-on={settingsOpen}
+            aria-haspopup="dialog"
+            aria-expanded={settingsOpen}
+            onClick={() => setSettingsOpen((open) => !open)}
+          >
+            ⚙ view{hiddenCount > 0 && <span className="chip__count">{hiddenCount} hidden</span>}
+          </button>
           {/* Whatever the host adds (`extensions.ts`): nothing, from this package's own two hosts. */}
           {ToolbarActions !== undefined && <ToolbarActions plan={plan} project={project} reload={reload} />}
         </div>
+        {settingsOpen && (
+          <>
+            <div className="settings__backdrop" onClick={() => setSettingsOpen(false)} />
+            <div className="settings" role="dialog" aria-label="View settings">
+              {!(view === "calendar" && allProjects) && <div className="settings__label">Areas</div>}
+              {!(view === "calendar" && allProjects) && (
+                <div className="filters__group">
+                  {areas.map((area) => (
+                    <button
+                      key={area}
+                      className="chip"
+                      data-off={hiddenAreas.has(area)}
+                      style={{ "--area": colours[area] } as React.CSSProperties}
+                      onClick={() => setHiddenAreas((set) => toggle(set, area))}
+                    >
+                      <span className="chip__dot" />
+                      {area}
+                      <span className="chip__count">{counts.byArea.get(area)}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="settings__label">Statuses</div>
+              <div className="filters__group">
+                {STATUS_KEYS.map((status) => (
+                  <button
+                    key={status}
+                    className="chip"
+                    data-off={hiddenStatuses.has(status)}
+                    style={{ "--area": STATUSES[status].colour } as React.CSSProperties}
+                    onClick={() => setHiddenStatuses((set) => toggle(set, status))}
+                  >
+                    <span className="chip__dot" />
+                    {STATUSES[status].label}
+                    <span className="chip__count">{counts.byStatus.get(status) ?? 0}</span>
+                  </button>
+                ))}
+              </div>
+              <div className="settings__row">
+              {!(view === "calendar" && allProjects) && (
+                <div className="segmented" role="group" aria-label="Colour by">
+                  <span className="segmented__label">colour</span>
+                  {COLOUR_MODES.map((mode) => (
+                    <button
+                      key={mode}
+                      className="segmented__btn"
+                      data-on={colourMode === mode}
+                      onClick={() => setColourMode(mode)}
+                    >
+                      {mode}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {view === "calendar" && plan.projects.length > 1 && (
+                <button
+                  className="chip"
+                  data-on={allProjects}
+                  onClick={() => setSpan(allProjects ? "project" : "all")}
+                  title="Show every project's dated items on one calendar, coloured by project"
+                >
+                  all projects
+                </button>
+              )}
+              </div>
+              {view === "graph" && <div className="settings__label">Layout</div>}
+              <div className="settings__row">
+              {view === "graph" && (
+                <button
+                  className="chip"
+                  data-on={locked}
+                  onClick={() => setLockMode(locked ? "free" : "selected")}
+                  title={locked ? "Only the selected item moves. Click to let everything move" : "Everything moves. Click to move only the selected item"}
+                >
+                  {locked ? "🔒 move selected only" : "🔓 move anything"}
+                </button>
+              )}
+              {view === "graph" && (
+                <button className="chip" onClick={resetLayout} title="Lay the map out afresh, forgetting where everything was">
+                  reset layout
+                </button>
+              )}
+              </div>
+            </div>
+          </>
+        )}
       </header>
 
       <div className="body">
@@ -590,9 +652,8 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
               onSelect={selectFromCalendar}
             />
           ) : (
-            <LockContext.Provider value={locked}>
               <ReactFlow
-                nodes={nodes}
+                nodes={flowNodes}
                 edges={edges}
                 nodeTypes={nodeTypes}
                 onNodesChange={handleNodesChange}
@@ -604,10 +665,15 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
                 onEdgeMouseLeave={onEdgeMouseLeave}
                 onPaneClick={() => setSelectedId(null)}
                 nodesDraggable={!locked}
+                // Nothing here creates a dependency from a drag, so a handle that starts one only invites a
+                // gesture that goes nowhere, and on a touch screen catches pans meant for the canvas.
+                nodesConnectable={false}
                 fitView
                 snapToGrid
                 snapGrid={[GRID, GRID]}
-                minZoom={0.2}
+                // Far enough out to see a few hundred items at once: the map is where you find things, and a
+                // floor that stops short of the whole of it hides exactly the overview it exists for.
+                minZoom={0.05}
                 maxZoom={1.75}
                 proOptions={{ hideAttribution: true }}
               >
@@ -622,7 +688,6 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
                 />
                 <Controls />
               </ReactFlow>
-            </LockContext.Provider>
           )}
         </div>
 

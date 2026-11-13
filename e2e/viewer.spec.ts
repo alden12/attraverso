@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { parse } from "yaml";
 
@@ -28,6 +28,17 @@ const areas = [...new Set(items.map((item) => item.area))];
 const foreign = [...new Set(items.flatMap((item) => (item.deps ?? []).filter((dep) => dep.includes(":"))))];
 const foreignProjects = [...new Set(foreign.map((dep) => dep.split(":")[0]!))];
 
+/**
+ * Toggle chips in the view settings dialog (VIEW-37), where the filters and layout controls live, then close it -
+ * its backdrop would otherwise catch the next click meant for the graph or the calendar.
+ */
+async function settings(page: Page, ...chips: string[]): Promise<void> {
+  await page.locator('.chip[aria-haspopup="dialog"]').click();
+  for (const chip of chips) await page.locator(".settings .chip", { hasText: chip }).first().click();
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".settings")).toHaveCount(0);
+}
+
 test.describe("the served store", () => {
   test.beforeEach(async ({ page }) => {
     // The manual layout persists in localStorage, so a stale drag from a previous run could otherwise move
@@ -38,6 +49,16 @@ test.describe("the served store", () => {
     // graph. `#demo` is the project this suite is about.
     await page.goto("/#demo");
     await expect(page.locator(".react-flow__node").first()).toBeVisible();
+    // Finished work is hidden by default; this suite is about the whole plan, so it starts with all of it.
+    await settings(page, "done");
+  });
+
+  test("hides finished work until asked, and says so on the settings button", async ({ page }) => {
+    await settings(page, "done"); // back to the default
+    const done = items.filter((item) => item.status === "done").length;
+    expect(done).toBeGreaterThan(0); // the fixture has finished work in it; guard the guard
+    await expect(page.locator(".topbar__sub")).toContainText(`${items.length - done} of ${items.length} items`);
+    await expect(page.locator('.chip[aria-haspopup="dialog"]')).toContainText(`${done} hidden`);
   });
 
   test("renders every area and item from the store", async ({ page }) => {
@@ -117,7 +138,7 @@ test.describe("the served store", () => {
     const before = await page.locator(".item-node").count();
     const platItems = items.filter((item) => item.area === "PLAT").length;
 
-    await page.locator(".chip", { hasText: "PLAT" }).first().click();
+    await settings(page, "PLAT");
 
     await expect(page.locator(".topbar__sub")).toContainText(`${items.length - platItems} of ${items.length}`);
     expect(await page.locator(".item-node").count()).toBeLessThan(before);
@@ -320,9 +341,8 @@ test.describe("the calendar", () => {
   });
 
   test("shows every project by default, and leaves undated items off", async ({ page }) => {
-    // Status filters apply across projects. Also makes room: three items on one day at this window size put
+    // Finished work is hidden by default, which also makes room: three items on one day at this window size put
     // the third behind FullCalendar's "+1 more".
-    await page.locator(".chip", { hasText: "done" }).click();
     await expect(page.locator(".cal__event", { hasText: "apm:CAL-3" }).first()).toBeVisible();
     await expect(page.locator(".cal__event", { hasText: "spanish:GRAM-1" })).toBeVisible();
     await expect(page.locator(".cal__event", { hasText: "MCP-1" })).toHaveCount(0);
@@ -330,18 +350,19 @@ test.describe("the calendar", () => {
   });
 
   test("puts finished work on the day it closed", async ({ page }) => {
+    await settings(page, "done");
     await expect(page.locator(".cal__event", { hasText: "apm:CAL-2" })).toBeVisible();
   });
 
   test("narrows to one project on request", async ({ page }) => {
-    await page.locator(".chip", { hasText: "all projects" }).click();
+    await settings(page, "all projects", "done"); // CAL-1 is finished
     await expect(page.locator(".cal__event", { hasText: "CAL-1" })).toBeVisible();
     await expect(page.locator(".cal__event", { hasText: "GRAM-1" })).toHaveCount(0);
     await page.screenshot({ path: "test-results/calendar.png", fullPage: false });
   });
 
   test("opens an item in the same detail pane, with its dates", async ({ page }) => {
-    await page.locator(".chip", { hasText: "to-do" }).click(); // room for CAL-1, by hiding GRAM-1
+    await settings(page, "done", "to-do"); // CAL-1 is finished; and room for it, by hiding GRAM-1
     await page.locator(".cal__event", { hasText: "CAL-1" }).click();
     await expect(page.locator(".detail__id")).toHaveText("CAL-1");
     await expect(page.locator(".detail")).toContainText("due");
@@ -349,7 +370,6 @@ test.describe("the calendar", () => {
   });
 
   test("opens another project's item by switching to it", async ({ page }) => {
-    await page.locator(".chip", { hasText: "done" }).click(); // room for all three, as above
     await page.locator(".cal__event", { hasText: "spanish:GRAM-1" }).click();
     await expect(page).toHaveURL(/#spanish\/GRAM-1$/);
     await expect(page.locator(".detail__id")).toHaveText("GRAM-1");
@@ -359,8 +379,8 @@ test.describe("the calendar", () => {
 
   test("says why it is empty when nothing has a date", async ({ page }) => {
     // Areas are per-project, so their chips only appear with the calendar narrowed to one.
-    await page.locator(".chip", { hasText: "all projects" }).click();
-    await page.locator(".chip", { hasText: "CAL" }).click(); // hide the dated area
+    await settings(page, "all projects");
+    await settings(page, "CAL"); // hide the dated area, whose chip only appears once narrowed to one project
     await expect(page.locator(".graph__notice")).toContainText("Nothing here has a date yet");
   });
 });
@@ -382,5 +402,71 @@ test.describe("the layout's memory (VIEW-23.1)", () => {
     await page.reload();
     await expect(page.locator(".react-flow__node").first()).toBeVisible();
     expect(await positions()).toEqual(before);
+  });
+});
+
+test.describe("the map follows the filters (VIEW-23.1)", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => window.localStorage.clear());
+    await page.goto("/#demo");
+    await expect(page.locator(".react-flow__node").first()).toBeVisible();
+  });
+
+  const transforms = (page: Page) =>
+    page.locator(".react-flow__node:visible").evaluateAll((nodes) =>
+      Object.fromEntries(nodes.map((node) => [node.getAttribute("data-id"), (node as HTMLElement).style.transform])),
+    );
+
+  test("closes up around what a filter leaves, and opens back out exactly when it goes", async ({ page }) => {
+    const before = await transforms(page);
+    const area = areas[0]!;
+    await settings(page, area);
+    const filtered = await transforms(page);
+    // Something visible moved in to fill the space, rather than leaving a hole where the area was.
+    expect(Object.keys(filtered).some((id) => filtered[id] !== before[id])).toBe(true);
+    await settings(page, area);
+    expect(await transforms(page)).toEqual(before);
+  });
+});
+
+test.describe("moving cards (VIEW-41)", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => window.localStorage.clear());
+    await page.goto("/#demo");
+    await expect(page.locator(".react-flow__node").first()).toBeVisible();
+  });
+
+  const drag = async (page: Page, id: string) => {
+    const node = page.locator(`.react-flow__node[data-id="${id}"]`);
+    const box = (await node.boundingBox())!;
+    const before = await node.evaluate((element) => (element as HTMLElement).style.transform);
+    await page.mouse.move(box.x + 10, box.y + 10);
+    await page.mouse.down();
+    await page.mouse.move(box.x + 10, box.y + 160, { steps: 10 });
+    await page.mouse.up();
+    return { before, after: await node.evaluate((element) => (element as HTMLElement).style.transform) };
+  };
+
+  test("leaves a card where it is until it is selected, so a pan cannot move it", async ({ page }) => {
+    const id = (await page.locator(".react-flow__node-item:visible").first().getAttribute("data-id"))!;
+    const unselected = await drag(page, id);
+    expect(unselected.after).toBe(unselected.before);
+  });
+
+  test("moves the selected card", async ({ page }) => {
+    const id = (await page.locator(".react-flow__node-item:visible").first().getAttribute("data-id"))!;
+    await page.locator(`.react-flow__node[data-id="${id}"]`).click();
+    const selected = await drag(page, id);
+    expect(selected.after).not.toBe(selected.before);
+  });
+
+  test("zooms out far enough to see the whole map", async ({ page }) => {
+    // The floor used to be 0.2, too close for a plan of a few hundred items to fit on screen.
+    const pane = (await page.locator(".react-flow").boundingBox())!;
+    await page.mouse.move(pane.x + pane.width / 2, pane.y + pane.height / 2);
+    for (let step = 0; step < 40; step++) await page.mouse.wheel(0, 400);
+    await page.waitForTimeout(300);
+    const scale = await page.locator(".react-flow__viewport").evaluate((element) => new DOMMatrix(getComputedStyle(element).transform).a);
+    expect(scale).toBeLessThan(0.1);
   });
 });

@@ -86,6 +86,48 @@ body {
   border-bottom: 1px solid var(--line);
   background: var(--panel-2);
   flex-wrap: wrap;
+  /* The anchor for the view settings dialog, which drops down from its right-hand edge. */
+  position: relative;
+  z-index: 10;
+}
+
+/* The view settings (VIEW-37): the filters and layout controls, out of the toolbar until asked for. The backdrop
+   is invisible and only catches the click that closes it. */
+.settings__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+.settings {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 16px;
+  z-index: 41;
+  width: min(560px, calc(100vw - 32px));
+  max-height: 70vh;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+.settings__label {
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.settings__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
 }
 
 .topbar__title {
