@@ -247,12 +247,12 @@ test.describe("the served store", () => {
     const opacity = (locator: typeof overview) => locator.evaluate((element) => Number(getComputedStyle(element).opacity));
     await expect.poll(() => opacity(overview)).toBe(0); // close enough to read the cards: nothing over them
 
-    // Out until the fade is complete and no further, so the frame stays big enough to click.
-    const shown = () => page.evaluate(() => document.querySelector<HTMLElement>(".react-flow")?.style.getPropertyValue("--overview"));
-    while ((await shown()) !== "1.000") await page.locator(".react-flow__controls-zoomout").click();
-    await expect.poll(() => opacity(overview)).toBe(1);
+    // Out until the cards are mostly gone and no further, so the frame stays big enough to click.
+    const far = () => page.evaluate(() => document.querySelector<HTMLElement>(".react-flow")?.dataset.far);
+    while ((await far()) !== "true") await page.locator(".react-flow__controls-zoomout").click();
+    expect(await opacity(overview)).toBeGreaterThan(0.5);
     await expect(overview).toContainText("DATA");
-    expect(await opacity(page.locator(".react-flow__node-item").first())).toBe(0);
+    expect(await opacity(page.locator(".react-flow__node-item").first())).toBeLessThan(0.5);
 
     // The cards no longer take clicks, so one in the middle of the area lands on the area.
     await page.locator('.react-flow__node[data-id="area:DATA"]').click();

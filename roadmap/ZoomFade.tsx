@@ -9,9 +9,10 @@ import { Panel, useStore } from "@xyflow/react";
  * Written straight onto the element rather than through React state: zooming changes them every frame, and as
  * state they would re-render every node each time, where as variables only the browser repaints.
  *
- * **Two ramps rather than one crossfade.** The cards fade out over one band of zoom and the overview fades in over
- * another, by default one after the other: both at half strength was an unreadable pile of text. The defaults sit
- * where a card's 13px title goes from small to unreadable, about 8px on screen at 0.6 and 5px at 0.4.
+ * **Two bands, so each can be tuned.** The cards fade out over one band of zoom and the overview fades in over
+ * another. The defaults were set by eye with the sliders below on this repo's plan (2026-11-13): one crossfade,
+ * late, from 0.19 to the floor at 0.05, which leaves the cards in place well past the point their text is legible,
+ * since their shapes and edges still say where things are long after their words stop.
  */
 export interface FadeBands {
   /** Zoom at which the cards start to fade, and at which they are gone. */
@@ -22,7 +23,7 @@ export interface FadeBands {
   overviewTo: number;
 }
 
-export const DEFAULT_BANDS: FadeBands = { cardsFrom: 0.6, cardsTo: 0.5, overviewFrom: 0.5, overviewTo: 0.4 };
+export const DEFAULT_BANDS: FadeBands = { cardsFrom: 0.19, cardsTo: 0.05, overviewFrom: 0.19, overviewTo: 0.05 };
 
 const TUNING_KEY = "attraverso.fade.bands";
 
