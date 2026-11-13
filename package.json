@@ -59,7 +59,7 @@
   "devDependencies": {
     "@dagrejs/dagre": "^1.1.0",
     "@fullcalendar/core": "6.1.21",
-    "@fullcalendar/daygrid": "6.1.21",
+    "@fullcalendar/daygrid": "6.1.22",
     "@fullcalendar/react": "6.1.21",
     "@playwright/test": "^1.61.1",
     "@types/node": "^22.0.0",
