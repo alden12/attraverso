@@ -95,38 +95,21 @@ body {
    is invisible and only catches the click that closes it. */
 /* The search box (VIEW-25): dropped from the toolbar's centre like the view settings drop from its right, over a
    backdrop that closes it. At most a readable column wide, and the full width on a phone. */
-.search__backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 40;
-  background: rgba(0, 0, 0, 0.35);
-}
-.search {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 41;
-  width: min(600px, calc(100vw - 32px));
-  max-height: 75vh;
-  display: flex;
-  flex-direction: column;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
-  overflow: hidden;
-}
+/* The search box is a pane (`aside.detail`), so it takes the pane's place and size; only its input is its own. */
 .search__input {
   flex: none;
-  padding: 12px 14px;
-  border: none;
-  border-bottom: 1px solid var(--line);
-  background: transparent;
+  margin: 8px 12px;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
   color: var(--text);
   font: inherit;
-  font-size: 15px;
+  font-size: 14px;
   outline: none;
+}
+.search__input:focus {
+  border-color: #3a4a60;
 }
 .search__note {
   padding: 10px 14px;
@@ -798,46 +781,7 @@ body {
   border-color: #3a4a60;
 }
 
-/* The open panel keeps a readable width (it used to shrink to make room for the buttons beside it, down to titles
-   of a few letters on a phone); when the row is too narrow for both, the buttons wrap below it instead. */
-.next {
-  flex: none;
-  width: 300px;
-  min-width: min(260px, 100%);
-  max-width: 100%;
-  max-height: 100%;
-  display: flex;
-  flex-direction: column;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--panel-2);
-  overflow: hidden;
-}
-.next__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 8px 8px 12px;
-  border-bottom: 1px solid var(--line);
-}
-.next__label {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-.next__close {
-  background: none;
-  border: none;
-  color: var(--muted);
-  cursor: pointer;
-  font-size: 12px;
-  padding: 2px 6px;
-}
-.next__close:hover {
-  color: var(--text);
-}
+/* The next list's rows, in the right-hand pane; the area pane uses them too (VIEW-49). */
 .next__list {
   list-style: none;
   margin: 0;

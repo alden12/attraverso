@@ -2,20 +2,24 @@ import { useEffect, useRef, useState } from "react";
 import { searchPlan, type SearchHit } from "./store";
 
 /**
- * The search box (`VIEW-25`): a field over the toolbar, with the hits dropping down beneath it.
+ * The search box (`VIEW-25`), in the right-hand pane with the rest of what you open over the graph, so the canvas
+ * stays the graph's.
  *
  * **The server matches, the browser does not.** Every keystroke (debounced) goes to `/api/search`, the same
  * index `search_plan` reads, so the human and the agent get one ranking for one question. Filtering the feed
  * here would be a second matching rule, and would stop working once a plan is too big to send whole.
  *
  * **Picking a hit selects; it does not navigate.** What happens on a pick is the caller's (`onPick`): an item is
- * selected and panned to in place, a context section opens in the pane.
+ * selected and panned to in place, a context section opens in the pane. The query is the caller's too, so going
+ * back from the item to the search finds it as it was left.
  */
 export function Search({
   projectKey,
   colours,
   hidden,
   titleOf,
+  query,
+  onQuery,
   onPick,
   onClose,
 }: {
@@ -25,10 +29,11 @@ export function Search({
   hidden: Set<string>;
   /** An item's title by ref: a comment's hit carries its item's ref but not its title. */
   titleOf: (ref: string) => string | undefined;
+  query: string;
+  onQuery: (query: string) => void;
   onPick: (hit: SearchHit) => void;
   onClose: () => void;
 }) {
-  const [query, setQuery] = useState("");
   const [hits, setHits] = useState<SearchHit[]>([]);
   const [relaxed, setRelaxed] = useState(false);
   const [state, setState] = useState<"idle" | "searching" | "done" | "unavailable">("idle");
@@ -71,7 +76,6 @@ export function Search({
   const pick = (hit: SearchHit | undefined) => {
     if (hit === undefined || !pickable(hit)) return;
     onPick(hit);
-    onClose();
   };
 
   const onKeyDown = (event: React.KeyboardEvent) => {
@@ -84,16 +88,20 @@ export function Search({
   };
 
   return (
-    <>
-      <div className="search__backdrop" onClick={onClose} />
-      <div className="search" role="dialog" aria-label="Search">
+    <aside className="detail search" aria-label="Search">
+      <div className="detail__head">
+        <span className="detail__id">Search</span>
+        <button className="detail__close" onClick={onClose} aria-label="Close">
+          ×
+        </button>
+      </div>
         <input
           ref={input}
           className="search__input"
           type="search"
           placeholder="Search items, comments and context, or type a ref"
           value={query}
-          onChange={(event) => setQuery(event.target.value)}
+          onChange={(event) => onQuery(event.target.value)}
           onKeyDown={onKeyDown}
           aria-label="Search"
         />
@@ -127,8 +135,7 @@ export function Search({
             ))}
           </ul>
         )}
-      </div>
-    </>
+    </aside>
   );
 }
 

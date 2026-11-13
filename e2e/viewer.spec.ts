@@ -268,21 +268,25 @@ test.describe("several projects in one store", () => {
     await page.goto("/");
     await expect(page.locator(".react-flow__node").first()).toBeVisible();
 
-    // Open on load, in the order agreed rather than the order the items are in.
-    await expect(page.locator(".next__item")).toHaveCount(2);
-    await expect(page.locator(".next__item").first()).toContainText("MCP-2");
+    // Open on load in the right-hand pane, in the order agreed rather than the order the items are in.
+    const list = page.locator('aside.detail[aria-label="Next"]');
+    await expect(list.locator(".next__item")).toHaveCount(2);
+    await expect(list.locator(".next__item").first()).toContainText("MCP-2");
 
-    // The point of the panel: a jump list into the graph, not a second copy of it.
-    await page.locator(".next__item").first().click();
+    // The point of the list: a jump list into the graph, not a second copy of it. The item takes the pane, with
+    // the way back to the list.
+    await list.locator(".next__item").first().click();
     await expect(page.locator(".detail__id")).toHaveText("MCP-2");
+    await page.locator(".detail__back", { hasText: "Next" }).click();
+    await expect(list.locator(".next__item")).toHaveCount(2);
 
-    // Dismissible, to a floating button that keeps the count, so closing it does not hide that an order exists,
-    // and opens it again.
-    await page.locator(".next__close").click();
-    await expect(page.locator(".next")).toHaveCount(0);
+    // Dismissible, leaving the floating button with the count, so closing it does not hide that an order exists,
+    // and the button opens it again.
+    await list.getByRole("button", { name: "Close" }).click();
+    await expect(list).toHaveCount(0);
     await expect(page.locator(".next-fab", { hasText: "Next" })).toContainText("2");
     await page.locator(".next-fab", { hasText: "Next" }).click();
-    await expect(page.locator(".next__item")).toHaveCount(2);
+    await expect(list.locator(".next__item")).toHaveCount(2);
   });
 
   test("shows an item's measurements under its prose, summarised (METRIC-4)", async ({ page }) => {
@@ -336,7 +340,7 @@ test.describe("several projects in one store", () => {
     // The shared fixture holds two projects and no `next`, so the hash picks one and the panel has nothing.
     await page.goto("/#apm");
     await expect(page.locator(".react-flow__node").first()).toBeVisible();
-    await expect(page.locator(".next")).toHaveCount(0);
+    await expect(page.locator('aside.detail[aria-label="Next"]')).toHaveCount(0);
     await expect(page.locator(".next-fab", { hasText: "Next" })).toHaveCount(0);
   });
 
@@ -665,6 +669,10 @@ test.describe("searching the plan (VIEW-25)", () => {
     await box(page).press("Enter");
     await expect(page.locator(".search")).toHaveCount(0);
     await expect(page.locator("aside.detail .detail__title")).toHaveText("Serve the tools over stdio");
+    // Back to the search as it was left, query and all.
+    await page.locator(".detail__back", { hasText: "Search" }).click();
+    await expect(box(page)).toHaveValue("stdi");
+    await expect(hits(page).first()).toContainText("Serve the tools over stdio");
   });
 
   test("goes straight to an item when a ref is typed", async ({ page }) => {

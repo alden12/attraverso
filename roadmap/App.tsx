@@ -118,9 +118,19 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
   const [hiddenStatuses, setHiddenStatuses] = useState<Set<Status>>(new Set<Status>(["done"]));
   const [colourMode, setColourMode] = useState<ColourMode>("area");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // The next list and the search box, in the right-hand pane with everything else you open over the graph, so the
+  // canvas is left to the graph. The pane holds one thing at a time (VIEW-30): an item, an area, context, or one of
+  // these. The next list starts open on a wide screen, as its floating panel did: it answers "what did we agree?",
+  // which someone back after three weeks is the least likely to know to ask. A narrow screen starts with the graph.
+  const [listShown, setListShown] = useState<"next" | "search" | null>(() =>
+    focus === null && (typeof window === "undefined" || window.innerWidth >= 700) ? "next" : null,
+  );
+  const [searchQuery, setSearchQuery] = useState("");
+  // Where an item was opened from, so its pane can offer the way back: the list, the search as it was left, or the
+  // area. Opening it from the graph itself leaves nothing to go back to.
+  const [cameFrom, setCameFrom] = useState<"next" | "search" | { area: string } | null>(null);
   // The search box (VIEW-25). `/` or Cmd/Ctrl+K opens it from anywhere but a text field, which is where those
   // keys are text.
-  const [searchOpen, setSearchOpen] = useState(false);
   useEffect(() => {
     const open = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
@@ -128,7 +138,7 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
       const shortcut = (event.key === "k" && (event.metaKey || event.ctrlKey)) || (event.key === "/" && !typing);
       if (!shortcut || (typing && event.key === "/")) return;
       event.preventDefault();
-      setSearchOpen(true);
+      openList("search");
     };
     window.addEventListener("keydown", open);
     return () => window.removeEventListener("keydown", open);
@@ -159,6 +169,7 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
   const openContext = useCallback((heading: string | null) => {
     setSelectedId(null);
     setAreaShown(null);
+    setListShown(null);
     setContextView({ heading });
   }, []);
   // An area in the pane (VIEW-49), by key: the third thing it can hold, under the same one-at-a-time rule.
@@ -166,12 +177,26 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
   const openArea = useCallback((area: string) => {
     setSelectedId(null);
     setContextView(null);
+    setListShown(null);
     setAreaShown(area);
   }, []);
+  function openList(kind: "next" | "search") {
+    setSelectedId(null);
+    setContextView(null);
+    setAreaShown(null);
+    setListShown(kind);
+  }
+  /** Back from an item to where it was opened from. */
+  const goBack = (from: NonNullable<typeof cameFrom>) => {
+    setCameFrom(null);
+    if (typeof from === "string") openList(from);
+    else openArea(from.area);
+  };
   useEffect(() => {
     if (selectedId === null) return;
     setContextView(null);
     setAreaShown(null);
+    setListShown(null);
   }, [selectedId]);
   // An open section is in the URL, so a link to "the storage model" can be shared the way a link to a project can.
   // `replaceState`, not an assignment, because a hash change remounts the viewer (main.tsx) and would close it.
@@ -226,13 +251,6 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
   const [hoveredId, setHoveredId] = useState<string | null>(null); // a ticket with a dependency path, hovered
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null); // a dependency edge, hovered directly
   const [layoutNonce, setLayoutNonce] = useState(0); // bump to force a fresh auto-layout (e.g. after reset)
-  // The agreed order (PROJ-8), open on load. It was collapsed at first, on the argument that the graph is
-  // what this surface is for - but that hides the one thing the panel exists to answer behind knowing it is
-  // there, from exactly the person most likely not to: someone opening this after three weeks away. The chip
-  // still closes it, and a graph you have to pan slightly is a smaller cost than an answer nobody finds.
-  // Except on a narrow screen (VIEW-38.2), where the open panel covers most of the graph; there it starts as the
-  // floating button, which still shows the count.
-  const [nextOpen, setNextOpen] = useState(() => typeof window === "undefined" || window.innerWidth >= 700);
   // Which detail-pane sections are collapsed. Held here rather than in each section, so the choice survives
   // the pane unmounting - which happens on every item click. Images and comments start folded: they sit below
   // the prose, which is what an item is opened to read, and their counts still show on the closed heading, so a
@@ -253,6 +271,8 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
     () => (project?.next ?? NO_REFS).flatMap((ref) => items.find((item) => item.id === ref) ?? []),
     [project, items],
   );
+  // An empty next list has nothing to show, so asking for it shows nothing rather than an empty pane.
+  const listPane = listShown === "next" && next.length === 0 ? null : listShown;
 
   // Ticket ids that touch a dependency path. Only these arm hover highlighting, so hovering a dependency-free
   // card (or an area box) never restyles the edges for nothing - a link surfaces from its own tickets or line.
@@ -587,7 +607,9 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
   const pickHit = (hit: SearchHit) => {
     if (hit.source === "context") return openContext(hit.id);
     const item = hit.ref === null ? undefined : items.find((candidate) => candidate.id === hit.ref);
-    if (item !== undefined) goToItem(item);
+    if (item === undefined) return;
+    goToItem(item);
+    setCameFrom("search");
   };
   /** Select an item and pan to it, bringing it back first if the filters hide it. A search hit and a row in the
    *  area pane both land here. */
@@ -604,6 +626,7 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
   const onNodeClick: NodeMouseHandler = (_event, node) => {
     if (node.type === "item" || node.type === "ticket") {
       setSelectedId((node.data as { item: RoadmapItem }).item.id);
+      setCameFrom(null);
     }
     const summary = node.data as { area?: string; collapsed?: unknown; foreign?: boolean };
     // A folded summary opens the area, which is what it is for; an open frame shows the area in the pane (VIEW-49).
@@ -738,16 +761,6 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
           {/* Whatever the host adds (`extensions.ts`): nothing, from this package's own two hosts. */}
           {ToolbarActions !== undefined && <ToolbarActions plan={plan} project={project} reload={reload} />}
         </div>
-        {searchOpen && project !== null && (
-          <Search
-            projectKey={project.key}
-            colours={colours}
-            hidden={hiddenIds}
-            titleOf={(ref) => items.find((item) => item.id === ref)?.title}
-            onPick={pickHit}
-            onClose={() => setSearchOpen(false)}
-          />
-        )}
         {settingsOpen && (
           <>
             <div className="settings__backdrop" onClick={() => setSettingsOpen(false)} />
@@ -913,7 +926,7 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
         )}
       </header>
 
-      <div className="body" data-pane={selected !== null || contextView !== null || areaShown !== null ? "open" : undefined}>
+      <div className="body" data-pane={selected !== null || contextView !== null || areaShown !== null || listPane !== null ? "open" : undefined}>
         <div className="graph">
           {/* Why the graph is empty, said out loud. Rendered over the (empty) canvas rather than instead of it,
               so the toolbar and its switcher stay put and the fix is one click away. */}
@@ -944,42 +957,15 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
               section is too long to read in a panel this size. */}
           {view === "graph" && project !== null && (
           <div className="fabs">
-          {!nextOpen && next.length > 0 && (
-            <button className="next-fab" onClick={() => setNextOpen(true)} title="The order agreed with set_next">
+          {next.length > 0 && (
+            <button
+              className="next-fab"
+              data-on={listPane === "next"}
+              onClick={() => (listPane === "next" ? setListShown(null) : openList("next"))}
+              title="The order agreed with set_next"
+            >
               Next<span className="chip__count">{next.length}</span>
             </button>
-          )}
-          {nextOpen && next.length > 0 && (
-            <aside className="next">
-              <div className="next__head">
-                <span className="next__label">Next</span>
-                <button className="next__close" onClick={() => setNextOpen(false)} aria-label="Close">
-                  ✕
-                </button>
-              </div>
-              <ol className="next__list">
-                {next.map((item, index) => (
-                  <li key={item.id}>
-                    {/* Clicking a row selects the node, which the detail pane and the graph highlight already
-                        handle - that is what makes this a jump list rather than a second copy of the graph.
-                        A row filtered out of the graph is dimmed rather than dropped: the agreed order is the
-                        agreed order, and silently shortening it under a filter would misreport it. */}
-                    <button
-                      className="next__item"
-                      data-on={selectedId === item.id}
-                      data-hidden={hiddenIds.has(item.id)}
-                      onClick={() => setSelectedId(item.id)}
-                    >
-                      <span className="next__pos">{index + 1}</span>
-                      <span className="next__id" style={{ color: colours[item.area] }}>
-                        {item.id}
-                      </span>
-                      <span className="next__title">{item.title}</span>
-                    </button>
-                  </li>
-                ))}
-              </ol>
-            </aside>
           )}
           {project !== null && project.context.length > 0 && (
             <button
@@ -993,7 +979,13 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
           )}
           {/* Search (VIEW-25), with the other things you open over the canvas rather than in the toolbar, which a
               phone has no room in. Icon-only: the magnifier is the most widely understood one there is. */}
-          <button className="next-fab next-fab--icon" data-on={searchOpen} aria-label="Search" title="Search (/ or Cmd+K)" onClick={() => setSearchOpen(true)}>
+          <button
+            className="next-fab next-fab--icon"
+            data-on={listPane === "search"}
+            aria-label="Search"
+            title="Search (/ or Cmd+K)"
+            onClick={() => (listPane === "search" ? setListShown(null) : openList("search"))}
+          >
             <SearchIcon />
           </button>
           </div>
@@ -1064,6 +1056,11 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
           <aside className="detail">
             <div className="detail__head">
               <div>
+                {cameFrom !== null && (
+                  <button className="detail__dep detail__back" onClick={() => goBack(cameFrom)}>
+                    ‹ {typeof cameFrom === "string" ? (cameFrom === "next" ? "Next" : "Search") : cameFrom.area}
+                  </button>
+                )}
                 <span className="detail__id" style={{ color: colours[selected.area] }}>
                   {selected.id}
                 </span>
@@ -1145,9 +1142,58 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
             items={items.filter((item) => item.area === areaShown)}
             next={next.flatMap((item, index) => (item.area === areaShown ? [{ item, position: index + 1 }] : []))}
             hidden={hiddenIds}
-            onPick={goToItem}
+            onPick={(item) => {
+              goToItem(item);
+              setCameFrom({ area: areaShown });
+            }}
             onZoom={() => zoomToArea(areaShown)}
             onClose={() => setAreaShown(null)}
+          />
+        )}
+        {!selected && contextView === null && areaShown === null && listPane === "next" && (
+          <aside className="detail" aria-label="Next">
+            <div className="detail__head">
+              <span className="detail__id">Next</span>
+              <button className="detail__close" onClick={() => setListShown(null)} aria-label="Close">
+                ×
+              </button>
+            </div>
+            <ol className="next__list area-pane__list">
+              {next.map((item, index) => (
+                <li key={item.id}>
+                  {/* Clicking a row selects the node, which the detail pane and the graph highlight already handle -
+                      that is what makes this a jump list rather than a second copy of the graph. A row filtered out
+                      of the graph is dimmed rather than dropped: the agreed order is the agreed order, and silently
+                      shortening it under a filter would misreport it. */}
+                  <button
+                    className="next__item"
+                    data-hidden={hiddenIds.has(item.id)}
+                    onClick={() => {
+                      goToItem(item);
+                      setCameFrom("next");
+                    }}
+                  >
+                    <span className="next__pos">{index + 1}</span>
+                    <span className="next__id" style={{ color: colours[item.area] }}>
+                      {item.id}
+                    </span>
+                    <span className="next__title">{item.title}</span>
+                  </button>
+                </li>
+              ))}
+            </ol>
+          </aside>
+        )}
+        {!selected && contextView === null && areaShown === null && listPane === "search" && project !== null && (
+          <Search
+            projectKey={project.key}
+            colours={colours}
+            hidden={hiddenIds}
+            titleOf={(ref) => items.find((item) => item.id === ref)?.title}
+            query={searchQuery}
+            onQuery={setSearchQuery}
+            onPick={pickHit}
+            onClose={() => setListShown(null)}
           />
         )}
         {!selected && contextView !== null && project !== null && (
