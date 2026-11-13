@@ -578,37 +578,52 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
               the toolbar has no width to spare for a mark that tall. */}
           <span className="picker-wrap">
           <Logo className="picker__logo" crop="icon" />
-          {/* The name reads as a title, and shows it is a switcher only when hovered, with the plan file as a
-              faint caption beneath: the question "which file is this?" is occasional, so it gets a whisper rather
-              than a line of its own. Absent in cloud mode, where there is no file (OPS-11). */}
-          <span className="picker-stack">
-          {plan.projects.length > 1 ? (
-            <select
-              className="picker"
-              aria-label="Project"
-              title="Switch project"
-              value={project?.key ?? ""}
-              // Writing the hash is the navigation: `hashchange` re-runs the selection in `main.tsx`.
-              onChange={(event) => {
-                window.location.hash = event.target.value;
-              }}
-            >
-              {project === null && <option value="">choose a project</option>}
-              {plan.projects.map((candidate) => (
-                <option key={candidate.key} value={candidate.key}>
-                  {candidate.name}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <strong className="picker picker--static">{project?.name ?? "no project"}</strong>
-          )}
-          {plan.storePath !== null && (
-            <span className="topbar__file" title={plan.storePath}>
-              {plan.storePath.split(",")[0]!.split("/").pop()}
-            </span>
-          )}
-          </span>
+          {/* The name reads as a title, and shows it is a switcher only when hovered, with the plan file as a faint
+              caption after it: "which file is this?" is occasional, so it gets a whisper rather than a line. Absent
+              in cloud mode, where there is no file (OPS-11).
+
+              **Drawn by us, with the real <select> laid over it, invisible.** A native select can only show its
+              chosen option's text, so the caption could not sit inside it; replacing it with a custom dropdown would
+              lose the phone's own picker, the keyboard and the screen reader for the sake of one caption. Clicking
+              lands on the select, which opens the browser's own list, and the <label> is what ties the two. */}
+          {(() => {
+            const file = plan.storePath === null ? null : plan.storePath.split(",")[0]!.split("/").pop()!;
+            const caption = file !== null && (
+              <span className="picker__file" title={plan.storePath ?? undefined}>
+                {file}
+              </span>
+            );
+            if (plan.projects.length <= 1) {
+              return (
+                <span className="picker picker--static">
+                  <strong className="picker__name">{project?.name ?? "no project"}</strong>
+                  {caption}
+                </span>
+              );
+            }
+            return (
+              <label className="picker" title="Switch project">
+                <span className="picker__name">{project?.name ?? "choose a project"}</span>
+                {caption}
+                <select
+                  className="picker__native"
+                  aria-label="Project"
+                  value={project?.key ?? ""}
+                  // Writing the hash is the navigation: `hashchange` re-runs the selection in `main.tsx`.
+                  onChange={(event) => {
+                    window.location.hash = event.target.value;
+                  }}
+                >
+                  {project === null && <option value="">choose a project</option>}
+                  {plan.projects.map((candidate) => (
+                    <option key={candidate.key} value={candidate.key}>
+                      {candidate.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            );
+          })()}
           </span>
         </div>
         <div className="filters">
