@@ -23,7 +23,7 @@ import { addComment, deleteComment, editComment, listComments, shortCommentId, A
 import { deleteSection, getSection, listSections, setSection, PROTOCOL_HEADING } from "../domain/context";
 import { resumeProject, type ContextPack, type PackBoard } from "../domain/memory";
 import { setNext, type NextItem } from "../domain/next";
-import { listAreas, MAX_AREA_DESCRIPTION, setArea, type AreaSummary } from "../domain/areas";
+import { listAreas, MAX_AREA_DESCRIPTION, MAX_AREA_NAME, setArea, type AreaSummary } from "../domain/areas";
 import { aggregateSeries, listMetrics, recordMeasurements, type Measurement } from "../domain/measurements";
 import { toRecords } from "../serialise/measurements";
 import { search, DEFAULT_LIMIT as SEARCH_LIMIT, type SearchHit } from "../domain/search";
@@ -544,14 +544,15 @@ export function registerTools(server: McpServer, db: Database, store: StoreAcces
       annotations: WRITE,
       description:
         "Name an area or describe it, or both. An area is a ref prefix (MCP, VIEW); it exists as soon as an item uses " +
-        "it, and this only says what it is: a name in full words (\"The graph viewer\" for VIEW) and a line or two " +
-        "on what belongs in it, which the viewer shows over the area and list_areas returns. Omit a field to leave " +
+        "it, and this only says what it is: a name of a word or two, as you would say it (\"Viewer\" for VIEW, at most " +
+        `${MAX_AREA_NAME} characters and shorter reads better, since it is read on the map at every zoom), and a line or ` +
+        "two on what belongs in it, which the viewer shows with the area and list_areas returns. Omit a field to leave " +
         `it; pass description: null to clear it. The description is at most ${MAX_AREA_DESCRIPTION} characters - a longer ` +
         "account is a context section (set_context).",
       inputSchema: {
         project: z.string(),
         key: z.string().describe('The area\'s ref prefix, e.g. "VIEW".'),
-        name: z.string().optional().describe("What the area is called, in words."),
+        name: z.string().optional().describe(`A word or two, at most ${MAX_AREA_NAME} characters; shorter reads better.`),
         description: z.string().nullable().optional().describe("What belongs in it, in a line or two. Null clears it."),
       },
     },

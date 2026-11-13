@@ -278,7 +278,8 @@ test.describe("the served store", () => {
     await page.keyboard.press("Escape");
 
     await frame.click({ position: { x: 12, y: 12 } });
-    await expect(page.locator('aside[aria-label="Area DATA"] .detail__title')).toHaveText("Storage");
+    await expect(page.locator('aside[aria-label="Area DATA"] .detail__title')).toHaveText("StorageDATA"); // the name, its key beside it
+    await expect(page.locator('aside[aria-label="Area DATA"] .area-pane__description')).toHaveText("Where the plan lives.");
   });
 
   test("captures the full graph for visual inspection", async ({ page }) => {

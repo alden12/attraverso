@@ -74,6 +74,13 @@ export async function listAreas(db: Database, projectId: OwnedProjectId): Promis
  */
 export const MAX_AREA_DESCRIPTION = 400;
 
+/**
+ * The longest name an area takes: a word or two, because it is read on the map at every zoom, including just
+ * before the zoomed-out fade (`VIEW-52`), where a longer one could not be read in time. The longer wording is the
+ * description's, and the refusal says so.
+ */
+export const MAX_AREA_NAME = 20;
+
 /** An area key as a ref prefix is written: letters first, then letters and digits, upper case. */
 const AREA_KEY = /^[A-Z][A-Z0-9]*$/;
 
@@ -104,6 +111,12 @@ export async function setArea(
   if (!AREA_KEY.test(key)) throw new Error(`"${input.key}" is not an area key: letters then letters and digits, like VIEW or OPS2`);
   const name = input.name?.trim();
   if (name === "") throw new Error("an area's name cannot be empty; omit `name` to leave it as it is");
+  if (name !== undefined && name.length > MAX_AREA_NAME) {
+    throw new Error(
+      `an area's name is at most ${MAX_AREA_NAME} characters (this is ${name.length}): a word or two, read on the map at every zoom. ` +
+        "Put the longer wording in the description.",
+    );
+  }
   const description = input.description === undefined ? undefined : input.description === null ? null : input.description.trim() || null;
   if (description !== undefined && description !== null && description.length > MAX_AREA_DESCRIPTION) {
     throw new Error(

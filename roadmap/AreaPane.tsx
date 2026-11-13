@@ -64,10 +64,7 @@ export function AreaPane({
   return (
     <aside className="detail" aria-label={`Area ${area}`}>
       <div className="detail__head">
-        <div>
-          <span className="detail__id" style={{ color: colour }}>
-            {area}
-          </span>
+        <div className="area-pane__tools">
           <button className="detail__dep area-pane__zoom" onClick={onZoom}>
             <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
               <circle cx="8" cy="8" r="5" fill="none" stroke="currentColor" strokeWidth="1.5" />
@@ -81,12 +78,13 @@ export function AreaPane({
           ×
         </button>
       </div>
-      <h2 className="detail__title">{name ?? area}</h2>
-      {description !== undefined && description !== "" && (
-        <div className="detail__doc">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{description}</ReactMarkdown>
-        </div>
-      )}
+      {/* The name the plan gives it, with the key it goes by on refs beside it; the key alone where it has none. */}
+      <h2 className="detail__title area-pane__title">
+        {name !== undefined && name !== area && <span>{name}</span>}
+        <span className="area-pane__key" style={{ color: colour }}>
+          {area}
+        </span>
+      </h2>
 
       <div className="area-pane__progress">
         <div className="area-pane__bar" role="img" aria-label={`${done} of ${items.length} done`}>
@@ -104,6 +102,13 @@ export function AreaPane({
           ))}
         </div>
       </div>
+
+      {/* Below the progress, where it reads as what the counts are counting. */}
+      {description !== undefined && description !== "" && (
+        <div className="detail__doc area-pane__description">
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{description}</ReactMarkdown>
+        </div>
+      )}
 
       {next.length > 0 && (
         <>

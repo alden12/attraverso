@@ -8,7 +8,7 @@ import { freshDb } from "../db/testing";
 import { areas } from "../db/schema";
 import { createProject } from "./projects";
 import { createItem, deleteItem, setStatus } from "./items";
-import { listAreas, MAX_AREA_DESCRIPTION, setArea } from "./areas";
+import { listAreas, MAX_AREA_DESCRIPTION, MAX_AREA_NAME, setArea } from "./areas";
 
 const ACTOR = "test";
 const project = (db: Awaited<ReturnType<typeof freshDb>>["db"], ownerId: string) =>
@@ -62,13 +62,13 @@ describe("setArea (PROJ-3)", () => {
     const p = await project(db, ownerId);
     await createItem(db, { projectId: p.id, area: "VIEW", title: "graph" }, ACTOR);
 
-    expect(await setArea(db, p.id, { key: "view", name: "The graph viewer" }, ACTOR)).toEqual({ key: "VIEW", name: "The graph viewer", description: null });
+    expect(await setArea(db, p.id, { key: "view", name: "Viewer" }, ACTOR)).toEqual({ key: "VIEW", name: "Viewer", description: null });
     await setArea(db, p.id, { key: "VIEW", description: "Everything you see in the browser." }, ACTOR);
     expect(await listAreas(db, p.id)).toEqual([
-      { key: "VIEW", name: "The graph viewer", description: "Everything you see in the browser.", open: 1, total: 1 },
+      { key: "VIEW", name: "Viewer", description: "Everything you see in the browser.", open: 1, total: 1 },
     ]);
     await setArea(db, p.id, { key: "VIEW", description: null }, ACTOR);
-    expect((await listAreas(db, p.id))[0]).toMatchObject({ name: "The graph viewer", description: null });
+    expect((await listAreas(db, p.id))[0]).toMatchObject({ name: "Viewer", description: null });
     await close();
   });
 
@@ -86,11 +86,12 @@ describe("setArea (PROJ-3)", () => {
     await close();
   });
 
-  it("refuses a key that is not a prefix, an empty name, and a description past the cap, naming set_context", async () => {
+  it("refuses a key that is not a prefix, an empty or overlong name, and a description past the cap, naming set_context", async () => {
     const { db, ownerId, close } = await freshDb();
     const p = await project(db, ownerId);
     await expect(setArea(db, p.id, { key: "VIEW-1", name: "x" }, ACTOR)).rejects.toThrow(/not an area key/);
     await expect(setArea(db, p.id, { key: "VIEW", name: "  " }, ACTOR)).rejects.toThrow(/cannot be empty/);
+    await expect(setArea(db, p.id, { key: "VIEW", name: "x".repeat(MAX_AREA_NAME + 1) }, ACTOR)).rejects.toThrow(/description/);
     await expect(setArea(db, p.id, { key: "VIEW", description: "x".repeat(MAX_AREA_DESCRIPTION + 1) }, ACTOR)).rejects.toThrow(/set_context/);
     await close();
   });

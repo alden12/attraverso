@@ -1499,12 +1499,32 @@ body {
 }
 
 /* An area in the pane (VIEW-49). */
+/* Centred in the head rather than sitting on the text baseline, where the icon rode above the middle. */
+.area-pane__tools {
+  display: flex;
+  align-items: center;
+}
 .area-pane__zoom {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  margin-left: 10px;
   font-size: 12px;
+  line-height: 1;
+}
+.area-pane__title {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0 10px;
+}
+.area-pane__key {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.area-pane__description {
+  padding-top: 0;
+  padding-bottom: 6px;
 }
 .area-pane__progress {
   padding: 8px 16px 14px;
