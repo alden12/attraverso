@@ -140,6 +140,8 @@ interface StoreProject {
   items: StoreItem[];
   /** The graph layout's memory (`VIEW-23.1`), node id -> "x,y", as the plan file holds it. */
   layout?: Record<string, string>;
+  /** Context sections, heading -> markdown, in the order the project chose (`VIEW-30`). */
+  context?: Record<string, string>;
 }
 /** The path rides along with the store so the viewer can say *which* file it is showing - the question a
  *  Desktop user actually has, given the store could be in a repo or in their home dir. */
@@ -189,7 +191,24 @@ export interface ProjectPlan {
   /** Metric summaries by item ref. Project-level readings are under the empty key, which nothing renders
    *  yet - the detail pane is per-item, and a home for those is the standalone view METRIC-4 is unsure about. */
   metrics: Map<string, MetricSummary[]>;
+  /** The project's context sections (`VIEW-30`), `protocol` first and the rest in the project's own order. */
+  context: ContextSection[];
 }
+
+export interface ContextSection {
+  heading: string;
+  content: string;
+}
+
+/**
+ * The sections in reading order: `protocol` first, as the context pack puts it (`CTX-9` makes it the one read
+ * every session), then the rest as the project ordered them. Not special-cased out: it is a section like any
+ * other, it just leads.
+ */
+export const orderSections = (context: Record<string, string>): ContextSection[] =>
+  Object.entries(context)
+    .map(([heading, content]) => ({ heading, content }))
+    .sort((a, b) => Number(b.heading === "protocol") - Number(a.heading === "protocol"));
 
 /** Every project in the served store. The viewer holds them all and switches between them client-side, because
  *  they all belong to the same person: one viewer left open, not one per project. */
@@ -247,6 +266,7 @@ export async function fetchPlan(): Promise<Plan> {
       bodies: new Map(project.items.map((item) => [item.ref, item.body ?? ""])),
       attachments: new Map(project.items.filter((item) => item.attachments?.length).map((item) => [item.ref, item.attachments!])),
       metrics: groupBy(metrics?.[project.key] ?? [], (m) => m.ref ?? ""),
+      context: orderSections(project.context ?? {}),
     })),
   };
 }
@@ -260,12 +280,21 @@ export async function fetchPlan(): Promise<Plan> {
  * anticipated. A ref never contains a `/`, so the first one is the split.
  */
 export function parseHash(hash: string): { project: string | null; item: string | null } {
+  // A context section rides in the item half as `context:<heading>` (`VIEW-30`, see `sectionInFocus`): a ref
+  // never contains a colon, so the two cannot be confused.
   const raw = decodeURIComponent(hash.replace(/^#/, ""));
   const cut = raw.indexOf("/");
   const project = (cut === -1 ? raw : raw.slice(0, cut)) || null;
   const item = cut === -1 ? null : raw.slice(cut + 1) || null;
   return { project, item };
 }
+
+/** The prefix that marks the hash's second half as a context section rather than an item (`VIEW-30`). */
+export const SECTION_PREFIX = "context:";
+
+/** The context section the hash's second half names, or null when it names an item or nothing. */
+export const sectionInFocus = (focus: string | null): string | null =>
+  focus?.startsWith(SECTION_PREFIX) ? focus.slice(SECTION_PREFIX.length) : null;
 
 /** What the viewer should render, given the store and the project asked for in the URL hash. */
 export interface Selection {

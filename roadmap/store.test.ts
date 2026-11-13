@@ -4,9 +4,9 @@
  * again by accident.
  */
 import { describe, expect, it } from "vitest";
-import { parseHash, selectProject, type ProjectPlan } from "./store";
+import { orderSections, parseHash, sectionInFocus, selectProject, type ProjectPlan } from "./store";
 
-const project = (key: string): ProjectPlan => ({ key, name: key.toUpperCase(), items: [], next: [], layout: {}, bodies: new Map(), attachments: new Map(), metrics: new Map() });
+const project = (key: string): ProjectPlan => ({ key, name: key.toUpperCase(), items: [], next: [], layout: {}, bodies: new Map(), attachments: new Map(), metrics: new Map(), context: [] });
 const apm = project("apm");
 const spanish = project("spanish");
 
@@ -47,5 +47,17 @@ describe("parseHash", () => {
     // A trailing slash names no item, rather than an item called "".
     expect(parseHash("#apm/")).toEqual({ project: "apm", item: null });
     expect(parseHash("#my%20plan/CAL-1")).toEqual({ project: "my plan", item: "CAL-1" });
+  });
+});
+
+describe("context sections (VIEW-30)", () => {
+  it("puts protocol first and keeps the project's order for the rest", () => {
+    expect(orderSections({ thesis: "a", protocol: "b", storage: "c" }).map((s) => s.heading)).toEqual(["protocol", "thesis", "storage"]);
+  });
+
+  it("reads a section from the hash's second half, and leaves an item ref alone", () => {
+    expect(sectionInFocus(parseHash("#apm/context%3AThe%20storage%20model").item)).toBe("The storage model");
+    expect(sectionInFocus(parseHash("#apm/VIEW-30").item)).toBeNull();
+    expect(sectionInFocus(null)).toBeNull();
   });
 });

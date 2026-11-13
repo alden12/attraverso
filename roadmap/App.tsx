@@ -21,7 +21,7 @@ import remarkGfm from "remark-gfm";
 // The plan is fetched at runtime and handed in by `main.tsx` (VIEW-11), so this component renders whichever
 // store was served to it rather than one baked into the bundle, and whichever project of it the URL asked
 // for (VIEW-4).
-import { canWrite, saveLayout, type Plan, type Selection } from "./store";
+import { canWrite, saveLayout, SECTION_PREFIX, sectionInFocus, type Plan, type Selection } from "./store";
 import { useExtensions } from "./extensions";
 import { areasOf, STATUSES, type Status, splitScope } from "../scripts/tickets";
 import { areaColours, buildGraph, buildEdges, memoryOf, remembered, type ColourMode, type LayoutMemory, type RoadmapNode } from "./graph";
@@ -124,7 +124,36 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
   const locked = lockMode === "selected";
   // Seeded from the URL (`#apm/CAL-1`), which is how the calendar opens another project's item: it switches
   // project, which remounts this, so the item has to arrive with the new mount.
-  const [selectedId, setSelectedId] = useState<string | null>(focus);
+  // A context section in the hash (`#apm/context:protocol`) opens that section instead (VIEW-30).
+  const [selectedId, setSelectedId] = useState<string | null>(sectionInFocus(focus) === null ? focus : null);
+  /**
+   * The context sections in the right-hand pane (VIEW-30): null when closed, `{ heading: null }` for the list of
+   * headings, or one section open. **The pane holds one thing at a time**, an item or context, so opening one
+   * closes the other: two pieces of state each believing they own the pane is the fight VIEW-30 warns about.
+   */
+  const [contextView, setContextView] = useState<{ heading: string | null } | null>(() => {
+    const heading = sectionInFocus(focus);
+    return heading === null ? null : { heading };
+  });
+  const openContext = useCallback((heading: string | null) => {
+    setSelectedId(null);
+    setContextView({ heading });
+  }, []);
+  useEffect(() => {
+    if (selectedId !== null) setContextView(null);
+  }, [selectedId]);
+  // An open section is in the URL, so a link to "the storage model" can be shared the way a link to a project can.
+  // `replaceState`, not an assignment, because a hash change remounts the viewer (main.tsx) and would close it.
+  const sectionShown = contextView?.heading ?? null;
+  useEffect(() => {
+    if (project === null) return;
+    const base = `#${encodeURIComponent(project.key)}`;
+    const wanted = sectionShown === null ? null : `${base}/${encodeURIComponent(SECTION_PREFIX + sectionShown)}`;
+    const current = window.location.hash;
+    if (wanted !== null && current !== wanted) history.replaceState(null, "", wanted);
+    // Only tidy a section link away; an item link someone arrived on is left as it was.
+    if (wanted === null && sectionInFocus(decodeURIComponent(current.slice(base.length + 1))) !== null) history.replaceState(null, "", base);
+  }, [sectionShown, project]);
   // Collapsed areas (VIEW-34): each is a summary box until opened, and the map closes up around it through the
   // same re-layout from memory a filter uses. Open by default, so the map is the whole plan until you fold
   // something away.
@@ -143,7 +172,11 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
     const area = selectedId?.split("-")[0];
     if (area !== undefined) expandArea(area);
   }, [selectedId, expandArea]);
-  useEffect(() => setSelectedId(focus), [focus]);
+  useEffect(() => {
+    const heading = sectionInFocus(focus);
+    if (heading === null) setSelectedId(focus);
+    else openContext(heading);
+  }, [focus, openContext]);
   const [view, setView] = usePreference<View>("attraverso.view", "graph", VIEWS);
   const otherView: View = view === "graph" ? "calendar" : "graph";
   // The minimap is a help on a big screen and a quarter of a small one, so it starts hidden on a narrow one, and
@@ -675,7 +708,7 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
         )}
       </header>
 
-      <div className="body">
+      <div className="body" data-pane={selected !== null || contextView !== null ? "open" : undefined}>
         <div className="graph">
           {/* Why the graph is empty, said out loud. Rendered over the (empty) canvas rather than instead of it,
               so the toolbar and its switcher stay put and the fix is one click away. */}
@@ -701,12 +734,17 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
           {/* Collapsed, the agreed order is a button floating where the panel was, rather than a toolbar chip: it
               keeps the count on screen, so closing the panel does not hide that an order exists, and it costs the
               toolbar nothing. */}
-          {view === "graph" && !nextOpen && next.length > 0 && (
+          {/* The floating controls at the canvas's top left, in one row: the agreed order, and beside it the
+              project's context sections (VIEW-30), which open in the right-hand pane rather than here, since a
+              section is too long to read in a panel this size. */}
+          {view === "graph" && (next.length > 0 || (project?.context.length ?? 0) > 0) && (
+          <div className="fabs">
+          {!nextOpen && next.length > 0 && (
             <button className="next-fab" onClick={() => setNextOpen(true)} title="The order agreed with set_next">
               Next<span className="chip__count">{next.length}</span>
             </button>
           )}
-          {view === "graph" && nextOpen && next.length > 0 && (
+          {nextOpen && next.length > 0 && (
             <aside className="next">
               <div className="next__head">
                 <span className="next__label">Next</span>
@@ -737,6 +775,18 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
                 ))}
               </ol>
             </aside>
+          )}
+          {project !== null && project.context.length > 0 && (
+            <button
+              className="next-fab"
+              data-on={contextView !== null}
+              onClick={() => (contextView === null ? openContext(null) : setContextView(null))}
+              title="The project's context sections: what it is, and how it is worked on"
+            >
+              Context<span className="chip__count">{project.context.length}</span>
+            </button>
+          )}
+          </div>
           )}
           {view === "calendar" ? (
             <Calendar
@@ -860,6 +910,47 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
                 uploadsDisabled={plan.uploadsDisabled}
                 reload={reload}
               />
+            )}
+          </aside>
+        )}
+        {!selected && contextView !== null && project !== null && (
+          <aside className="detail" aria-label="Context">
+            <div className="detail__head">
+              <div>
+                {contextView.heading === null ? (
+                  <span className="detail__id">Context</span>
+                ) : (
+                  <button className="detail__dep" onClick={() => setContextView({ heading: null })}>
+                    ‹ Context
+                  </button>
+                )}
+              </div>
+              <button className="detail__close" onClick={() => setContextView(null)} aria-label="Close">
+                ×
+              </button>
+            </div>
+            {contextView.heading === null ? (
+              // The table of contents, never every body at once: a heading is cheap to scan and a body is long,
+              // which is why `get_project` names headings and opens one on demand.
+              <ul className="context__list">
+                {project.context.map((section) => (
+                  <li key={section.heading}>
+                    <button className="context__item" onClick={() => setContextView({ heading: section.heading })}>
+                      {section.heading}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <>
+                <h2 className="detail__title">{contextView.heading}</h2>
+                {/* The item body's renderer, so a section reads the same wherever it is shown. */}
+                <div className="detail__doc">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {project.context.find((section) => section.heading === contextView.heading)?.content ?? "This section no longer exists."}
+                  </ReactMarkdown>
+                </div>
+              </>
             )}
           </aside>
         )}

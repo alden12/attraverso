@@ -141,7 +141,9 @@ test.describe("the served store", () => {
     await settings(page, "PLAT");
 
     await expect(page.locator(".topbar__sub")).toContainText(`${items.length - platItems} of ${items.length}`);
-    expect(await page.locator(".item-node").count()).toBeLessThan(before);
+    // Polled: the subtitle updates a frame before the re-layout drops the filtered cards, and a single read taken
+    // in between failed now and then under a loaded runner.
+    await expect.poll(() => page.locator(".item-node").count()).toBeLessThan(before);
   });
 
   test("captures the full graph for visual inspection", async ({ page }) => {
@@ -522,5 +524,46 @@ test.describe("moving cards (VIEW-41)", () => {
     await page.waitForTimeout(300);
     const scale = await page.locator(".react-flow__viewport").evaluate((element) => new DOMMatrix(getComputedStyle(element).transform).a);
     expect(scale).toBeLessThan(0.1);
+  });
+});
+
+test.describe("the project's context sections (VIEW-30)", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => window.localStorage.clear());
+    await page.goto("/#demo");
+    await expect(page.locator(".react-flow__node").first()).toBeVisible();
+  });
+
+  const button = (page: Page) => page.locator(".next-fab", { hasText: "Context" });
+  const pane = (page: Page) => page.locator('aside.detail[aria-label="Context"]');
+
+  test("lists the headings, protocol first, and opens one in the pane with a link to it", async ({ page }) => {
+    await expect(button(page)).toContainText("2");
+    await button(page).click();
+    await expect(pane(page).locator(".context__item")).toHaveText(["protocol", "Goals"]);
+
+    await pane(page).locator(".context__item", { hasText: "Goals" }).click();
+    await expect(pane(page).locator(".detail__title")).toHaveText("Goals");
+    await expect(pane(page).locator(".detail__doc strong")).toHaveText("demo"); // rendered as markdown
+    expect(decodeURIComponent(new URL(page.url()).hash)).toBe("#demo/context:Goals");
+
+    // The link opens the same section on its own.
+    await page.reload();
+    await expect(pane(page).locator(".detail__title")).toHaveText("Goals");
+
+    await pane(page).locator("button", { hasText: "‹ Context" }).click();
+    await expect(pane(page).locator(".context__item")).toHaveCount(2);
+  });
+
+  test("shares the pane with items: opening one closes the other", async ({ page }) => {
+    await button(page).click();
+    await expect(pane(page)).toBeVisible();
+    await page.locator(".react-flow__node-item").first().click();
+    await expect(pane(page)).toHaveCount(0);
+    await expect(page.locator("aside.detail .detail__title")).toBeVisible();
+
+    await button(page).click();
+    await expect(pane(page)).toBeVisible();
+    await expect(page.locator("aside.detail")).toHaveCount(1);
   });
 });

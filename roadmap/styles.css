@@ -519,12 +519,27 @@ body {
 /* The agreed order (PROJ-8), floated over the graph rather than docked beside it: it is short, it is opened
    deliberately, and it should not permanently narrow the thing the viewer exists to show. Top-left, because
    the detail pane already owns the right edge and the two are routinely open together. */
-/* The agreed order, collapsed: a button floating where the panel opens, keeping its count on screen. */
-.next-fab {
+/* The floating controls' row (VIEW-30): the agreed order (button or open panel) and the context button beside
+   it, top-aligned so the button sits at the panel's top edge when the panel is open. The row itself takes no
+   clicks, so the canvas between and under its children still pans. */
+.fabs {
   position: absolute;
   z-index: 5;
   top: 12px;
   left: 12px;
+  right: 12px;
+  max-height: calc(100% - 24px);
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  pointer-events: none;
+}
+.fabs > * {
+  pointer-events: auto;
+}
+/* The agreed order, collapsed: a button floating where the panel opens, keeping its count on screen. */
+.next-fab {
+  flex: none;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -542,14 +557,16 @@ body {
 .next-fab:hover {
   border-color: #38455a;
 }
+.next-fab[data-on="true"] {
+  background: #263243;
+  border-color: #3a4a60;
+}
 
 .next {
-  position: absolute;
-  z-index: 5;
-  top: 12px;
-  left: 12px;
+  flex: none;
   width: 300px;
-  max-height: calc(100% - 24px);
+  max-width: calc(100vw - 140px);
+  max-height: 100%;
   display: flex;
   flex-direction: column;
   border: 1px solid var(--line);
@@ -843,8 +860,35 @@ body {
 }
 
 /* Detail panel -------------------------------------------------------------- */
+/* The context sections' table of contents (VIEW-30), in the detail pane. */
+.context__list {
+  list-style: none;
+  margin: 0;
+  padding: 6px 8px;
+  overflow-y: auto;
+}
+.context__item {
+  display: block;
+  width: 100%;
+  padding: 9px 10px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+.context__item:hover {
+  background: #263243;
+}
+
 .detail {
   width: 420px;
+  /* Never wider than the screen: on a phone a fixed 420px pushed the close button out of reach. The phone's real
+     shape for the pane is a bottom sheet (VIEW-38.3). */
+  max-width: 100%;
   flex: none;
   border-left: 1px solid var(--line);
   background: var(--panel-2);
@@ -1099,4 +1143,12 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* With the pane open on a narrow screen the graph is a sliver beside it, and the floating buttons spilled over the
+   pane's header. Hidden until the pane closes; VIEW-38.3's bottom sheet is what gives them room back. */
+@media (max-width: 700px) {
+  .body[data-pane="open"] .fabs {
+    display: none;
+  }
 }

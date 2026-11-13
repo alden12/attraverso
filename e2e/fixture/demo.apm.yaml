@@ -6,6 +6,12 @@ projects:
     id: 01a169c5-05ac-7258-a1c5-489951bd9242
     created_at: 2026-10-23T17:18:02.156Z
     updated_at: 2026-10-23T17:18:02.156Z
+    context:
+      Goals: |-
+        Ship a **demo** plan the suite can render.
+
+        One section of prose, so the pane has markdown to show.
+      protocol: Read the next list first.
     areas: []
     items:
       - ref: DATA-1

@@ -16,6 +16,7 @@ import { fileURLToPath } from "node:url";
 import { createInMemoryDb } from "../../src/db/memory";
 import { createItem, deleteItem, setStatus } from "../../src/domain/items";
 import { createProject } from "../../src/domain/projects";
+import { setSection } from "../../src/domain/context";
 import { ensureUser, LOCAL_IDENTITY } from "../../src/domain/users";
 import { saveStore } from "../../src/serialise/store";
 
@@ -57,6 +58,10 @@ await setStatus(db, { projectId: demo.id, ref: "DATA-3", status: "in-progress" }
 await setStatus(db, { projectId: demo.id, ref: "VIEW-1.1", status: "review" }, ACTOR);
 // Soft-deleted, so it stays in the file (it is the durable copy) and must never be counted by the viewer.
 await deleteItem(db, { projectId: demo.id, ref: "DATA-6" }, ACTOR);
+
+// Two context sections (VIEW-30), `protocol` written second so the suite can see the viewer lists it first.
+await setSection(db, { projectId: demo.id, heading: "Goals", content: "Ship a **demo** plan the suite can render.\n\nOne section of prose, so the pane has markdown to show." }, ACTOR);
+await setSection(db, { projectId: demo.id, heading: "protocol", content: "Read the next list first." }, ACTOR);
 
 await saveStore(db, here("demo.apm.yaml"), new Set([demo.id]));
 await saveStore(db, here("other.apm.yaml"), new Set([other.id]));
