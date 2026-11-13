@@ -154,12 +154,50 @@ body {
   font: inherit;
   font-weight: 700;
   letter-spacing: -0.01em;
-  padding: 3px 8px;
+  /* The native arrow sat inside the 8px padding and collided with a long name, so it is drawn here instead,
+     with its own room on the right that the text cannot run into. */
+  appearance: none;
+  padding: 3px 26px 3px 8px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%239aa7b8' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 9px center;
+  background-size: 10px 6px;
+  text-overflow: ellipsis;
   cursor: pointer;
+}
+/* The logo beside the switcher, as tall as its row and no taller: the subtitle runs underneath both, so the
+   mark adds width to one row rather than height to the toolbar. */
+.picker-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+}
+.picker__logo {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  color: var(--text);
+  /* A round badge: the disc gives the clip an edge to see, since the drawing itself only touches the circle
+     where the bridge runs off it. */
+  clip-path: circle(50%);
+  background: #33435a;
+}
+.picker-wrap .picker {
+  min-width: 0;
+}
+/* One project, nothing to switch to: the same box so the logo sits the same, but no chevron and no hover. */
+.picker--static {
+  background-image: none;
+  padding-right: 10px;
+  cursor: default;
+  white-space: nowrap;
+  overflow: hidden;
 }
 .picker:hover {
   border-color: #4d5e77;
-  background: #263243;
+  /* background-color, not background: the shorthand would wipe the chevron. */
+  background-color: #263243;
 }
 
 .filters {
@@ -596,6 +634,10 @@ body {
   border-bottom: 1px solid var(--line);
   color: var(--text);
   fill: var(--text);
+}
+/* React Flow's own hover is near-white, which on a dark panel washed out the icon it was highlighting. */
+.react-flow__controls button:hover {
+  background: #263243;
 }
 .react-flow__minimap {
   background: var(--panel-2);

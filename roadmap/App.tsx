@@ -34,6 +34,7 @@ import { StatusPicker } from "./StatusPicker";
 import type { RoadmapItem } from "../scripts/tickets";
 import { Calendar, type CalendarEntry } from "./Calendar";
 import { countDated } from "./calendarDates";
+import { Logo } from "./Logo";
 
 const nodeTypes = { item: ItemNodeView, area: AreaGroupNode, ticket: TicketGroupNode, ghost: GhostNodeView };
 const STATUS_KEYS = Object.keys(STATUSES) as Status[];
@@ -456,6 +457,10 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
           {/* The switcher takes the title's place rather than sitting beside it, since both would be saying the
               project's name. It is absent when there is nothing to switch to, and present with no project
               chosen - landing on the root of a multi-project store is exactly when you need it (VIEW-4). */}
+          {/* The mark sits in the name's row rather than in a corner of its own spanning the subtitle too: on a phone
+              the toolbar has no width to spare for a mark that tall. */}
+          <span className="picker-wrap">
+          <Logo className="picker__logo" crop="icon" />
           {plan.projects.length > 1 ? (
             <select
               className="picker"
@@ -474,8 +479,9 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
               ))}
             </select>
           ) : (
-            <strong>{project?.name ?? "no project"}</strong>
+            <strong className="picker picker--static">{project?.name ?? "no project"}</strong>
           )}
+          </span>
           {/* No noun after the name. This graph is a roadmap for a software project and a curriculum for a
               language one, and the domain layer is careful not to assume which - the toolbar should not either.
               The store path, not a fixed filename: the viewer renders whichever store was served to it, so
