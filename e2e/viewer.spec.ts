@@ -242,6 +242,23 @@ test.describe("the served store", () => {
     await expect(pane).toHaveAttribute("data-more", "false");
   });
 
+  test("zoomed far out, an area shows its overview in place of its cards, and a click opens it (VIEW-52)", async ({ page }) => {
+    const overview = page.locator('.react-flow__node[data-id="area:DATA"] .area-box__overview');
+    const opacity = (locator: typeof overview) => locator.evaluate((element) => Number(getComputedStyle(element).opacity));
+    await expect.poll(() => opacity(overview)).toBe(0); // close enough to read the cards: nothing over them
+
+    // Out until the fade is complete and no further, so the frame stays big enough to click.
+    const far = () => page.evaluate(() => document.querySelector<HTMLElement>(".react-flow")?.style.getPropertyValue("--far"));
+    while ((await far()) !== "1.000") await page.locator(".react-flow__controls-zoomout").click();
+    await expect.poll(() => opacity(overview)).toBe(1);
+    await expect(overview).toContainText("DATA");
+    expect(await opacity(page.locator(".react-flow__node-item").first())).toBe(0);
+
+    // The cards no longer take clicks, so one in the middle of the area lands on the area.
+    await page.locator('.react-flow__node[data-id="area:DATA"]').click();
+    await expect(page.locator('aside[aria-label="Area DATA"]')).toBeVisible();
+  });
+
   test("captures the full graph for visual inspection", async ({ page }) => {
     // Give the dagre layout and the fitView transition time to settle before capturing.
     await page.waitForTimeout(1200);

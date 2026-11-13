@@ -40,6 +40,7 @@ import { Search } from "./Search";
 import { fetchItem, type ItemDetail, type SearchHit } from "./store";
 import { Comments } from "./Comments";
 import { AreaPane } from "./AreaPane";
+import { ZoomFade } from "./ZoomFade";
 
 const nodeTypes = { item: ItemNodeView, area: AreaGroupNode, ticket: TicketGroupNode, ghost: GhostNodeView };
 const STATUS_KEYS = Object.keys(STATUSES) as Status[];
@@ -1093,6 +1094,7 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
                 proOptions={{ hideAttribution: true }}
               >
                 <Background gap={GRID} color="#232a33" />
+                <ZoomFade />
                 {minimap === "shown" && (
                 <MiniMap
                   pannable

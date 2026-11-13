@@ -874,6 +874,70 @@ body {
   background: color-mix(in srgb, var(--area) 8%, var(--panel-2));
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--area) 12%, transparent);
 }
+/* Zoomed out (VIEW-52): an area's cards fade, and what the area is fades in over where they were. `--far` runs 0 to
+   1 with the zoom (ZoomFade.tsx). One after the other rather than crossed: the cards are gone by halfway, and the
+   overview only starts then, because both at half strength was an unreadable pile of text. Sized in container
+   units, so a one-card area and a forty-card one both read. */
+.area-box {
+  position: relative;
+  container-type: size;
+}
+.area-box__overview {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: min(4cqh, 18px);
+  padding: 6%;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--area) 14%, var(--panel-2));
+  opacity: clamp(0, calc(var(--far, 0) * 2 - 1), 1);
+  pointer-events: none;
+}
+.area-box__overview-name {
+  color: var(--area);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  font-size: min(22cqw, 30cqh, 110px);
+  line-height: 1;
+}
+.area-box__overview-bar {
+  display: flex;
+  width: 80%;
+  height: min(6cqh, 22px);
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--line);
+}
+.area-box__overview-counts {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.2em 0.8em;
+  font-size: min(9cqw, 12cqh, 44px);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+/* The small title gives way to the big one. */
+.area-box__title {
+  opacity: clamp(0, calc(1 - var(--far, 0) * 2), 1);
+}
+/* Cards, parent boxes and placeholders fade the other way, and in the far half stop taking clicks, so a click
+   lands on the area and opens it in the pane. */
+.react-flow__node-item,
+.react-flow__node-ticket,
+.react-flow__node-ghost {
+  opacity: clamp(0, calc(1 - var(--far, 0) * 2), 1);
+}
+/* `!important` because React Flow writes `pointer-events: all` onto each node as an inline style; without it the
+   faded cards still took the click, and selected an item you could not see. */
+.react-flow[data-far="true"] .react-flow__node-item,
+.react-flow[data-far="true"] .react-flow__node-ticket,
+.react-flow[data-far="true"] .react-flow__node-ghost {
+  pointer-events: none !important;
+}
 .area-box__title {
   display: flex;
   align-items: baseline;

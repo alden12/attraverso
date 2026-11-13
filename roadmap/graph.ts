@@ -42,6 +42,9 @@ export interface AreaNodeData extends Record<string, unknown> {
   foreign?: boolean;
   /** Collapsed (`VIEW-34`): drawn as a summary of its open work instead of its cards, with their edges ending on it. */
   collapsed?: { byStatus: [Status, number][] };
+  /** Its items counted by status, in workflow order, for the overview an open area fades to when zoomed out
+   *  (`VIEW-52`). Absent on a box of another project's placeholders. */
+  byStatus?: [Status, number][];
 }
 export type AreaNode = Node<AreaNodeData, "area">;
 
@@ -912,9 +915,10 @@ export function buildGraph(
       return [foreignBox, ...entry.inner.nodes];
     }
     const areaItems = items.filter((item) => item.area === entry.area);
+    const counted = new Map<Status, number>();
+    for (const item of areaItems) counted.set(item.status, (counted.get(item.status) ?? 0) + 1);
+    const byStatus = (Object.keys(STATUSES) as Status[]).flatMap((status): [Status, number][] => (counted.has(status) ? [[status, counted.get(status)!]] : []));
     if (collapsed.has(entry.area)) {
-      const byStatus = new Map<Status, number>();
-      for (const item of areaItems) byStatus.set(item.status, (byStatus.get(item.status) ?? 0) + 1);
       const summary: AreaNode = {
         id: collapsedNodeId(entry.area),
         type: "area",
@@ -924,7 +928,7 @@ export function buildGraph(
           area: entry.area,
           colour: colours[entry.area] ?? "#94a3b8",
           count: areaItems.length,
-          collapsed: { byStatus: (Object.keys(STATUSES) as Status[]).flatMap((status) => (byStatus.has(status) ? [[status, byStatus.get(status)!]] : [])) },
+          collapsed: { byStatus },
         },
         style: { width: COLLAPSED_SIZE.width, height: COLLAPSED_SIZE.height },
         // Above the cards' z, since it is the endpoint of edges now and must take their clicks like a card does.
@@ -937,7 +941,7 @@ export function buildGraph(
       type: "area",
       position: { x: position.x, y: position.y },
       hidden: areaItems.every((item) => hiddenIds.has(item.id)), // hide the box only when nothing in it shows
-      data: { area: entry.area, colour: colours[entry.area] ?? "#94a3b8", count: areaItems.length },
+      data: { area: entry.area, colour: colours[entry.area] ?? "#94a3b8", count: areaItems.length, byStatus },
       style: { width: entry.size.width, height: entry.size.height },
       zIndex: 0,
     };
