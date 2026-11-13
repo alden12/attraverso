@@ -765,6 +765,22 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
                   )}
                 </div>
               )}
+              {/* Both, as with expand and collapse: with some hidden, which way one toggle goes is a guess. "Hide all"
+                  then one name is the quick way to look at a single area. */}
+              {!(view === "calendar" && allProjects) && (
+                <div className="settings__row">
+                  <button className="chip" disabled={hiddenAreas.size === 0} onClick={() => setHiddenAreas(new Set())}>
+                    show all
+                  </button>
+                  <button
+                    className="chip"
+                    disabled={areas.every((area) => hiddenAreas.has(area))}
+                    onClick={() => setHiddenAreas(new Set(areas))}
+                  >
+                    hide all
+                  </button>
+                </div>
+              )}
               <div className="settings__label">Statuses</div>
               <div className="filters__group">
                 {STATUS_KEYS.map((status) => (

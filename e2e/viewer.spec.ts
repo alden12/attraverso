@@ -177,6 +177,17 @@ test.describe("the served store", () => {
     await expect.poll(offCentre).toBeLessThan(4);
   });
 
+  test("hides and shows every area at once", async ({ page }) => {
+    await expect(page.locator(".item-node").first()).toBeVisible();
+    await page.locator('.toolbtn[aria-haspopup="dialog"]').click();
+    await page.getByRole("button", { name: "hide all" }).click();
+    await expect(page.locator(".item-node")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "hide all" })).toBeDisabled();
+    await page.getByRole("button", { name: "show all" }).click();
+    await expect(page.locator(".item-node").first()).toBeVisible();
+    await expect(page.getByRole("button", { name: "show all" })).toBeDisabled();
+  });
+
   test("captures the full graph for visual inspection", async ({ page }) => {
     // Give the dagre layout and the fitView transition time to settle before capturing.
     await page.waitForTimeout(1200);
