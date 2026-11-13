@@ -616,15 +616,6 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
               is what lets the toolbar fit a phone's width in one row. */}
           {/* One button that switches to the other view, rather than a two-way switch: there are only two, so the
               button can name where it goes, and it costs one slot instead of two. */}
-          {/* Search (VIEW-25), first because it is the one used most once a plan is too big to scan. */}
-          {project !== null && (
-            <button className="toolbtn" data-on={searchOpen} aria-label="Search" title="Search (/ or Cmd+K)" onClick={() => setSearchOpen(true)}>
-              <span className="toolbtn__main">
-                <SearchIcon />
-              </span>
-              <span className="toolbtn__sub">search</span>
-            </button>
-          )}
           <button
             className="toolbtn"
             aria-label={`Show the ${otherView}`}
@@ -805,7 +796,7 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
           {/* The floating controls at the canvas's top left, in one row: the agreed order, and beside it the
               project's context sections (VIEW-30), which open in the right-hand pane rather than here, since a
               section is too long to read in a panel this size. */}
-          {view === "graph" && (next.length > 0 || (project?.context.length ?? 0) > 0) && (
+          {view === "graph" && project !== null && (
           <div className="fabs">
           {!nextOpen && next.length > 0 && (
             <button className="next-fab" onClick={() => setNextOpen(true)} title="The order agreed with set_next">
@@ -854,6 +845,11 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
               Context<span className="chip__count">{project.context.length}</span>
             </button>
           )}
+          {/* Search (VIEW-25), with the other things you open over the canvas rather than in the toolbar, which a
+              phone has no room in. Icon-only: the magnifier is the most widely understood one there is. */}
+          <button className="next-fab next-fab--icon" data-on={searchOpen} aria-label="Search" title="Search (/ or Cmd+K)" onClick={() => setSearchOpen(true)}>
+            <SearchIcon />
+          </button>
           </div>
           )}
           {view === "calendar" ? (

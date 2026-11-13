@@ -222,8 +222,8 @@ test.describe("several projects in one store", () => {
     // and opens it again.
     await page.locator(".next__close").click();
     await expect(page.locator(".next")).toHaveCount(0);
-    await expect(page.locator(".next-fab")).toContainText("2");
-    await page.locator(".next-fab").click();
+    await expect(page.locator(".next-fab", { hasText: "Next" })).toContainText("2");
+    await page.locator(".next-fab", { hasText: "Next" }).click();
     await expect(page.locator(".next__item")).toHaveCount(2);
   });
 
@@ -279,7 +279,7 @@ test.describe("several projects in one store", () => {
     await page.goto("/#apm");
     await expect(page.locator(".react-flow__node").first()).toBeVisible();
     await expect(page.locator(".next")).toHaveCount(0);
-    await expect(page.locator(".next-fab")).toHaveCount(0);
+    await expect(page.locator(".next-fab", { hasText: "Next" })).toHaveCount(0);
   });
 
   test("opens the first project when none is named, and offers the others (VIEW-31)", async ({ page }) => {
@@ -593,7 +593,7 @@ test.describe("searching the plan (VIEW-25)", () => {
   });
 
   test("goes straight to an item when a ref is typed", async ({ page }) => {
-    await page.locator('.toolbtn[aria-label="Search"]').click();
+    await page.locator('.next-fab[aria-label="Search"]').click();
     await box(page).fill("view-1.2");
     await expect(hits(page).first()).toContainText("VIEW-1.2");
   });

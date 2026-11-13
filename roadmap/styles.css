@@ -644,6 +644,7 @@ body {
   right: 12px;
   max-height: calc(100% - 24px);
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   gap: 8px;
   pointer-events: none;
@@ -671,15 +672,22 @@ body {
 .next-fab:hover {
   border-color: #38455a;
 }
+/* The search button: a circle the height of its neighbours. */
+.next-fab--icon {
+  padding: 6px 8px;
+}
 .next-fab[data-on="true"] {
   background: #263243;
   border-color: #3a4a60;
 }
 
+/* The open panel keeps a readable width (it used to shrink to make room for the buttons beside it, down to titles
+   of a few letters on a phone); when the row is too narrow for both, the buttons wrap below it instead. */
 .next {
   flex: none;
   width: 300px;
-  max-width: calc(100vw - 140px);
+  min-width: min(260px, 100%);
+  max-width: 100%;
   max-height: 100%;
   display: flex;
   flex-direction: column;
