@@ -650,10 +650,11 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
             <div className="settings" role="dialog" aria-label="View settings">
               {/* Which plan this is, here rather than under the title, where it was a second line on every screen
                   for a question asked occasionally; the count beside it moved to the view button's caption. The
-                  basename, with the full path on hover. In cloud mode there is no file (OPS-11), and it says so
-                  rather than going blank: the connection string is not the answer, since it carries a password. */}
-              <div className="settings__head" title={plan.storePath ?? "a database is the source of truth here - there is no plan file"}>
-                {project?.name ?? "No project"} - {plan.storePath?.split("/").pop() ?? "database"}
+                  plan file's basename, with the full path on hover. In cloud mode there is no file (OPS-11), so it
+                  is the project's name alone: the connection string is not a name, and it carries a password. */}
+              <div className="settings__head" title={plan.storePath ?? undefined}>
+                {project?.name ?? "No project"}
+                {plan.storePath !== null && ` - ${plan.storePath.split("/").pop()}`}
               </div>
               {!(view === "calendar" && allProjects) && <div className="settings__label">Areas</div>}
               {!(view === "calendar" && allProjects) && (
