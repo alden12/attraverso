@@ -263,10 +263,14 @@ body {
 /* Project switcher (VIEW-4). It carries the project's name where the title used to be, so it is weighted like
    a title - but lifted off the topbar rather than matching it, since a switcher nobody can find is a switcher
    that does not exist. */
+/* A title until hovered (no border, no fill), then visibly a control: the name is what the toolbar is saying, and
+   a box around it made it read as a form field first. The chevron stays, faint, so it is still findable. */
 .picker {
-  border: 1px solid #3a4759;
+  border: 1px solid transparent;
   border-radius: 8px;
-  background: #1e2836;
+  background-color: transparent;
+  margin-left: -7px; /* the text, not the box, lines up with the caption beneath */
+  font-size: 16px;
   color: var(--text);
   font: inherit;
   font-weight: 700;
@@ -287,7 +291,7 @@ body {
 .picker-wrap {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 14px; /* the switcher's hover box reaches 7px left of its text, and should not touch the logo */
   max-width: 100%;
 }
 .picker__logo {
@@ -303,6 +307,21 @@ body {
 .picker-wrap .picker {
   min-width: 0;
 }
+.picker-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+}
+.topbar__file {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--muted);
+  opacity: 0.7;
+}
 /* One project, nothing to switch to: the same box so the logo sits the same, but no chevron and no hover. */
 .picker--static {
   background-image: none;
@@ -315,6 +334,10 @@ body {
   border-color: #4d5e77;
   /* background-color, not background: the shorthand would wipe the chevron. */
   background-color: #263243;
+}
+.picker--static:hover {
+  border-color: transparent;
+  background-color: transparent;
 }
 
 .filters {

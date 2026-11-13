@@ -578,10 +578,15 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
               the toolbar has no width to spare for a mark that tall. */}
           <span className="picker-wrap">
           <Logo className="picker__logo" crop="icon" />
+          {/* The name reads as a title, and shows it is a switcher only when hovered, with the plan file as a
+              faint caption beneath: the question "which file is this?" is occasional, so it gets a whisper rather
+              than a line of its own. Absent in cloud mode, where there is no file (OPS-11). */}
+          <span className="picker-stack">
           {plan.projects.length > 1 ? (
             <select
               className="picker"
               aria-label="Project"
+              title="Switch project"
               value={project?.key ?? ""}
               // Writing the hash is the navigation: `hashchange` re-runs the selection in `main.tsx`.
               onChange={(event) => {
@@ -598,6 +603,12 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
           ) : (
             <strong className="picker picker--static">{project?.name ?? "no project"}</strong>
           )}
+          {plan.storePath !== null && (
+            <span className="topbar__file" title={plan.storePath}>
+              {plan.storePath.split(",")[0]!.split("/").pop()}
+            </span>
+          )}
+          </span>
           </span>
         </div>
         <div className="filters">
