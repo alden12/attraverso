@@ -296,6 +296,8 @@ export function selectProject(projects: ProjectPlan[], requested: string | null)
       notice: `No project "${requested}" in this store. It holds: ${projects.map((project) => project.key).join(", ")}.`,
     };
   }
-  if (projects.length === 1) return { project: projects[0]!, notice: null };
-  return { project: null, notice: "This store holds several projects. Choose one to see its graph." };
+  // The first project, rather than a prompt to choose (VIEW-31). The prompt existed because rendering
+  // `projects[0]` once gave no sign the others existed; the switcher in the title now always shows them, so
+  // asking first only puts a click between opening the viewer and seeing a plan.
+  return { project: projects[0]!, notice: null };
 }

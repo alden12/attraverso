@@ -164,8 +164,34 @@ body {
 
 .filters {
   display: flex;
-  gap: 18px;
+  align-items: center;
+  gap: 8px;
   flex-wrap: wrap;
+}
+/* One row on a phone: the title gives way (its subtitle ellipsised) rather than the buttons wrapping under it. */
+@media (max-width: 600px) {
+  .topbar {
+    flex-wrap: nowrap;
+    gap: 10px;
+    padding: 8px 12px;
+  }
+  .topbar__title {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+  .topbar__sub {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .picker {
+    max-width: 100%;
+  }
+  .filters {
+    flex-wrap: nowrap;
+    flex: none;
+  }
 }
 .filters__group {
   display: flex;
@@ -208,6 +234,44 @@ body {
   color: var(--muted);
   font-variant-numeric: tabular-nums;
   font-size: 11px;
+}
+
+/* A toolbar button with its detail as a caption underneath rather than inline, so the toolbar fits a phone's
+   width in one row. */
+.toolbtn {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  min-width: 56px;
+  padding: 4px 10px 3px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.25;
+  cursor: pointer;
+  transition: border-color 0.12s;
+}
+.toolbtn:hover {
+  border-color: #38455a;
+}
+.toolbtn[data-on="true"] {
+  background: #263243;
+  border-color: #3a4a60;
+}
+.toolbtn__main {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.toolbtn__sub {
+  font-size: 10px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 /* Segmented colour-by control */
@@ -412,6 +476,30 @@ body {
 /* The agreed order (PROJ-8), floated over the graph rather than docked beside it: it is short, it is opened
    deliberately, and it should not permanently narrow the thing the viewer exists to show. Top-left, because
    the detail pane already owns the right edge and the two are routinely open together. */
+/* The agreed order, collapsed: a button floating where the panel opens, keeping its count on screen. */
+.next-fab {
+  position: absolute;
+  z-index: 5;
+  top: 12px;
+  left: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+.next-fab:hover {
+  border-color: #38455a;
+}
+
 .next {
   position: absolute;
   z-index: 5;

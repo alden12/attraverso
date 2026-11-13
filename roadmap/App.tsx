@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ReactFlow,
   Background,
+  ControlButton,
   Controls,
   MiniMap,
   useNodesState,
@@ -49,6 +50,17 @@ const NO_REFS: string[] = [];
 
 type View = "graph" | "calendar";
 const VIEWS: View[] = ["graph", "calendar"];
+
+/** Toolbar icons, drawn inline in `currentColor` so they follow the theme and need no asset or icon library. */
+const icon = (paths: React.ReactNode) => (
+  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    {paths}
+  </svg>
+);
+const CalendarIcon = () => icon(<><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 10h18M8 3v4M16 3v4" /></>);
+const GraphIcon = () => icon(<><circle cx="6" cy="6" r="2.5" /><circle cx="18" cy="8" r="2.5" /><circle cx="9" cy="18" r="2.5" /><path d="M8.3 7.2l7.4 0.6M7 8.4l1.6 7.2" /></>);
+const SlidersIcon = () => icon(<><path d="M4 7h10M18 7h2M4 17h4M12 17h8" /><circle cx="16" cy="7" r="2" /><circle cx="10" cy="17" r="2" /></>);
+const MapIcon = () => icon(<><path d="M9 4l-6 2v14l6-2 6 2 6-2V4l-6 2-6-2z" /><path d="M9 4v14M15 6v14" /></>);
 
 /**
  * A per-viewer preference that outlives a remount (`CAL-3`). Switching project remounts `App`, which resets
@@ -114,6 +126,14 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
   const [selectedId, setSelectedId] = useState<string | null>(focus);
   useEffect(() => setSelectedId(focus), [focus]);
   const [view, setView] = usePreference<View>("attraverso.view", "graph", VIEWS);
+  const otherView: View = view === "graph" ? "calendar" : "graph";
+  // The minimap is a help on a big screen and a quarter of a small one, so it starts hidden on a narrow one, and
+  // the choice is remembered either way.
+  const [minimap, setMinimap] = usePreference<"shown" | "hidden">(
+    "attraverso.minimap",
+    typeof window !== "undefined" && window.innerWidth < 700 ? "hidden" : "shown",
+    ["shown", "hidden"],
+  );
   // Every project by default: a calendar is where you see what else is happening that week, and that is rarely
   // confined to one plan. One project is a click away and remembered.
   const [span, setSpan] = usePreference<"project" | "all">("attraverso.calendar.span", "all", ["project", "all"]);
@@ -125,7 +145,9 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
   // what this surface is for - but that hides the one thing the panel exists to answer behind knowing it is
   // there, from exactly the person most likely not to: someone opening this after three weeks away. The chip
   // still closes it, and a graph you have to pan slightly is a smaller cost than an answer nobody finds.
-  const [nextOpen, setNextOpen] = useState(true);
+  // Except on a narrow screen (VIEW-38.2), where the open panel covers most of the graph; there it starts as the
+  // floating button, which still shows the count.
+  const [nextOpen, setNextOpen] = useState(() => typeof window === "undefined" || window.innerWidth >= 700);
   // Which detail-pane sections are collapsed. Held here rather than in each section, so the choice survives
   // the pane unmounting - which happens on every item click - and open is the default (see `Section`).
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -467,36 +489,35 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
           </span>
         </div>
         <div className="filters">
-          <div className="segmented" role="group" aria-label="View">
-            {VIEWS.map((mode) => (
-              <button key={mode} className="segmented__btn" data-on={view === mode} onClick={() => setView(mode)}>
-                {mode}
-              </button>
-            ))}
-          </div>
-          {/* The count rides on the chip, so closing the panel still leaves the fact that an order exists (and
-              how long it is) on screen. */}
-          {next.length > 0 && (
-            <button
-              className="chip"
-              data-off={!nextOpen}
-              onClick={() => setNextOpen((open) => !open)}
-              title="The order agreed with set_next"
-            >
-              next<span className="chip__count">{next.length}</span>
-            </button>
-          )}
+          {/* Toolbar buttons carry their detail underneath rather than inline (a caption below the icon), which
+              is what lets the toolbar fit a phone's width in one row. */}
+          {/* One button that switches to the other view, rather than a two-way switch: there are only two, so the
+              button can name where it goes, and it costs one slot instead of two. */}
+          <button
+            className="toolbtn"
+            aria-label={`Show the ${otherView}`}
+            title={`Show the ${otherView}`}
+            onClick={() => setView(otherView)}
+          >
+            <span className="toolbtn__main">{otherView === "calendar" ? <CalendarIcon /> : <GraphIcon />}</span>
+            <span className="toolbtn__sub">{otherView}</span>
+          </button>
           {/* Everything set occasionally lives in one dialog (VIEW-37): on a phone the toolbar was most of the screen.
               The button says how much is filtered out, because a filter set last week and tucked behind a menu
               otherwise reads as items gone missing. */}
           <button
-            className="chip"
+            className="toolbtn"
             data-on={settingsOpen}
             aria-haspopup="dialog"
             aria-expanded={settingsOpen}
+            aria-label="View settings"
             onClick={() => setSettingsOpen((open) => !open)}
           >
-            ⚙ view{hiddenCount > 0 && <span className="chip__count">{hiddenCount} hidden</span>}
+            <span className="toolbtn__main">
+              <SlidersIcon />
+              view
+            </span>
+            <span className="toolbtn__sub">{hiddenCount > 0 ? `${hiddenCount} hidden` : "all shown"}</span>
           </button>
           {/* Whatever the host adds (`extensions.ts`): nothing, from this package's own two hosts. */}
           {ToolbarActions !== undefined && <ToolbarActions plan={plan} project={project} reload={reload} />}
@@ -612,6 +633,14 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
           )}
           {/* Open by default: this is the answer to "what now", which is the question someone opens the viewer
               with. Dismissible rather than hidden - see the state above. */}
+          {/* Collapsed, the agreed order is a button floating where the panel was, rather than a toolbar chip: it
+              keeps the count on screen, so closing the panel does not hide that an order exists, and it costs the
+              toolbar nothing. */}
+          {view === "graph" && !nextOpen && next.length > 0 && (
+            <button className="next-fab" onClick={() => setNextOpen(true)} title="The order agreed with set_next">
+              Next<span className="chip__count">{next.length}</span>
+            </button>
+          )}
           {view === "graph" && nextOpen && next.length > 0 && (
             <aside className="next">
               <div className="next__head">
@@ -678,6 +707,7 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
                 proOptions={{ hideAttribution: true }}
               >
                 <Background gap={GRID} color="#232a33" />
+                {minimap === "shown" && (
                 <MiniMap
                   pannable
                   zoomable
@@ -686,7 +716,18 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
                   nodeBorderRadius={4}
                   maskColor="rgba(11,15,20,0.6)"
                 />
-                <Controls />
+                )}
+                {/* Without React Flow's own padlock: the view settings' lock is the one that means something here, and
+                    a second, different lock beside the zoom buttons would contradict it. */}
+                <Controls showInteractive={false}>
+                  <ControlButton
+                    onClick={() => setMinimap(minimap === "shown" ? "hidden" : "shown")}
+                    title={minimap === "shown" ? "Hide the minimap" : "Show the minimap"}
+                    aria-label={minimap === "shown" ? "Hide the minimap" : "Show the minimap"}
+                  >
+                    <MapIcon />
+                  </ControlButton>
+                </Controls>
               </ReactFlow>
           )}
         </div>

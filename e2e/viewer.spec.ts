@@ -33,7 +33,7 @@ const foreignProjects = [...new Set(foreign.map((dep) => dep.split(":")[0]!))];
  * its backdrop would otherwise catch the next click meant for the graph or the calendar.
  */
 async function settings(page: Page, ...chips: string[]): Promise<void> {
-  await page.locator('.chip[aria-haspopup="dialog"]').click();
+  await page.locator('.toolbtn[aria-haspopup="dialog"]').click();
   for (const chip of chips) await page.locator(".settings .chip", { hasText: chip }).first().click();
   await page.keyboard.press("Escape");
   await expect(page.locator(".settings")).toHaveCount(0);
@@ -58,7 +58,7 @@ test.describe("the served store", () => {
     const done = items.filter((item) => item.status === "done").length;
     expect(done).toBeGreaterThan(0); // the fixture has finished work in it; guard the guard
     await expect(page.locator(".topbar__sub")).toContainText(`${items.length - done} of ${items.length} items`);
-    await expect(page.locator('.chip[aria-haspopup="dialog"]')).toContainText(`${done} hidden`);
+    await expect(page.locator('.toolbtn[aria-haspopup="dialog"]')).toContainText(`${done} hidden`);
   });
 
   test("renders every area and item from the store", async ({ page }) => {
@@ -211,9 +211,13 @@ test.describe("several projects in one store", () => {
     await page.locator(".next__item").first().click();
     await expect(page.locator(".detail__id")).toHaveText("MCP-2");
 
-    // Dismissible, and the chip keeps the count so closing it does not hide that an order exists.
-    await page.locator(".chip", { hasText: "next" }).first().click();
+    // Dismissible, to a floating button that keeps the count, so closing it does not hide that an order exists,
+    // and opens it again.
+    await page.locator(".next__close").click();
     await expect(page.locator(".next")).toHaveCount(0);
+    await expect(page.locator(".next-fab")).toContainText("2");
+    await page.locator(".next-fab").click();
+    await expect(page.locator(".next__item")).toHaveCount(2);
   });
 
   test("shows an item's measurements under its prose, summarised (METRIC-4)", async ({ page }) => {
@@ -262,22 +266,23 @@ test.describe("several projects in one store", () => {
     await expect(page.locator(".metrics__table")).toHaveCount(1);
   });
 
-  test("shows no panel and no chip when nobody has recorded an order", async ({ page }) => {
+  test("shows no panel and no button when nobody has recorded an order", async ({ page }) => {
     // The state this project is in right now, which is exactly why the test above cannot use the live store.
     // The shared fixture holds two projects and no `next`, so the hash picks one and the panel has nothing.
     await page.goto("/#apm");
     await expect(page.locator(".react-flow__node").first()).toBeVisible();
     await expect(page.locator(".next")).toHaveCount(0);
-    await expect(page.locator(".chip", { hasText: "next" })).toHaveCount(0);
+    await expect(page.locator(".next-fab")).toHaveCount(0);
   });
 
-  test("prompts for a project rather than picking one, and offers them all", async ({ page }) => {
+  test("opens the first project when none is named, and offers the others (VIEW-31)", async ({ page }) => {
     await page.goto("/");
 
-    // The bug this replaces was rendering `projects[0]` with no sign the other existed.
-    await expect(page.locator(".graph__notice")).toContainText("Choose one");
-    await expect(page.locator(".item-node")).toHaveCount(0);
+    // The first project's graph, with the switcher beside it naming every project, so the others are never
+    // hidden - which was the reason the viewer used to prompt instead.
+    await expect(page.locator(".item-node").first()).toBeVisible();
     await expect(page.locator(".picker")).toBeVisible();
+    await expect(page.locator(".picker option")).toHaveCount(2);
   });
 
   test("switches project from the toolbar, and the URL follows so the link can be shared", async ({ page }) => {
@@ -337,7 +342,7 @@ test.describe("the calendar", () => {
     await page.addInitScript(() => window.localStorage.clear());
     await page.route("**/api/store", (route) => route.fulfill({ json: DATED }));
     await page.goto("/#apm");
-    await page.locator(".segmented__btn", { hasText: "calendar" }).click();
+    await page.getByLabel("Show the calendar").click();
   });
 
   test("shows every project by default, and leaves undated items off", async ({ page }) => {
@@ -412,10 +417,22 @@ test.describe("the map follows the filters (VIEW-23.1)", () => {
     await expect(page.locator(".react-flow__node").first()).toBeVisible();
   });
 
-  const transforms = (page: Page) =>
+  const read = (page: Page) =>
     page.locator(".react-flow__node:visible").evaluateAll((nodes) =>
       Object.fromEntries(nodes.map((node) => [node.getAttribute("data-id"), (node as HTMLElement).style.transform])),
     );
+  /** The positions once the layout has stopped moving: the first frame can land before it settles, and under a
+   *  loaded runner a read taken then compares a half-drawn map. */
+  const transforms = async (page: Page) => {
+    let previous = await read(page);
+    for (let attempt = 0; attempt < 20; attempt++) {
+      await page.waitForTimeout(100);
+      const current = await read(page);
+      if (JSON.stringify(current) === JSON.stringify(previous)) return current;
+      previous = current;
+    }
+    return previous;
+  };
 
   test("closes up around what a filter leaves, and opens back out exactly when it goes", async ({ page }) => {
     const before = await transforms(page);
@@ -458,6 +475,16 @@ test.describe("moving cards (VIEW-41)", () => {
     await page.locator(`.react-flow__node[data-id="${id}"]`).click();
     const selected = await drag(page, id);
     expect(selected.after).not.toBe(selected.before);
+  });
+
+  test("hides and shows the minimap on request, and remembers it", async ({ page }) => {
+    await expect(page.locator(".react-flow__minimap")).toBeVisible();
+    await page.getByLabel("Hide the minimap").click();
+    await expect(page.locator(".react-flow__minimap")).toHaveCount(0);
+    // Remembered: read back from storage rather than across a reload, which this suite's init script clears.
+    expect(await page.evaluate(() => window.localStorage.getItem("attraverso.minimap"))).toBe("hidden");
+    await page.getByLabel("Show the minimap").click();
+    await expect(page.locator(".react-flow__minimap")).toBeVisible();
   });
 
   test("zooms out far enough to see the whole map", async ({ page }) => {

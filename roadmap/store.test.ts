@@ -15,10 +15,8 @@ describe("selectProject", () => {
     expect(selectProject([apm], null)).toEqual({ project: apm, notice: null });
   });
 
-  it("prompts rather than picking one when several could be meant", () => {
-    const selection = selectProject([apm, spanish], null);
-    expect(selection.project).toBeNull();
-    expect(selection.notice).toContain("Choose one");
+  it("opens the first project when none is named, since the switcher shows the rest (VIEW-31)", () => {
+    expect(selectProject([apm, spanish], null)).toEqual({ project: apm, notice: null });
   });
 
   it("renders the project named in the hash", () => {
