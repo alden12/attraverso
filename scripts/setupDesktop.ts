@@ -24,8 +24,12 @@ const LEGACY_NAMES = ["ai-project-manager"];
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const nodePath = process.execPath;
 // Found by resolution, not by path: hoisted to the workspace root's `node_modules` in development, beside this
-// package in a checkout of the public repo.
-const viteNode = join(dirname(createRequire(import.meta.url).resolve("vite-node/package.json")), "vite-node.mjs");
+// package in a checkout of the public repo. And the entry is read from the package's own `bin` rather than
+// named: it was `vite-node.mjs` until vite-node 6 moved it to `dist/cli.mjs`, and a hardcoded name wrote a
+// Desktop config pointing at a file that no longer existed.
+const viteNodeManifest = createRequire(import.meta.url).resolve("vite-node/package.json");
+const viteNodeBin = (JSON.parse(readFileSync(viteNodeManifest, "utf8")) as { bin: string | Record<string, string> }).bin;
+const viteNode = join(dirname(viteNodeManifest), typeof viteNodeBin === "string" ? viteNodeBin : viteNodeBin["vite-node"]!);
 const serverEntry = join(repoRoot, "src", "mcp", "server.ts");
 const launchArgs = [viteNode, "--root", repoRoot, serverEntry];
 
