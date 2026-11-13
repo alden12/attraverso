@@ -199,10 +199,12 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
   const [view, setView] = usePreference<View>("attraverso.view", "graph", VIEWS);
   const otherView: View = view === "graph" ? "calendar" : "graph";
   // The minimap is a help on a big screen and a quarter of a small one, so it starts hidden on a narrow one, and
-  // the choice is remembered either way.
+  // the choice is remembered - **separately for each**. One shared choice meant hiding it on a phone-sized
+  // window hid it on the desktop too, since every tab of the viewer shares one browser's storage.
+  const narrow = typeof window !== "undefined" && window.innerWidth < 700;
   const [minimap, setMinimap] = usePreference<"shown" | "hidden">(
-    "attraverso.minimap",
-    typeof window !== "undefined" && window.innerWidth < 700 ? "hidden" : "shown",
+    narrow ? "attraverso.minimap.narrow" : "attraverso.minimap.wide",
+    narrow ? "hidden" : "shown",
     ["shown", "hidden"],
   );
   // Every project by default: a calendar is where you see what else is happening that week, and that is rarely

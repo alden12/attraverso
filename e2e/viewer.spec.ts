@@ -517,9 +517,17 @@ test.describe("moving cards (VIEW-41)", () => {
     await expect(page.locator(".react-flow__minimap")).toBeVisible();
     await page.getByLabel("Hide the minimap").click();
     await expect(page.locator(".react-flow__minimap")).toHaveCount(0);
-    // Remembered: read back from storage rather than across a reload, which this suite's init script clears.
-    expect(await page.evaluate(() => window.localStorage.getItem("attraverso.minimap"))).toBe("hidden");
+    // Remembered: read back from storage rather than across a reload, which this suite's init script clears. Per
+    // screen size, so hiding it here (a desktop width) says nothing about a phone, and the reverse.
+    expect(await page.evaluate(() => window.localStorage.getItem("attraverso.minimap.wide"))).toBe("hidden");
+    expect(await page.evaluate(() => window.localStorage.getItem("attraverso.minimap.narrow"))).toBeNull();
     await page.getByLabel("Show the minimap").click();
+    await expect(page.locator(".react-flow__minimap")).toBeVisible();
+  });
+
+  test("opens with the minimap on a wide screen even after it was hidden on a narrow one", async ({ page }) => {
+    await page.addInitScript(() => window.localStorage.setItem("attraverso.minimap.narrow", "hidden"));
+    await page.reload();
     await expect(page.locator(".react-flow__minimap")).toBeVisible();
   });
 
