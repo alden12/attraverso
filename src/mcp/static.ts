@@ -7,11 +7,23 @@
 import { readFile } from "node:fs/promises";
 import { extname, join, normalize, sep } from "node:path";
 
+/**
+ * The types of what the viewer builds hold, for **every** host that serves one: the hosted server through
+ * `serveFile` below, and the loopback host (`viewer.ts`). There were two tables, and the hosted one never gained
+ * `.svg`, so the favicon went out as `application/octet-stream`, which a browser will not use as an icon. One
+ * table, so a type added for one host is there for both.
+ */
 export const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
   ".css": "text/css; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
   ".map": "application/json; charset=utf-8",
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".ico": "image/x-icon",
+  ".woff2": "font/woff2",
+  ".wasm": "application/wasm",
 };
 
 

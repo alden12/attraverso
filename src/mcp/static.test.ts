@@ -24,6 +24,7 @@ beforeAll(async () => {
   await mkdir(join(root, "assets"), { recursive: true });
   await writeFile(join(root, "index.html"), "<!doctype html><title>viewer</title>");
   await writeFile(join(root, "assets", "app-abc123.js"), "console.log(1)");
+  await writeFile(join(root, "assets", "favicon-abc123.svg"), "<svg xmlns=\"http://www.w3.org/2000/svg\"/>");
   // Real files just outside the root, so a successful escape returns content rather than a miss - otherwise
   // these tests pass with the guard deleted, on the strength of the file not existing.
   await writeFile(outside, "the private key");
@@ -40,6 +41,11 @@ describe("serveFile", () => {
     const file = await serveFile(root, "index.html");
     expect(file?.body.toString()).toContain("viewer");
     expect(file?.type).toBe("text/html; charset=utf-8");
+  });
+
+  it("serves the favicon as an image, which a browser will use as an icon", async () => {
+    // It went out as application/octet-stream from the hosted server, and the tab showed no icon.
+    expect((await serveFile(root, "assets/favicon-abc123.svg"))?.type).toBe("image/svg+xml");
   });
 
   it("refuses to walk out of the build directory", async () => {

@@ -31,6 +31,7 @@ import { asPlan, exportStore, type StoreAccess } from "../serialise/store";
 import { storeFeed } from "./storeFeed";
 import { searchFeed } from "./searchFeed";
 import { versionFeed } from "./versionFeed";
+import { MIME } from "./static";
 import { createChangeFeed } from "./changes";
 import { layoutPathFor } from "../serialise/paths";
 import { itemFeed } from "./itemFeed";
@@ -54,17 +55,6 @@ const PORT_ATTEMPTS = 20;
  */
 const VIEWER_BUILD_CANDIDATES = ["./viewer", "../../roadmap/dist", "../roadmap/dist"];
 
-const MIME: Record<string, string> = {
-  ".html": "text/html; charset=utf-8",
-  ".js": "text/javascript; charset=utf-8",
-  ".css": "text/css; charset=utf-8",
-  ".json": "application/json",
-  ".map": "application/json",
-  ".svg": "image/svg+xml",
-  ".png": "image/png",
-  ".ico": "image/x-icon",
-  ".woff2": "font/woff2",
-};
 
 /**
  * How long a served file may be cached, which is not a performance question here but a correctness one.
