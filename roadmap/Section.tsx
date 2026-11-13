@@ -6,10 +6,11 @@
  * when you switch item, one forgets. The pane is going to grow more of these (`METRIC-4`'s sparkline,
  * `CTX-3`'s observations), so the second one is the moment to stop.
  *
- * **Open by default, and the state lives in the pane's owner.** Collapsed-by-default was tried on the order
- * panel earlier the same day and reversed: hiding a thing behind knowing it is there fails exactly the person
- * least likely to know. And holding the open/closed state here would reset it every time the pane unmounts,
- * which is on every item click - so `App` owns it and it survives moving around the graph.
+ * **The state lives in the pane's owner**, which also picks each section's default. Holding open/closed here
+ * would reset it every time the pane unmounts, which is on every item click - so `App` owns it and it survives
+ * moving around the graph. Collapsed-by-default was once tried and reversed on the order panel, because hiding
+ * a thing behind knowing it is there fails the person least likely to know; images and comments start folded
+ * anyway, because the count on a closed heading is exactly that knowing.
  *
  * A real `<button>` with `aria-expanded`, because this is a disclosure and the pane has no keyboard path to
  * anything else yet (`VIEW-27`).

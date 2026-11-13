@@ -790,6 +790,9 @@ test.describe("an item's comments in the pane (VIEW-5, VIEW-29)", () => {
 
     const comments = pane.locator(".section", { hasText: "Comments" });
     await expect(comments.locator(".section__count")).toHaveText("2");
+    // Folded to start with, its count showing on the heading; one click opens it, and it stays open from item to item.
+    await expect(comments.locator(".comment")).toHaveCount(0);
+    await comments.getByRole("button", { name: /Comments/ }).click();
     await expect(comments.locator(".comment")).toHaveCount(1);
     await expect(comments.locator(".comment")).toContainText("Moved to the pane");
 

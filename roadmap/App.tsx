@@ -223,8 +223,10 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
   // floating button, which still shows the count.
   const [nextOpen, setNextOpen] = useState(() => typeof window === "undefined" || window.innerWidth >= 700);
   // Which detail-pane sections are collapsed. Held here rather than in each section, so the choice survives
-  // the pane unmounting - which happens on every item click - and open is the default (see `Section`).
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  // the pane unmounting - which happens on every item click. Images and comments start folded: they sit below
+  // the prose, which is what an item is opened to read, and their counts still show on the closed heading, so a
+  // folded one says whether it holds anything. Metrics stay open, being one line each.
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set(["images", "comments"]));
   const sectionProps = (name: string) => ({
     open: !collapsed.has(name),
     onToggle: () => setCollapsed((set) => toggle(set, name)),
