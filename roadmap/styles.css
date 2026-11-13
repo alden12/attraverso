@@ -86,9 +86,11 @@ body {
   border-bottom: 1px solid var(--line);
   background: var(--panel-2);
   flex-wrap: wrap;
-  /* The anchor for the view settings dialog, which drops down from its right-hand edge. */
+  /* The anchor for the view settings dialog, which drops down from its right-hand edge. Above the floating pane
+     (20): the dialog stacks inside this bar, so the bar's own level is the one that decides, and at 10 the pane
+     covered the dialog where they overlap. */
   position: relative;
-  z-index: 10;
+  z-index: 30;
 }
 
 /* The view settings (VIEW-37): the filters and layout controls, out of the toolbar until asked for. The backdrop
