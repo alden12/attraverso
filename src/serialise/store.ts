@@ -18,11 +18,11 @@ import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { existsSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { delimiter, dirname, isAbsolute, join } from "node:path";
-import { isStoreFile, LEGACY_STORE_SUFFIX, STORE_FILE } from "./paths";
+import { isStoreFile, layoutPathFor, LEGACY_STORE_SUFFIX, STORE_FILE } from "./paths";
 import type { Database } from "../db/client";
 import { ensureUser, LOCAL_IDENTITY } from "../domain/users";
 import { appendMeasurements, loadMeasurements, measurementsDirFor, readMeasurements, type MeasurementRecord } from "./measurements";
-import { exportStore, importStore, parseStore, replaceStore, stringifyStore, type Store } from "./plan";
+import { exportStore, importStore, mergeLayout, parseLayout, parseStore, replaceStore, splitLayout, stringifyLayout, stringifyStore, type LayoutFile, type Store } from "./plan";
 
 // The plan as data is `plan.ts`, split out so it loads without Node (`DIST-6`). Re-exported, so no import moves.
 export * from "./plan";
@@ -219,8 +219,11 @@ export async function saveStore(db: Database, path: string, only?: ReadonlySet<s
   // everything it imports, and nothing else can create a project in this process. Passing an owner anyway,
   // rather than exporting the table, keeps one rule - a project is reached through its owner or not at all.
   const { id: ownerId } = await ensureUser(db, LOCAL_IDENTITY);
-  const text = stringifyStore(restrict(await exportStore(db, ownerId), only));
+  const { plan, layouts } = splitLayout(restrict(await exportStore(db, ownerId), only));
+  const text = stringifyStore(plan);
   await writeAtomic(path, text);
+  // Only when there is a layout to write, so a store with none gets no empty file beside it.
+  if (Object.keys(layouts).length > 0) await writeAtomic(layoutPathFor(path), stringifyLayout(layouts));
   return hashOf(text); // so a caller tracking freshness knows exactly what it left on disk
 }
 
@@ -239,7 +242,7 @@ export async function canonicalForms(db: Database, loaded: { path: string; store
   const { id: ownerId } = await ensureUser(db, LOCAL_IDENTITY);
   const full = await exportStore(db, ownerId);
   return new Map(
-    loaded.map(({ path, store }) => [path, stringifyStore(restrict(full, new Set(store.projects.map((p) => p.id))))]),
+    loaded.map(({ path, store }) => [path, stringifyStore(splitLayout(restrict(full, new Set(store.projects.map((p) => p.id)))).plan)]),
   );
 }
 
@@ -280,6 +283,24 @@ async function stampOf(path: string): Promise<string | null> {
 }
 
 /**
+ * A layout file as read from disk, or null when there is none. Parse failures throw, naming the file: a
+ * half-merged layout should fail as loudly as a half-merged plan rather than quietly dropping the map.
+ */
+async function readLayoutFile(path: string): Promise<{ layouts: LayoutFile; hash: string; stamp: string | null } | null> {
+  let text: string;
+  try {
+    text = await readFile(path, "utf8");
+  } catch {
+    return null;
+  }
+  try {
+    return { layouts: parseLayout(text), hash: hashOf(text), stamp: await stampOf(path) };
+  } catch (cause) {
+    throw new Error(`${path} is not a layout file: ${cause instanceof Error ? cause.message : String(cause)}`);
+  }
+}
+
+/**
  * Open the store: rebuild the database from the file, or create it empty if this is a first run. Reports which
  * happened, so the caller can say so.
  *
@@ -292,7 +313,8 @@ async function stampOf(path: string): Promise<string | null> {
 export async function openStore(db: Database, path: string): Promise<{ created: boolean; hash: string }> {
   if (existsSync(path)) {
     const text = await readFile(path, "utf8");
-    await importStore(db, parseStore(text));
+    const layout = await readLayoutFile(layoutPathFor(path));
+    await importStore(db, mergeLayout(parseStore(text), layout?.layouts ?? {}));
     return { created: false, hash: hashOf(text) };
   }
   // an empty database serialises to `projects: []`, which loads back cleanly
@@ -416,6 +438,39 @@ export function createStoreFile(where: string | string[]): StoreFile {
     file.keys = new Set(store.projects.map((project) => project.key));
   };
 
+  /**
+   * The layout files (`VIEW-23.2`), one per data folder, with the version this process last read or wrote. Keyed
+   * by path rather than hung off each plan file, because two plan files can share a data folder (legacy
+   * `*.apm.yaml` side by side share `.apm/`) and so share one layout file.
+   */
+  const layoutFiles = new Map<string, { known: string | null; stamp: string | null; owners: Tracked[] }>();
+  for (const file of files) {
+    const path = layoutPathFor(file.path);
+    const entry = layoutFiles.get(path) ?? { known: null, stamp: null, owners: [] };
+    entry.owners.push(file);
+    layoutFiles.set(path, entry);
+  }
+
+  /**
+   * Read every layout file from disk and lay it over the plans it belongs to, recording what was read. Runs on
+   * open and on every rebuild, so the database's layout is always the files' - a branch switch that changes only
+   * the map reloads it like any other change.
+   */
+  const overlayLayouts = async (loaded: { file: Tracked; store: Store }[]): Promise<{ file: Tracked; store: Store }[]> => {
+    const out = [...loaded];
+    for (const [path, entry] of layoutFiles) {
+      const read = await readLayoutFile(path);
+      if (read === null) continue; // none yet: whatever the plans carry (an inline layout from before the split) stands
+      entry.known = read.hash;
+      entry.stamp = read.stamp;
+      for (let index = 0; index < out.length; index++) {
+        const one = out[index]!;
+        if (entry.owners.includes(one.file)) out[index] = { file: one.file, store: mergeLayout(one.store, read.layouts) };
+      }
+    }
+    return out;
+  };
+
   /** Measurements for every store, read once per directory: two plan files committed side by side in one repo
    *  share a `.apm/measurements`, and reading it twice would double every reading it holds. */
   const loadAllMeasurements = async (db: Database): Promise<void> => {
@@ -495,7 +550,7 @@ export function createStoreFile(where: string | string[]): StoreFile {
       assertDistinctProjects(loaded.map(({ file, store }) => ({ path: file.path, store })));
 
       let created = false;
-      for (const { file, store } of loaded) {
+      for (const { file, store } of await overlayLayouts(loaded)) {
         claim(file, store);
         await importStore(db, store);
       }
@@ -551,7 +606,15 @@ export function createStoreFile(where: string | string[]): StoreFile {
         // is asked.
         fresh.set(file, { store: parseStore(text), hash, stamp: current });
       }
-      if (fresh.size === 0) return false;
+      // The layout files by the same test, so a pull that moved only the map still reloads it.
+      let layoutMoved = false;
+      for (const [path, entry] of layoutFiles) {
+        const current = await stampOf(path);
+        if (current === null || current === entry.stamp) continue;
+        if ((await hashOnDisk(path)) === entry.known) entry.stamp = current;
+        else layoutMoved = true;
+      }
+      if (fresh.size === 0 && !layoutMoved) return false;
 
       // The runtime holds the *union* of the files, so a change in one rebuilds from all of them. Reloading
       // only the file that moved would mean clearing part of the database, and a partial clear is a second
@@ -560,14 +623,16 @@ export function createStoreFile(where: string | string[]): StoreFile {
       const { id: ownerId } = await ensureUser(db, LOCAL_IDENTITY);
       const loadedNow = await exportStore(db, ownerId);
       const claimed = new Set(files.flatMap((file) => [...file.ids]));
-      const union: { file: Tracked; store: Store }[] = files.map((file) => {
-        const moved = fresh.get(file);
-        if (moved !== undefined) return { file, store: moved.store };
-        // A project created since the last save belongs to nobody yet; it is the primary's, which is where a
-        // save would have put it.
-        const mine = loadedNow.projects.filter((p) => file.ids.has(p.id) || (file === primary && !claimed.has(p.id)));
-        return { file, store: { projects: mine } };
-      });
+      const union = await overlayLayouts(
+        files.map((file) => {
+          const moved = fresh.get(file);
+          if (moved !== undefined) return { file, store: moved.store };
+          // A project created since the last save belongs to nobody yet; it is the primary's, which is where a
+          // save would have put it.
+          const mine = loadedNow.projects.filter((p) => file.ids.has(p.id) || (file === primary && !claimed.has(p.id)));
+          return { file, store: { projects: mine } };
+        }),
+      );
       assertDistinctProjects(union.map(({ file, store }) => ({ path: file.path, store })));
 
       await replaceStore(db, { projects: union.flatMap(({ store }) => store.projects) });
@@ -608,17 +673,38 @@ export function createStoreFile(where: string | string[]): StoreFile {
       const { id: ownerId } = await ensureUser(db, LOCAL_IDENTITY);
       const full = await exportStore(db, ownerId);
       const claimed = new Set(files.flatMap((file) => [...file.ids]));
+      const layoutsOf = new Map<Tracked, LayoutFile>();
       for (const file of files) {
         const mine = full.projects.filter((p) => file.ids.has(p.id) || (file === primary && !claimed.has(p.id)));
-        const text = stringifyStore({ projects: mine });
+        const { plan, layouts } = splitLayout({ projects: mine });
+        layoutsOf.set(file, layouts);
+        const text = stringifyStore(plan);
         const hash = hashOf(text);
         // Nothing of this file's changed, so it is not rewritten at all. That is what keeps a mutation to one
         // half of a split plan out of the other half's git history, and it is why `persist()` can stay
-        // argumentless: the files work out for themselves which of them a change belonged to.
+        // argumentless: the files work out for themselves which of them a change belonged to. A layout save
+        // lands here too, and changes nothing in the plan file, which is the point of the split (`VIEW-23.2`).
         if (hash === file.known) continue;
         await writeAtomic(file.path, text);
         claim(file, { projects: mine });
         await remember(file, hash);
+      }
+
+      // The layout files after the plans, by the same skip-if-unchanged rule. **Not guarded like the plan files**,
+      // deliberately: a layout is memory the viewer recomputes and saves again whenever it draws, so overwriting a
+      // foreign change to it costs a map that settles back on the next save, where a plan overwrite costs work.
+      // Refusing would also fail an unrelated tool call over a position, which is the worse trade. `refresh` still
+      // reloads a foreign change before the next call, so in practice there is nothing stale to overwrite.
+      for (const [path, entry] of layoutFiles) {
+        const layouts: LayoutFile = Object.assign({}, ...entry.owners.map((owner) => layoutsOf.get(owner) ?? {}));
+        // No layout and no file yet: a store that has never been drawn gets no empty file beside it.
+        if (Object.keys(layouts).length === 0 && entry.known === null) continue;
+        const text = stringifyLayout(layouts);
+        const hash = hashOf(text);
+        if (hash === entry.known) continue;
+        await writeAtomic(path, text);
+        entry.known = hash;
+        entry.stamp = await stampOf(path);
       }
     }),
   };

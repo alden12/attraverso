@@ -33,3 +33,9 @@ export const isLegacyStore = (storePath: string): boolean => basename(storePath)
  */
 export const dataDirFor = (storePath: string): string =>
   join(storePath, "..", isLegacyStore(storePath) ? ".apm" : ".attraverso");
+
+/**
+ * Where a plan file's graph layout lives (`VIEW-23.2`): `layout.yaml` in its data folder. Out of the plan file
+ * because positions change on every drag and every new item, and the plan file is the one a reviewer reads.
+ */
+export const layoutPathFor = (storePath: string): string => join(dataDirFor(storePath), "layout.yaml");

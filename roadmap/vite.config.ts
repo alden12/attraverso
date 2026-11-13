@@ -3,7 +3,9 @@ import react from "@vitejs/plugin-react";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
-import { asPlan, resolveStorePaths, type Store } from "../src/serialise/store";
+import { existsSync } from "node:fs";
+import { asPlan, mergeLayout, parseLayout, resolveStorePaths, type Store } from "../src/serialise/store";
+import { layoutPathFor } from "../src/serialise/paths";
 import { summariseFromFiles } from "../src/serialise/measurements";
 
 // The viewer's Vite root is this folder, set explicitly rather than left to the invocation: `vite --config
@@ -47,7 +49,14 @@ function servePlan(): Plugin {
           // server that refuses to serve a store the real server accepts would be a second source of truth.
           // Projected through the same `asPlan` the real server uses, though - the two routes must agree
           // about what a plan is, or the graph differs between `yarn viewer` and open_viewer (VIEW-15).
-          const loaded = await Promise.all(storePaths.map(async (path) => ({ path, store: parse(await readFile(path, "utf8")) as Store })));
+          // With each plan's layout file laid back over it (`VIEW-23.2`), so this server draws the same shared map.
+          const loaded = await Promise.all(
+            storePaths.map(async (path) => {
+              const store = parse(await readFile(path, "utf8")) as Store;
+              const layoutPath = layoutPathFor(path);
+              return { path, store: existsSync(layoutPath) ? mergeLayout(store, parseLayout(await readFile(layoutPath, "utf8"))) : store };
+            }),
+          );
           const store = asPlan({ projects: loaded.flatMap(({ store: one }) => one.projects ?? []) });
           // Summarised from the month files rather than a database, because this server has none. The call is
           // one function for the same reason the other two hosts share `storeFeed`: the shape of this reply

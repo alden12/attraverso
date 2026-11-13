@@ -88,7 +88,8 @@ const COVERAGE: Record<string, Coverage> = {
   },
   layoutPositions: {
     table: layoutPositions,
-    // Folded onto the project as `layout: { node: "x,y" }` (`VIEW-23.1`). The project is the block it sits in.
+    // Folded onto the project as `layout: { node: "x,y" }` (`VIEW-23.1`), which a file write then moves to
+    // `.attraverso/layout.yaml`, keyed by project (`VIEW-23.2`).
     exported: ["node", "x", "y"],
     omitted: ["projectId"],
   },

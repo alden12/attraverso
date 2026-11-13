@@ -15,7 +15,8 @@ import { ensureUser } from "../domain/users";
 import { setSection } from "../domain/context";
 import { addComment, MAX_BODY } from "../domain/comments";
 import { getNext, setNext } from "../domain/next";
-import { setLayout } from "../domain/layout";
+import { getLayout, setLayout } from "../domain/layout";
+import { buildBundle, packBundle, storeOf, unpackBundle } from "./bundle";
 import { recordMeasurements } from "../domain/measurements";
 import type { MeasurementRecord } from "./measurements";
 import { YAML_FORMAT } from "./format";
@@ -1340,5 +1341,103 @@ describe("one layout for every writer (IMP-19)", () => {
     expect(forms.get(one.path)).toBe(one.text);
     expect(forms.get(otherPath)).toBe(otherText);
     await rm(one.dir, { recursive: true });
+  });
+});
+
+/**
+ * The layout in its own file (`VIEW-23.2`). Positions change on every drag and every new item, so they live in
+ * `.attraverso/layout.yaml` beside the plan rather than in it, and the plan file's diffs stay the edits a reviewer
+ * reads it for.
+ */
+describe("the layout's own file (VIEW-23.2)", () => {
+  async function opened() {
+    const dir = await mkdtemp(join(tmpdir(), "apm-layout-"));
+    const path = join(dir, "attraverso.yaml");
+    const { db, ownerId, close } = await freshDb();
+    const store = createStoreFile(path);
+    await store.open(db);
+    const project = await seed(db, ownerId);
+    await store.save(db);
+    const layoutPath = join(dir, ".attraverso", "layout.yaml");
+    return { dir, path, layoutPath, db, ownerId, store, project, done: async () => (await close(), rm(dir, { recursive: true, force: true })) };
+  }
+
+  it("writes the layout beside the plan, never in it", async () => {
+    const a = await opened();
+    expect(await readFile(a.path, "utf8")).not.toMatch(/^\s*layout:/m);
+    expect(parse(await readFile(a.layoutPath, "utf8"))).toEqual({ apm: { "MCP-1": "260,-10", "area:DATA": "1200,40", "area:MCP": "0,0" } });
+    await a.done();
+  });
+
+  it("leaves the plan file alone when only the layout moved", async () => {
+    // The whole point: a drag used to rewrite the plan file, and every new item rewrote a block of positions in it.
+    const a = await opened();
+    const plan = await readFile(a.path, "utf8");
+    await setLayout(a.db, a.project.id, { "area:MCP": { x: 10, y: 20 } }, ACTOR);
+    await a.store.save(a.db);
+    expect(await readFile(a.path, "utf8")).toBe(plan);
+    expect(parse(await readFile(a.layoutPath, "utf8"))).toEqual({ apm: { "area:MCP": "10,20" } });
+    await a.done();
+  });
+
+  it("reloads a layout changed on disk, even when the plan did not change", async () => {
+    // A pull that brings only someone else's rearranged map has to reach the running server like any other change.
+    const a = await opened();
+    const b = await freshDb();
+    const bStore = createStoreFile(a.path);
+    await bStore.open(b.db);
+    await setLayout(b.db, one(await listProjects(b.db, b.ownerId)).id, { "MCP-1": { x: 500, y: 600 } }, ACTOR);
+    await bStore.save(b.db);
+
+    expect(await a.store.refresh(a.db)).toBe(true);
+    expect(await getLayout(a.db, a.project.id)).toEqual({ "MCP-1": { x: 500, y: 600 } });
+    expect(await a.store.refresh(a.db)).toBe(false); // and only once
+    await b.close();
+    await a.done();
+  });
+
+  it("loads a plan written with its layout inline, and the next save moves it out", async () => {
+    // The few days the layout lived in the plan file (`VIEW-23.1`): such a file must still open with its map.
+    const a = await opened();
+    const inline = stringifyStore(await exportStore(a.db, a.ownerId)); // the whole store, layout and all
+    expect(inline).toMatch(/^\s*layout:/m);
+    const dir = await mkdtemp(join(tmpdir(), "apm-layout-inline-"));
+    const path = join(dir, "attraverso.yaml");
+    await writeFile(path, inline);
+
+    const fresh = await freshDb();
+    const store = createStoreFile(path);
+    await store.open(fresh.db);
+    const project = one(await listProjects(fresh.db, fresh.ownerId));
+    expect(await getLayout(fresh.db, project.id)).toEqual(await getLayout(a.db, a.project.id));
+
+    await store.save(fresh.db);
+    expect(await readFile(path, "utf8")).not.toMatch(/^\s*layout:/m);
+    expect(existsSync(join(dir, ".attraverso", "layout.yaml"))).toBe(true);
+    await fresh.close();
+    await rm(dir, { recursive: true, force: true });
+    await a.done();
+  });
+
+  it("travels in an export bundle as its own file, and comes back on import", async () => {
+    const a = await opened();
+    const bundle = unpackBundle(packBundle(await buildBundle(a.db, a.ownerId, a.project)), "attraverso.yaml");
+    expect(bundle.text).not.toMatch(/^\s*layout:/m);
+    expect(bundle.layout).toBeDefined();
+    expect(storeOf(bundle).projects[0]?.layout).toEqual({ "MCP-1": "260,-10", "area:DATA": "1200,40", "area:MCP": "0,0" });
+    await a.done();
+  });
+
+  it("writes no layout file for a store that has never been drawn", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "apm-layout-none-"));
+    const path = join(dir, "attraverso.yaml");
+    const { db, ownerId, close } = await freshDb();
+    const store = createStoreFile(path);
+    await store.open(db);
+    await createProject(db, { key: "plain", name: "Plain", type: "software", ownerId }, ACTOR);
+    await store.save(db);
+    expect(existsSync(join(dir, ".attraverso", "layout.yaml"))).toBe(false);
+    await close();
+    await rm(dir, { recursive: true, force: true });
   });
 });

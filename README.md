@@ -30,8 +30,8 @@ Add it to the `.mcp.json` at the root of your repo:
 ```
 
 The plan, `attraverso.yaml`, is created at the root of the repo on first run. Commit it: it is the source of
-truth, and its diffs are the history of the plan. Readings and attachments go in an `.attraverso/` folder
-beside it, committed too.
+truth, and its diffs are the history of the plan. Readings, attachments and the graph's layout go in an
+`.attraverso/` folder beside it, committed too.
 
 Then ask the agent to call `get_project`, or just to create a project and start planning. The tools describe
 themselves, and `get_project` returns the project's protocol - its operating manual - first.

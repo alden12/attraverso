@@ -10,6 +10,7 @@
  *
  * ```
  * attraverso.yaml
+ * .attraverso/layout.yaml
  * .attraverso/measurements/2026-08.yaml
  * .attraverso/measurements/2026-09.yaml
  * ```
@@ -37,18 +38,29 @@ import type { Database } from "../db/client";
 import { measurements as measurementsTable } from "../db/schema";
 import { measurementFiles, parseMeasurementFile, toRecords, type MeasurementRecord } from "./measurements";
 import { dataDirFor, isStoreFile, STORE_FILE } from "./paths";
-import { exportStore, restrict, stringifyStore } from "./store";
+import { exportStore, mergeLayout, parseLayout, parseStore, restrict, splitLayout, stringifyLayout, stringifyStore, type Store } from "./store";
 
 /** Where a plan file's measurement months sit inside the bundle, mirroring `measurementsDirFor` beside it. */
 const measurementsDirIn = (planName: string): string => `${dataDirFor(planName)}/measurements/`;
+/** Where its layout sits, mirroring `layoutPathFor` (`VIEW-23.2`). */
+const layoutPathIn = (planName: string): string => `${dataDirFor(planName)}/layout.yaml`;
 
 export interface Bundle {
   /** The plan file's name, as it should land in a checkout (`attraverso.yaml`). */
   name: string;
   /** The plan file's contents, exactly as `stringifyStore` wrote them. */
   text: string;
+  /** The layout file's contents (`VIEW-23.2`), when the project has a layout. */
+  layout?: string;
   measurements: MeasurementRecord[];
 }
+
+/**
+ * The project a bundle holds, with its layout put back: what an importer adopts. A bare plan file, or a bundle
+ * from before the layout had a file of its own, simply has none, or carries it inline in the plan.
+ */
+export const storeOf = (bundle: Bundle): Store =>
+  mergeLayout(parseStore(bundle.text), bundle.layout === undefined ? {} : parseLayout(bundle.layout));
 
 /** The first four bytes of every zip: `PK\x03\x04`. A bare plan file is YAML and cannot begin with them. */
 export function looksLikeZip(bytes: Uint8Array): boolean {
@@ -57,6 +69,7 @@ export function looksLikeZip(bytes: Uint8Array): boolean {
 
 export function packBundle(bundle: Bundle): Uint8Array {
   const files: Record<string, Uint8Array> = { [bundle.name]: strToU8(bundle.text) };
+  if (bundle.layout !== undefined) files[layoutPathIn(bundle.name)] = strToU8(bundle.layout);
   for (const [name, text] of measurementFiles(bundle.measurements)) files[measurementsDirIn(bundle.name) + name] = strToU8(text);
   // `mtime` is left at fflate's default rather than set to now, so exporting an unchanged project twice
   // produces the same bytes. Nothing depends on that today; a diffable export is the habit this whole
@@ -100,7 +113,8 @@ export function unpackBundle(bytes: Uint8Array, fallbackName: string): Bundle {
     }
   }
 
-  return { name, text: strFromU8(entries[name] as Uint8Array), measurements };
+  const layout = entries[layoutPathIn(name)];
+  return { name, text: strFromU8(entries[name] as Uint8Array), ...(layout === undefined ? {} : { layout: strFromU8(layout) }), measurements };
 }
 
 /**
@@ -118,11 +132,12 @@ export function unpackBundle(bytes: Uint8Array, fallbackName: string): Bundle {
  * replaces.
  */
 export async function buildBundle(db: Database, ownerId: string, project: { id: string; key: string }): Promise<Bundle> {
-  const store = restrict(await exportStore(db, ownerId), new Set([project.id]));
+  const { plan, layouts } = splitLayout(restrict(await exportStore(db, ownerId), new Set([project.id])));
   const rows = await db.select().from(measurementsTable).where(eq(measurementsTable.projectId, project.id));
   return {
     name: STORE_FILE,
-    text: stringifyStore(store),
+    text: stringifyStore(plan),
+    ...(Object.keys(layouts).length === 0 ? {} : { layout: stringifyLayout(layouts) }),
     measurements: await toRecords(db, project.key, rows),
   };
 }

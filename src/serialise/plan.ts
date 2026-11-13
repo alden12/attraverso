@@ -55,6 +55,9 @@ const attachmentSchema = z.object({
   actor: z.string(),
 });
 
+/** One project's layout: node id -> "x,y", whole numbers on the layout's grid. */
+const layoutSchema = z.record(z.string(), z.string().regex(/^-?\d+,-?\d+$/, "a layout position is \"x,y\" in whole numbers"));
+
 const itemSchema = z.object({
   ref: z.string(),
   area: z.string(),
@@ -85,10 +88,6 @@ const itemSchema = z.object({
   /** Accepted for old plan files, never written: see `readComments` (CTX-2). */
   notes: z.array(commentSchema).optional(),
   attachments: z.array(attachmentSchema).optional(),
-  // The graph layout's memory (`VIEW-23.1`): node id -> "x,y", relative to the node's container. Last in the
-  // project, and one line per node sorted by id, so a moved card is a one-line diff below everything a reviewer
-  // reads, and the file stays the one place a project's map is shared from.
-  layout: z.record(z.string(), z.string().regex(/^-?\d+,-?\d+$/, "a layout position is \"x,y\" in whole numbers")).optional(),
 });
 
 // Sessions were removed with the concept (CTX-10). The key stays *parseable* rather than being deleted,
@@ -128,10 +127,16 @@ const projectSchema = z.object({
   /** Accepted for old plan files, never written: see `readComments` (CTX-2). */
   notes: z.array(commentSchema).optional(),
   attachments: z.array(attachmentSchema).optional(),
-  // The graph layout's memory (`VIEW-23.1`): node id -> "x,y", relative to the node's container. Last in the
-  // project, and one line per node sorted by id, so a moved card is a one-line diff below everything a reviewer
-  // reads, and the file stays the one place a project's map is shared from.
-  layout: z.record(z.string(), z.string().regex(/^-?\d+,-?\d+$/, "a layout position is \"x,y\" in whole numbers")).optional(),
+  /**
+   * The graph layout's memory (`VIEW-23.1`): node id -> "x,y", relative to the node's container.
+   *
+   * **Part of the plan as data, not of the plan file.** It travels with a project wherever the plan does - the
+   * database, the cloud import, the library - but a plan *file* never carries it: `splitLayout` moves it to
+   * `.attraverso/layout.yaml` on every write (`VIEW-23.2`), because positions churn on every drag and a new
+   * item, and that churn would bury the edits a reviewer reads the plan file for. Still read here, so a plan
+   * written in the few days the layout lived inline loads, and the next save moves it out.
+   */
+  layout: layoutSchema.optional(),
 });
 
 /**
@@ -628,6 +633,44 @@ async function insertStore(tx: Tx, store: Store, owner?: string): Promise<void> 
 
 /** The plan as text, in the one layout every writer shares (`IMP-19`, see `format.ts`). */
 export const stringifyStore = (store: Store): string => stringify(store, YAML_FORMAT);
+
+/**
+ * The layout file (`VIEW-23.2`): every project's layout, keyed by project key, in `.attraverso/layout.yaml`
+ * beside the plan file.
+ *
+ * Keyed by key rather than id because the file is read by people too, and a key is what they know a project by;
+ * two plan files can share one data folder (legacy `*.apm.yaml` side by side share `.apm/`), and project keys
+ * are already unique across the files a process loads (`assertDistinctProjects`), so one file holds them all
+ * without collision.
+ */
+const layoutFileSchema = z.record(z.string(), layoutSchema);
+export type LayoutFile = z.infer<typeof layoutFileSchema>;
+
+/** A plan, with its layouts taken out to be written to their own file. The plan keeps every other key as it was. */
+export function splitLayout(store: Store): { plan: Store; layouts: LayoutFile } {
+  const layouts: LayoutFile = {};
+  const projects = store.projects.map(({ layout, ...rest }) => {
+    if (layout !== undefined) layouts[rest.key] = layout;
+    return rest;
+  });
+  return { plan: { projects }, layouts };
+}
+
+/**
+ * Put a layout file's positions back into the plan they belong to. **The file wins** over a layout still inline in
+ * the plan (one written before `VIEW-23.2`), since the file is where every save since has gone. A project the
+ * file does not mention keeps what it had: a layout is memory, not something a missing entry should erase.
+ */
+export const mergeLayout = (store: Store, layouts: LayoutFile): Store => ({
+  projects: store.projects.map((project) => (layouts[project.key] === undefined ? project : { ...project, layout: layouts[project.key] })),
+});
+
+export const stringifyLayout = (layouts: LayoutFile): string => stringify(layouts, YAML_FORMAT);
+
+/** A layout file's contents. An empty file is no layouts, the way an empty plan file is no projects. */
+export function parseLayout(text: string): LayoutFile {
+  return layoutFileSchema.parse(parse(text) ?? {});
+}
 
 export function parseStore(text: string): Store {
   return storeSchema.parse(parse(text));
