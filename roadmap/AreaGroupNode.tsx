@@ -44,7 +44,7 @@ export function AreaGroupNode({ data, selected }: NodeProps<AreaNode>) {
         <span className="area-box__name">{data.area}</span>
         <span className="area-box__count">{data.count}</span>
       </div>
-      {/* What the area is, for when its cards are too small to read (VIEW-52): faded in by `--far`, which the graph
+      {/* What the area is, for when its cards are too small to read (VIEW-52): faded in by `--overview`, which the graph
           sets from the zoom, while the cards fade out over it. Always mounted, so the fade is a style and never a
           re-render, and it lets clicks through to the frame. */}
       {data.byStatus !== undefined && data.foreign !== true && (

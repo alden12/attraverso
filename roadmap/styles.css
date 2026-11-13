@@ -874,10 +874,9 @@ body {
   background: color-mix(in srgb, var(--area) 8%, var(--panel-2));
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--area) 12%, transparent);
 }
-/* Zoomed out (VIEW-52): an area's cards fade, and what the area is fades in over where they were. `--far` runs 0 to
-   1 with the zoom (ZoomFade.tsx). One after the other rather than crossed: the cards are gone by halfway, and the
-   overview only starts then, because both at half strength was an unreadable pile of text. Sized in container
-   units, so a one-card area and a forty-card one both read. */
+/* Zoomed out (VIEW-52): an area's cards fade, and what the area is fades in over where they were, by `--cards` and
+   `--overview`, which ZoomFade.tsx sets from the zoom (one after the other by default, since both at half strength
+   was an unreadable pile of text). Sized in container units, so a one-card area and a forty-card one both read. */
 .area-box {
   position: relative;
   container-type: size;
@@ -893,7 +892,7 @@ body {
   padding: 6%;
   border-radius: inherit;
   background: color-mix(in srgb, var(--area) 14%, var(--panel-2));
-  opacity: clamp(0, calc(var(--far, 0) * 2 - 1), 1);
+  opacity: var(--overview, 0);
   pointer-events: none;
 }
 .area-box__overview-name {
@@ -922,14 +921,14 @@ body {
 }
 /* The small title gives way to the big one. */
 .area-box__title {
-  opacity: clamp(0, calc(1 - var(--far, 0) * 2), 1);
+  opacity: var(--cards, 1);
 }
 /* Cards, parent boxes and placeholders fade the other way, and in the far half stop taking clicks, so a click
    lands on the area and opens it in the pane. */
 .react-flow__node-item,
 .react-flow__node-ticket,
 .react-flow__node-ghost {
-  opacity: clamp(0, calc(1 - var(--far, 0) * 2), 1);
+  opacity: var(--cards, 1);
 }
 /* `!important` because React Flow writes `pointer-events: all` onto each node as an inline style; without it the
    faded cards still took the click, and selected an item you could not see. */
@@ -1492,4 +1491,55 @@ body {
 .area-pane__list {
   padding: 4px 8px 10px;
   overflow: visible;
+}
+
+/* The dev sliders for the fade bands (ZoomFade.tsx): on the dev server, or with `?tune`. */
+.fade-tuner {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+  font-size: 12px;
+  color: var(--text);
+}
+.fade-tuner__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.fade-tuner__head strong {
+  color: var(--text);
+}
+.fade-tuner__row {
+  display: grid;
+  grid-template-columns: 96px 150px 36px;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+}
+.fade-tuner__row output {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.fade-tuner__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 2px;
+}
+.fade-tuner__actions button {
+  padding: 2px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
 }

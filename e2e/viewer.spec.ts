@@ -248,8 +248,8 @@ test.describe("the served store", () => {
     await expect.poll(() => opacity(overview)).toBe(0); // close enough to read the cards: nothing over them
 
     // Out until the fade is complete and no further, so the frame stays big enough to click.
-    const far = () => page.evaluate(() => document.querySelector<HTMLElement>(".react-flow")?.style.getPropertyValue("--far"));
-    while ((await far()) !== "1.000") await page.locator(".react-flow__controls-zoomout").click();
+    const shown = () => page.evaluate(() => document.querySelector<HTMLElement>(".react-flow")?.style.getPropertyValue("--overview"));
+    while ((await shown()) !== "1.000") await page.locator(".react-flow__controls-zoomout").click();
     await expect.poll(() => opacity(overview)).toBe(1);
     await expect(overview).toContainText("DATA");
     expect(await opacity(page.locator(".react-flow__node-item").first())).toBe(0);
