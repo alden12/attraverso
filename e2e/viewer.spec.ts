@@ -191,8 +191,14 @@ test.describe("the served store", () => {
   test("shows an area in the pane when its frame is clicked, and goes to an item from it (VIEW-49)", async ({ page }) => {
     const plat = items.filter((item) => item.area === "PLAT");
     const open = plat.filter((item) => item.status !== "done");
-    await page.locator('.react-flow__node[data-id="area:PLAT"]').click({ position: { x: 12, y: 12 } });
+    // An item selected first: the click on the area clears it, which rebuilds the nodes, and the area's resize
+    // handles used to flash and vanish with that rebuild.
+    await page.locator(".item-node", { hasText: "DATA-1" }).first().click();
+    const frame = page.locator('.react-flow__node[data-id="area:PLAT"]');
+    await frame.click({ position: { x: 12, y: 12 } });
     const pane = page.locator('aside[aria-label="Area PLAT"]');
+    await page.waitForTimeout(300);
+    await expect(frame.locator(".react-flow__resize-control").first()).toBeVisible();
     await expect(pane.locator(".detail__title")).toHaveText("PLAT"); // no `areas` row in the fixture: the key stands in
     await expect(pane.locator(".area-pane__bar")).toHaveAttribute("aria-label", `${plat.length - open.length} of ${plat.length} done`);
     await expect(pane.locator(".next__item")).toHaveCount(open.length); // none of them is in the fixture's next list

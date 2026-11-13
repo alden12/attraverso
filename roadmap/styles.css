@@ -1394,6 +1394,9 @@ body {
 
 /* An area in the pane (VIEW-49). */
 .area-pane__zoom {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   margin-left: 10px;
   font-size: 12px;
 }

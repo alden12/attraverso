@@ -472,12 +472,17 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
         ...nodes.filter((node) => !compactIds.has(node.id)).map((node) => (inCollapsed(node) ? { ...node, hidden: true } : node)),
       ];
     }
-    setNodes(
-      drawn.map((node) => {
+    // React Flow's own selection survives the rebuild: it is what shows an area's resize handles, and the click that
+    // opens an area in the pane (VIEW-49) also clears the selected item, which rebuilds the nodes - so without this
+    // the handles flashed and vanished whenever an item had been selected first.
+    setNodes((current) => {
+      const picked = new Set(current.filter((node) => node.selected === true).map((node) => node.id));
+      return drawn.map((node) => {
         const resized = resizedSizes.current[node.id];
-        return resized ? { ...node, style: { ...node.style, width: resized.width, height: resized.height } } : node;
-      }),
-    );
+        const sized = resized ? { ...node, style: { ...node.style, width: resized.width, height: resized.height } } : node;
+        return picked.has(node.id) ? { ...sized, selected: true } : sized;
+      });
+    });
     // layoutNonce forces a re-run after a reset or a drop (the memory ref changed, which React cannot see).
   }, [items, areas, colours, colourMode, selectedId, hiddenIds, collapsedAreas, layoutNonce, remember, setNodes]);
 

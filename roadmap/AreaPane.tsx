@@ -69,7 +69,12 @@ export function AreaPane({
             {area}
           </span>
           <button className="detail__dep area-pane__zoom" onClick={onZoom}>
-            zoom to it
+            <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+              <circle cx="8" cy="8" r="5" fill="none" stroke="currentColor" strokeWidth="1.5" />
+              <circle cx="8" cy="8" r="1.6" fill="currentColor" />
+              <path d="M8 0.5v2.5M8 13v2.5M0.5 8h2.5M13 8h2.5" stroke="currentColor" strokeWidth="1.5" />
+            </svg>
+            fit to view
           </button>
         </div>
         <button className="detail__close" onClick={onClose} aria-label="Close">
