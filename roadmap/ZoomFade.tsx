@@ -10,9 +10,9 @@ import { useStore } from "@xyflow/react";
  * state they would re-render every node each time, where as variables only the browser repaints.
  *
  * **Two bands, so each can be tuned.** The cards fade out over one band of zoom and the overview fades in over
- * another. These were set by eye with dev sliders on this repo's plan (2026-11-13): one crossfade, late, from 0.19
- * to the floor at 0.05, which leaves the cards in place well past the point their text is legible, since their
- * shapes and edges still say where things are long after their words stop.
+ * another. Set by eye on this repo's plan (2026-11-13), first with dev sliders and then refined by hand: one
+ * crossfade from 0.35 to 0.1, which leaves the cards in place past the point their text is legible, since their
+ * shapes and edges still say where things are after their words stop, and finishes before the floor at 0.05.
  */
 export interface FadeBands {
   /** Zoom at which the cards start to fade, and at which they are gone. */
@@ -23,7 +23,7 @@ export interface FadeBands {
   overviewTo: number;
 }
 
-export const FADE_BANDS: FadeBands = { cardsFrom: 0.19, cardsTo: 0.05, overviewFrom: 0.19, overviewTo: 0.05 };
+export const FADE_BANDS: FadeBands = { cardsFrom: 0.35, cardsTo: 0.1, overviewFrom: 0.35, overviewTo: 0.1 };
 
 /** How far into a band `zoom` is, 0 above its start to 1 past its end (zooming out runs from high to low). */
 const ramp = (zoom: number, from: number, to: number): number =>
