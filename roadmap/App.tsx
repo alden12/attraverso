@@ -105,7 +105,7 @@ const fmtDay = (day: string): string =>
 
 export function App({ plan, selection, focus, reload }: { plan: Plan; selection: Selection; focus: string | null; reload: () => void }) {
   const project = selection.project;
-  const { ToolbarActions, EmptyPlan } = useExtensions();
+  const { MenuActions, EmptyPlan } = useExtensions();
   // Manual layout is stored per project, since a node id is a ticket ref and those repeat across projects.
   const scope = project?.key ?? "";
   const items = project?.items ?? NO_ITEMS; // fetched once and held in state above, so the reference is stable
@@ -816,8 +816,6 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
             </span>
             <span className="toolbtn__sub">{hiddenCount > 0 ? `${hiddenCount} hidden` : "all shown"}</span>
           </button>
-          {/* Whatever the host adds (`extensions.ts`): nothing, from this package's own two hosts. */}
-          {ToolbarActions !== undefined && <ToolbarActions plan={plan} project={project} reload={reload} />}
         </div>
         {settingsOpen && (
           <>
@@ -979,6 +977,16 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
                 </button>
               )}
               </div>
+              {/* Whatever the host adds (`extensions.ts`): nothing, from this package's own two hosts. Here rather than
+                  in the toolbar, which keeps to the title and the two view controls. */}
+              {MenuActions !== undefined && (
+                <>
+                  <div className="settings__label">Plan</div>
+                  <div className="settings__row">
+                    <MenuActions plan={plan} project={project} reload={reload} />
+                  </div>
+                </>
+              )}
             </div>
           </>
         )}

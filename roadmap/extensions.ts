@@ -13,8 +13,9 @@ import type { Plan, ProjectPlan } from "./store";
 export interface ViewerExtensions {
   /** How this host signs people in. Absent: there is nobody to sign in, and requests go out bare. */
   session?: SessionProvider;
-  /** Extra toolbar controls, after the built-in ones. `reload` refetches the plan after a write. */
-  ToolbarActions?: ComponentType<{ plan: Plan; project: ProjectPlan | null; reload: () => void }>;
+  /** Extra controls in the view dialog, under "Plan" (they were in the toolbar until the toolbar shrank to the
+   *  title and the two view controls). `reload` refetches the plan after a write. */
+  MenuActions?: ComponentType<{ plan: Plan; project: ProjectPlan | null; reload: () => void }>;
   /** Shown over an empty graph in place of the notice, when this host has a way to fill an empty plan. */
   EmptyPlan?: ComponentType<{ reload: () => void }>;
   /**
