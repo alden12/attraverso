@@ -49,8 +49,10 @@ test.describe("the served store", () => {
     // graph. `#demo` is the project this suite is about.
     await page.goto("/#demo");
     await expect(page.locator(".react-flow__node").first()).toBeVisible();
-    // Finished work is hidden by default; this suite is about the whole plan, so it starts with all of it.
+    // Finished work is hidden by default; this suite is about the whole plan, so it starts with all of it - and
+    // waits for it, or a test's first count reads the map from before the done items came back.
     await settings(page, "done");
+    await expect(page.locator(".topbar__sub")).toContainText(`${items.length} of ${items.length}`);
   });
 
   test("hides finished work until asked, and says so on the settings button", async ({ page }) => {
@@ -135,14 +137,17 @@ test.describe("the served store", () => {
   });
 
   test("filters items out by area", async ({ page }) => {
-    const before = await page.locator(".item-node").count();
+    // Every leaf item is a card (a parent is drawn as a box instead). Waited for rather than read once, since the
+    // cards redraw a frame after the toolbar's count does, and a read in between was the flake this used to have.
+    const leaves = items.filter((item) => !items.some((other) => other.ref.startsWith(`${item.ref}.`))).length;
+    await expect(page.locator(".item-node")).toHaveCount(leaves);
+    const before = leaves;
     const platItems = items.filter((item) => item.area === "PLAT").length;
 
     await settings(page, "PLAT");
 
     await expect(page.locator(".topbar__sub")).toContainText(`${items.length - platItems} of ${items.length}`);
-    // Polled: the subtitle updates a frame before the re-layout drops the filtered cards, and a single read taken
-    // in between failed now and then under a loaded runner.
+    // Polled: the subtitle updates a frame before the re-layout drops the filtered cards.
     await expect.poll(() => page.locator(".item-node").count()).toBeLessThan(before);
   });
 
