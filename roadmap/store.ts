@@ -200,6 +200,8 @@ interface StoreProject {
   layout?: Record<string, string>;
   /** Context sections, heading -> markdown, in the order the project chose (`VIEW-30`). */
   context?: Record<string, string>;
+  /** The `areas` rows: a name and maybe a description, for the areas that have one (`VIEW-49`). */
+  areas?: { key: string; name: string; description?: string }[];
 }
 /** The path rides along with the store so the viewer can say *which* file it is showing - the question a
  *  Desktop user actually has, given the store could be in a repo or in their home dir. */
@@ -253,6 +255,9 @@ export interface ProjectPlan {
   context: ContextSection[];
   /** Its plan file relative to the repo (`packages/cloud/attraverso.yaml`), or null where there is no file. */
   file: string | null;
+  /** Each area's name and description, by key, where the plan records them (`VIEW-49`). Most areas have none,
+   *  since filing an item in a new area writes no row (`PROJ-3`). */
+  areaInfo: Record<string, { name: string; description?: string }>;
 }
 
 export interface ContextSection {
@@ -325,6 +330,7 @@ export async function fetchPlan(): Promise<Plan> {
       metrics: groupBy(metrics?.[project.key] ?? [], (m) => m.ref ?? ""),
       context: orderSections(project.context ?? {}),
       file: files?.[project.key] ?? null,
+      areaInfo: Object.fromEntries((project.areas ?? []).map((area) => [area.key, { name: area.name, description: area.description }])),
     })),
   };
 }

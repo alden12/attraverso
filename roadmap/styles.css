@@ -1391,3 +1391,35 @@ body {
     display: none;
   }
 }
+
+/* An area in the pane (VIEW-49). */
+.area-pane__zoom {
+  margin-left: 10px;
+  font-size: 12px;
+}
+.area-pane__progress {
+  padding: 8px 16px 14px;
+}
+.area-pane__label {
+  padding: 0 16px;
+  margin-top: 4px;
+}
+.area-pane__bar {
+  display: flex;
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--line);
+}
+.area-pane__counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.area-pane__list {
+  padding: 4px 8px 10px;
+  overflow: visible;
+}

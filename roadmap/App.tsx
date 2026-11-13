@@ -39,6 +39,7 @@ import { Logo } from "./Logo";
 import { Search } from "./Search";
 import { fetchItem, type ItemDetail, type SearchHit } from "./store";
 import { Comments } from "./Comments";
+import { AreaPane } from "./AreaPane";
 
 const nodeTypes = { item: ItemNodeView, area: AreaGroupNode, ticket: TicketGroupNode, ghost: GhostNodeView };
 const STATUS_KEYS = Object.keys(STATUSES) as Status[];
@@ -157,10 +158,20 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
   });
   const openContext = useCallback((heading: string | null) => {
     setSelectedId(null);
+    setAreaShown(null);
     setContextView({ heading });
   }, []);
+  // An area in the pane (VIEW-49), by key: the third thing it can hold, under the same one-at-a-time rule.
+  const [areaShown, setAreaShown] = useState<string | null>(null);
+  const openArea = useCallback((area: string) => {
+    setSelectedId(null);
+    setContextView(null);
+    setAreaShown(area);
+  }, []);
   useEffect(() => {
-    if (selectedId !== null) setContextView(null);
+    if (selectedId === null) return;
+    setContextView(null);
+    setAreaShown(null);
   }, [selectedId]);
   // An open section is in the URL, so a link to "the storage model" can be shared the way a link to a project can.
   // `replaceState`, not an assignment, because a hash change remounts the viewer (main.tsx) and would close it.
@@ -571,7 +582,11 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
   const pickHit = (hit: SearchHit) => {
     if (hit.source === "context") return openContext(hit.id);
     const item = hit.ref === null ? undefined : items.find((candidate) => candidate.id === hit.ref);
-    if (item === undefined) return;
+    if (item !== undefined) goToItem(item);
+  };
+  /** Select an item and pan to it, bringing it back first if the filters hide it. A search hit and a row in the
+   *  area pane both land here. */
+  const goToItem = (item: RoadmapItem) => {
     if (hiddenIds.has(item.id)) {
       setHiddenStatuses((set) => (set.has(item.status) ? toggle(set, item.status) : set));
       setHiddenAreas((set) => (set.has(item.area) ? toggle(set, item.area) : set));
@@ -585,8 +600,13 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
     if (node.type === "item" || node.type === "ticket") {
       setSelectedId((node.data as { item: RoadmapItem }).item.id);
     }
-    const summary = node.data as { area?: string; collapsed?: unknown };
-    if (node.type === "area" && summary.collapsed !== undefined && summary.area !== undefined) expandArea(summary.area);
+    const summary = node.data as { area?: string; collapsed?: unknown; foreign?: boolean };
+    // A folded summary opens the area, which is what it is for; an open frame shows the area in the pane (VIEW-49).
+    // A frame holding another project's items is not an area of this one, so it has nothing to show.
+    if (node.type === "area" && summary.area !== undefined) {
+      if (summary.collapsed !== undefined) expandArea(summary.area);
+      else if (summary.foreign !== true) openArea(summary.area);
+    }
   };
   // Double-clicking an open area's frame folds it back up.
   const onNodeDoubleClick: NodeMouseHandler = (_event, node) => {
@@ -888,7 +908,7 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
         )}
       </header>
 
-      <div className="body" data-pane={selected !== null || contextView !== null ? "open" : undefined}>
+      <div className="body" data-pane={selected !== null || contextView !== null || areaShown !== null ? "open" : undefined}>
         <div className="graph">
           {/* Why the graph is empty, said out loud. Rendered over the (empty) canvas rather than instead of it,
               so the toolbar and its switcher stay put and the fix is one click away. */}
@@ -1110,6 +1130,20 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
             {/* Last: the running record of why the item moved, below what is settled about it (VIEW-5). */}
             {loaded !== null && <Comments comments={loaded.comments} {...sectionProps("comments")} />}
           </aside>
+        )}
+        {!selected && contextView === null && areaShown !== null && project !== null && (
+          <AreaPane
+            area={areaShown}
+            name={project.areaInfo[areaShown]?.name}
+            description={project.areaInfo[areaShown]?.description}
+            colour={colours[areaShown]}
+            items={items.filter((item) => item.area === areaShown)}
+            next={next.flatMap((item, index) => (item.area === areaShown ? [{ item, position: index + 1 }] : []))}
+            hidden={hiddenIds}
+            onPick={goToItem}
+            onZoom={() => zoomToArea(areaShown)}
+            onClose={() => setAreaShown(null)}
+          />
         )}
         {!selected && contextView !== null && project !== null && (
           <aside className="detail" aria-label="Context">

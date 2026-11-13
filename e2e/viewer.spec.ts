@@ -188,6 +188,21 @@ test.describe("the served store", () => {
     await expect(page.getByRole("button", { name: "show all" })).toBeDisabled();
   });
 
+  test("shows an area in the pane when its frame is clicked, and goes to an item from it (VIEW-49)", async ({ page }) => {
+    const plat = items.filter((item) => item.area === "PLAT");
+    const open = plat.filter((item) => item.status !== "done");
+    await page.locator('.react-flow__node[data-id="area:PLAT"]').click({ position: { x: 12, y: 12 } });
+    const pane = page.locator('aside[aria-label="Area PLAT"]');
+    await expect(pane.locator(".detail__title")).toHaveText("PLAT"); // no `areas` row in the fixture: the key stands in
+    await expect(pane.locator(".area-pane__bar")).toHaveAttribute("aria-label", `${plat.length - open.length} of ${plat.length} done`);
+    await expect(pane.locator(".next__item")).toHaveCount(open.length); // none of them is in the fixture's next list
+
+    // A row selects its item, and the item's pane replaces the area's.
+    await pane.locator(".next__item", { hasText: open[0]!.ref }).click();
+    await expect(page.locator('aside[aria-label="Area PLAT"]')).toHaveCount(0);
+    await expect(page.locator("aside.detail .detail__id")).toHaveText(open[0]!.ref);
+  });
+
   test("captures the full graph for visual inspection", async ({ page }) => {
     // Give the dagre layout and the fitView transition time to settle before capturing.
     await page.waitForTimeout(1200);
