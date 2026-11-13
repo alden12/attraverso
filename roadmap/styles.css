@@ -978,12 +978,12 @@ body {
    for the title bar (`PAD_TOP` in graph.ts), so nothing moves. */
 .area-box__name {
   color: var(--area);
-  font-size: 16px;
+  font-size: 18px;
 }
 /* The area's own name beside its key, quieter, since the key is what refs carry. */
 .area-box__label {
   color: var(--text);
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
   letter-spacing: 0;
   white-space: nowrap;
