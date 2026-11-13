@@ -6,7 +6,7 @@
 import { describe, expect, it } from "vitest";
 import { orderSections, parseHash, sectionInFocus, selectProject, type ProjectPlan } from "./store";
 
-const project = (key: string): ProjectPlan => ({ key, name: key.toUpperCase(), items: [], next: [], layout: {}, bodies: new Map(), attachments: new Map(), metrics: new Map(), context: [], file: null });
+const project = (key: string): ProjectPlan => ({ key, name: key.toUpperCase(), items: [], next: [], layout: {}, metrics: new Map(), context: [], file: null });
 const apm = project("apm");
 const spanish = project("spanish");
 

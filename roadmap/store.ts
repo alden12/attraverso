@@ -87,6 +87,34 @@ export async function saveLayout(projectKey: string, layout: Record<string, { x:
 
 /** Remove an attachment from its ticket. The blob stays on disk - another ticket may reference the same bytes
  *  - so this is "take it off this ticket", not "destroy it". */
+/**
+ * Everything the detail pane draws for one item (`VIEW-29`), fetched when the pane opens it rather than shipped
+ * for every item on every page load: the body, every comment (newest first, agent ones tagged) and the images.
+ */
+export interface ItemDetail {
+  ref: string;
+  body: string;
+  comments: ItemComment[];
+  attachments: Attachment[];
+}
+
+export interface ItemComment {
+  id: string;
+  body: string;
+  audience: "user" | "agent";
+  actor: string;
+  at: string;
+}
+
+/** One item's detail, or null when the server has no such item (deleted since the page loaded, say). */
+export async function fetchItem(projectKey: string, ref: string, signal?: AbortSignal): Promise<ItemDetail | null> {
+  const params = new URLSearchParams({ project: projectKey, ref });
+  const response = await fetch(`/api/item?${params}`, { headers: authHeaders(), signal });
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(`/api/item returned ${response.status} ${response.statusText}`);
+  return (await response.json()) as ItemDetail;
+}
+
 /** One search hit (`VIEW-25`), as `/api/search` returns it: the domain's `SearchHit`, minus what nothing here reads. */
 export interface SearchHit {
   source: "item" | "comment" | "context";
@@ -212,8 +240,6 @@ export interface ProjectPlan {
   next: string[];
   /** Where each node of the graph sat when the layout was last saved (`VIEW-23.1`). Empty when never saved. */
   layout: Record<string, { x: number; y: number }>;
-  bodies: Map<string, string>;
-  attachments: Map<string, Attachment[]>;
   /** Metric summaries by item ref. Project-level readings are under the empty key, which nothing renders
    *  yet - the detail pane is per-item, and a home for those is the standalone view METRIC-4 is unsure about. */
   metrics: Map<string, MetricSummary[]>;
@@ -290,9 +316,6 @@ export async function fetchPlan(): Promise<Plan> {
           return [node, { x, y }];
         }),
       ),
-      // A ticket's prose for the detail pane, read straight from its stored `body`.
-      bodies: new Map(project.items.map((item) => [item.ref, item.body ?? ""])),
-      attachments: new Map(project.items.filter((item) => item.attachments?.length).map((item) => [item.ref, item.attachments!])),
       metrics: groupBy(metrics?.[project.key] ?? [], (m) => m.ref ?? ""),
       context: orderSections(project.context ?? {}),
       file: files?.[project.key] ?? null,

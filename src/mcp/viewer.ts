@@ -30,6 +30,7 @@ import { attachments } from "../db/schema";
 import { asPlan, exportStore, type StoreAccess } from "../serialise/store";
 import { storeFeed } from "./storeFeed";
 import { searchFeed } from "./searchFeed";
+import { itemFeed } from "./itemFeed";
 import { addAttachment, removeAttachment } from "../domain/attachments";
 import { setStatus } from "../domain/items";
 import { setLayout } from "../domain/layout";
@@ -259,6 +260,12 @@ export function createViewerHost(db: Database, sources: ViewerSources, store: St
         if (file !== null) files[p.key] = file;
       }
       return json(200, await storeFeed(db, caller.ownerId, { store, path: storePath, uploadsDisabled: media.unavailable ?? null, files }));
+    }
+
+    // One item's body, comments and attachments, when the pane opens it (VIEW-29). A read, open like `/api/store`.
+    if (path === "/api/item") {
+      const found = await itemFeed(db, caller.ownerId, params.get("project") ?? "", params.get("ref") ?? "");
+      return found === null ? json(404, { error: `no item "${params.get("ref") ?? ""}" in "${params.get("project") ?? ""}"` }) : json(200, found);
     }
 
     // The search box (VIEW-25). A read, open like `/api/store`, through the one function every host shares.

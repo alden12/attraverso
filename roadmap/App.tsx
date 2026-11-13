@@ -37,7 +37,8 @@ import { Calendar, type CalendarEntry } from "./Calendar";
 import { countDated } from "./calendarDates";
 import { Logo } from "./Logo";
 import { Search } from "./Search";
-import type { SearchHit } from "./store";
+import { fetchItem, type ItemDetail, type SearchHit } from "./store";
+import { Comments } from "./Comments";
 
 const nodeTypes = { item: ItemNodeView, area: AreaGroupNode, ticket: TicketGroupNode, ghost: GhostNodeView };
 const STATUS_KEYS = Object.keys(STATUSES) as Status[];
@@ -504,7 +505,27 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
     if (key === project?.key) setSelectedId(ref);
     else window.location.hash = `${encodeURIComponent(key)}/${encodeURIComponent(ref)}`;
   };
-  const detail = selected ? (project?.bodies.get(selected.id) ?? "") : "";
+  /**
+   * The open item's body, comments and images, fetched when the pane opens it (VIEW-29) rather than carried for
+   * every item in the bulk feed. Fetched again whenever the plan reloads (`plan` is a new object then), so an
+   * upload, a status change or an edit made elsewhere shows up in the pane too. A slow answer for the previous
+   * item is aborted rather than allowed to land on the next one.
+   */
+  const [detail, setDetail] = useState<{ ref: string; state: "loading" | "missing" | "failed" } | ItemDetail | null>(null);
+  const selectedRef = selected?.id ?? null;
+  useEffect(() => {
+    if (selectedRef === null || project === null) return setDetail(null);
+    const abort = new AbortController();
+    // Keep showing what is already there for this item while it refreshes, so a reload does not flash "loading".
+    setDetail((current) => (current !== null && current.ref === selectedRef ? current : { ref: selectedRef, state: "loading" }));
+    fetchItem(project.key, selectedRef, abort.signal)
+      .then((found) => setDetail(found ?? { ref: selectedRef, state: "missing" }))
+      .catch((error: unknown) => {
+        if ((error as Error).name !== "AbortError") setDetail({ ref: selectedRef, state: "failed" });
+      });
+    return () => abort.abort();
+  }, [selectedRef, project, plan]);
+  const loaded = detail !== null && "body" in detail && detail.ref === selectedRef ? detail : null;
 
   const toggle = <T,>(set: Set<T>, value: T): Set<T> => {
     const next = new Set(set);
@@ -988,7 +1009,17 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
               </div>
             )}
             <div className="detail__doc">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{detail}</ReactMarkdown>
+              {loaded !== null ? (
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{loaded.body}</ReactMarkdown>
+              ) : (
+                <p className="detail__pending">
+                  {detail !== null && "state" in detail && detail.state === "missing"
+                    ? "This item is no longer in the plan."
+                    : detail !== null && "state" in detail && detail.state === "failed"
+                      ? "Could not load this item. Try reopening it."
+                      : "Loading…"}
+                </p>
+              )}
             </div>
             {/* Below the prose and above the attachments: the body is the item's settled reasoning, and its
                 measurements are evidence about it, which is the slot attachments already established. */}
@@ -998,11 +1029,13 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
                 {...sectionProps("images")}
                 projectKey={project.key}
                 ref_={selected.id}
-                images={project.attachments.get(selected.id) ?? EMPTY}
+                images={loaded?.attachments ?? EMPTY}
                 uploadsDisabled={plan.uploadsDisabled}
                 reload={reload}
               />
             )}
+            {/* Last: the running record of why the item moved, below what is settled about it (VIEW-5). */}
+            {loaded !== null && <Comments comments={loaded.comments} {...sectionProps("comments")} />}
           </aside>
         )}
         {!selected && contextView !== null && project !== null && (

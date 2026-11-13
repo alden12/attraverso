@@ -51,11 +51,12 @@ function servePlan(): Plugin {
     const { importStore } = await load<typeof import("../src/serialise/store")>(server, "../src/serialise/store.ts");
     const { ensureUser, LOCAL_IDENTITY } = await load<typeof import("../src/domain/users")>(server, "../src/domain/users.ts");
     const { searchFeed } = await load<typeof import("../src/mcp/searchFeed")>(server, "../src/mcp/searchFeed.ts");
+    const { itemFeed } = await load<typeof import("../src/mcp/itemFeed")>(server, "../src/mcp/itemFeed.ts");
     const { db, close } = await createInMemoryDb();
     const stores = await Promise.all(storePaths.map(async (path) => parse(await readFile(path, "utf8")) as Store));
     await importStore(db, { projects: stores.flatMap((store) => store.projects ?? []) });
     const { id: ownerId } = await ensureUser(db, LOCAL_IDENTITY);
-    return { db: db as Database, ownerId, close, searchFeed };
+    return { db: db as Database, ownerId, close, searchFeed, itemFeed };
   }
   const described = storePaths.join(", ");
   return {
@@ -73,6 +74,21 @@ function servePlan(): Plugin {
       // from the plan files the first time someone searches - the same in-memory engine the MCP server runs, and
       // the same `searchFeed`, so the dev server matches exactly as the real hosts do rather than imitating them.
       // Lazily, because PGlite takes most of a second to start and most dev sessions never search.
+      // One item for the detail pane (VIEW-29), from the same lazily-built database as search: the bulk feed below
+      // no longer carries bodies or comments, so this server needs the per-item route the real hosts have.
+      server.middlewares.use("/api/item", async (request, response) => {
+        response.setHeader("Content-Type", "application/json");
+        try {
+          const { db, ownerId, itemFeed } = await searchable();
+          const params = new URL(request.url ?? "/", "http://localhost").searchParams;
+          const found = await itemFeed(db, ownerId, params.get("project") ?? "", params.get("ref") ?? "");
+          if (found === null) response.statusCode = 404;
+          response.end(JSON.stringify(found ?? { error: `no item "${params.get("ref") ?? ""}"` }));
+        } catch (error) {
+          response.statusCode = 500;
+          response.end(JSON.stringify({ error: `item failed: ${String(error)}` }));
+        }
+      });
       server.middlewares.use("/api/search", async (request, response) => {
         response.setHeader("Content-Type", "application/json");
         try {

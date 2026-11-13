@@ -135,3 +135,14 @@ projects:
         id: 01a169c5-05cf-70bd-9a11-692f05bba6aa
         created_at: 2026-10-23T17:18:02.191Z
         updated_at: 2026-10-23T17:18:02.191Z
+        comments:
+          - body: Moved to the pane so the graph stays readable.
+            audience: user
+            id: 019a7e10-0000-7000-8000-000000000001
+            at: 2026-11-01T10:00:00.000Z
+            actor: fixture
+          - body: Checked the markdown renders **bold**.
+            audience: agent
+            id: 019a7e10-0000-7000-8000-000000000002
+            at: 2026-11-02T10:00:00.000Z
+            actor: fixture

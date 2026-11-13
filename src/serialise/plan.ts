@@ -186,10 +186,14 @@ export function asPlan(store: Store): Store {
       // its place. It belongs here rather than in the viewer, because this is already the projection that
       // strips references to dropped items.
       const actionable = new Set(live.filter((item) => !NOT_ACTIONABLE.includes(item.status)).map((item) => item.ref));
+      // **What the graph draws, and nothing the pane draws** (`VIEW-29`). Bodies, comments and attachments are
+      // the detail pane's, one item at a time, through `/api/item` (`itemFeed`): they were 89% of an 806 kB feed,
+      // and the comments were never rendered at all. Project-level comments go too, since nothing shows them.
+      const { comments: _projectComments, notes: _projectNotes, ...rest } = project;
       return {
-        ...project,
+        ...rest,
         next: project.next?.filter((ref) => actionable.has(ref)),
-        items: live.map((item) => ({
+        items: live.map(({ body: _body, comments: _comments, notes: _notes, attachments: _attachments, ...item }) => ({
           ...item,
           // A scoped ref (`PROJ-11`) names an item in another project, so `present` never holds it: keeping it
           // is the point, since an unresolved edge is what the viewer draws as a placeholder.

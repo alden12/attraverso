@@ -634,6 +634,60 @@ body {
   padding: 0 16px 12px;
 }
 
+/* An item's comments, at the end of the pane (VIEW-5). Each a small card, its metadata a muted line above, and
+   Claude's own notes set slightly apart so they read as the agent's working record rather than a person's. */
+.comments {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.comment {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.comment[data-agent="true"] {
+  border-style: dashed;
+}
+.comment__meta {
+  display: flex;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.comment__tag {
+  margin-left: auto;
+}
+.comment__body {
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.comment__body > :first-child {
+  margin-top: 4px;
+}
+.comment__body > :last-child {
+  margin-bottom: 0;
+}
+.comments__empty,
+.detail__pending {
+  color: var(--muted);
+  font-size: 13px;
+}
+.comments__toggle {
+  margin-top: 10px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent, #4f9dff);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
 /* An item's measurements, under its prose (METRIC-4). A table rather than a list: three columns that line
    up are scannable, and the whole point is noticing at a glance that a number has moved. */
 .metrics__table {

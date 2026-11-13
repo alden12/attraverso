@@ -350,6 +350,15 @@ test.describe("the calendar", () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => window.localStorage.clear());
     await page.route("**/api/store", (route) => route.fulfill({ json: DATED }));
+    // An item's prose comes from `/api/item` now (VIEW-29), so the mock answers that from the same fixture.
+    await page.route("**/api/item?*", (route) => {
+      const params = new URL(route.request().url()).searchParams;
+      const project = DATED.store.projects.find((candidate) => candidate.key === params.get("project"));
+      const item = project?.items.find((candidate) => candidate.ref === params.get("ref")) as { ref: string; body?: string } | undefined;
+      return item === undefined
+        ? route.fulfill({ status: 404, json: { error: "no such item" } })
+        : route.fulfill({ json: { ref: item.ref, body: item.body ?? "", comments: [], attachments: [] } });
+    });
     await page.goto("/#apm");
     await page.getByLabel("Show the calendar").click();
   });
@@ -624,5 +633,30 @@ test.describe("searching the plan (VIEW-25)", () => {
     await box(page).fill("demo pla");
     await hits(page).filter({ hasText: "Goals" }).first().click();
     await expect(page.locator('aside.detail[aria-label="Context"] .detail__title')).toHaveText("Goals");
+  });
+});
+
+test.describe("an item's comments in the pane (VIEW-5, VIEW-29)", () => {
+  test("loads the item when it is opened, and shows its comments last, Claude's folded", async ({ page }) => {
+    await page.addInitScript(() => window.localStorage.clear());
+    // Its body and comments come from `/api/item`, not the page load: the bulk feed no longer carries them.
+    let itemFetched = false;
+    page.on("request", (request) => {
+      if (request.url().includes("/api/item?")) itemFetched = true;
+    });
+    await page.goto("/#demo/VIEW-1.2");
+    const pane = page.locator("aside.detail");
+    await expect(pane.locator(".detail__title")).toHaveText("Show an item's prose");
+
+    const comments = pane.locator(".section", { hasText: "Comments" });
+    await expect(comments.locator(".section__count")).toHaveText("2");
+    await expect(comments.locator(".comment")).toHaveCount(1);
+    await expect(comments.locator(".comment")).toContainText("Moved to the pane");
+
+    await comments.getByRole("button", { name: "Show Claude's note" }).click();
+    await expect(comments.locator(".comment")).toHaveCount(2);
+    // Newest first, so Claude's later note leads, rendered as markdown.
+    await expect(comments.locator(".comment").first().locator("strong")).toHaveText("bold");
+    expect(itemFetched).toBe(true);
   });
 });
