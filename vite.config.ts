@@ -1,5 +1,7 @@
 // From vitest/config, not vite: it is the same defineConfig widened to accept the `test` block below.
 import { defineConfig } from "vitest/config";
+import { chmod } from "node:fs/promises";
+import { join } from "node:path";
 
 /**
  * The Node side: the MCP server's distributable bundle, and the vitest config the domain tests run under.
@@ -15,8 +17,20 @@ export default defineConfig({
     ssr: "src/mcp/server.ts",
     outDir: "dist",
     target: "node22",
-    rollupOptions: { external: ["better-sqlite3"] },
+    // A runnable bin, as the published one is (`buildStandalone.ts` adds the same line): Yarn links this repo's
+    // `node_modules/.bin/attraverso` straight to this file, and without the line and the mode it was "permission
+    // denied" (VIEW-47). npm sets the mode itself when it installs the package, so this only matters here.
+    rollupOptions: { external: ["better-sqlite3"], output: { banner: "#!/usr/bin/env node" } },
   },
+  plugins: [
+    {
+      name: "executable-bin",
+      apply: "build",
+      async writeBundle(options, bundle) {
+        for (const name of Object.keys(bundle)) if (name === "server.js") await chmod(join(options.dir ?? "dist", name), 0o755);
+      },
+    },
+  ],
   test: {
     environment: "node",
     // roadmap/ is a browser app, but the pieces worth testing there are pure functions over the fetched store

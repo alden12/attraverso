@@ -36,6 +36,21 @@ truth, and its diffs are the history of the plan. Readings, attachments and the 
 Then ask the agent to call `get_project`, or just to create a project and start planning. The tools describe
 themselves, and `get_project` returns the project's protocol - its operating manual - first.
 
+### Seeing it
+
+Ask the agent to open the viewer (the `open_viewer` tool). It serves the plan as a dependency graph on a
+`127.0.0.1` address, so it only opens on the machine running the server.
+
+Or open it yourself from a terminal, in the project:
+
+```bash
+npx attraverso viewer --open
+```
+
+It finds the plan the way the server does (or takes `--store <path>`), prints the URL, and opens it with
+`--open`. `--project <key>` picks which project it lands on. It can edit the plan as the agent's viewer can, and
+is safe to run beside a connected server on the same file. Ctrl+C stops it.
+
 ### Where the plan lives
 
 In order of precedence:
@@ -58,21 +73,6 @@ Repeat `--store` to load a plan split across files; the first one named is where
 **Plan files from before 0.1.2 are named `*.apm.yaml`**, with their data in `.apm/`. They are still found and
 loaded, and always will be. To move one over, rename both: `git mv roadmap.apm.yaml attraverso.yaml` and
 `git mv .apm .attraverso`.
-
-### Seeing it
-
-Ask the agent to open the viewer (the `open_viewer` tool). It serves the plan as a dependency graph on a
-`127.0.0.1` address, so it only opens on the machine running the server.
-
-Or open it yourself from a terminal, in the project:
-
-```bash
-npx attraverso viewer --open
-```
-
-It finds the plan the way the server does (or takes `--store <path>`), prints the URL, and opens it with
-`--open`. `--project <key>` picks which project it lands on. It can edit the plan as the agent's viewer can, and
-is safe to run beside a connected server on the same file. Ctrl+C stops it.
 
 ### Claude Desktop
 
