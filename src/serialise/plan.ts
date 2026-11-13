@@ -10,7 +10,7 @@ import { asc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { parse, stringify } from "yaml";
 import { clearAll, type Database, type Tx } from "../db/client";
-import { areas, attachments, comments, contextSections, dependencies, items, projectNext, projects, scopedDependencies } from "../db/schema";
+import { areas, attachments, comments, contextSections, dependencies, items, layoutPositions, projectNext, projects, scopedDependencies } from "../db/schema";
 import { ensureUserIn, LOCAL_IDENTITY } from "../domain/users";
 import { loadMeasurements, type MeasurementRecord } from "./measurementRecords";
 import { NOT_ACTIONABLE } from "../domain/next";
@@ -85,6 +85,10 @@ const itemSchema = z.object({
   /** Accepted for old plan files, never written: see `readComments` (CTX-2). */
   notes: z.array(commentSchema).optional(),
   attachments: z.array(attachmentSchema).optional(),
+  // The graph layout's memory (`VIEW-23.1`): node id -> "x,y", relative to the node's container. Last in the
+  // project, and one line per node sorted by id, so a moved card is a one-line diff below everything a reviewer
+  // reads, and the file stays the one place a project's map is shared from.
+  layout: z.record(z.string(), z.string().regex(/^-?\d+,-?\d+$/, "a layout position is \"x,y\" in whole numbers")).optional(),
 });
 
 // Sessions were removed with the concept (CTX-10). The key stays *parseable* rather than being deleted,
@@ -124,6 +128,10 @@ const projectSchema = z.object({
   /** Accepted for old plan files, never written: see `readComments` (CTX-2). */
   notes: z.array(commentSchema).optional(),
   attachments: z.array(attachmentSchema).optional(),
+  // The graph layout's memory (`VIEW-23.1`): node id -> "x,y", relative to the node's container. Last in the
+  // project, and one line per node sorted by id, so a moved card is a one-line diff below everything a reviewer
+  // reads, and the file stays the one place a project's map is shared from.
+  layout: z.record(z.string(), z.string().regex(/^-?\d+,-?\d+$/, "a layout position is \"x,y\" in whole numbers")).optional(),
 });
 
 /**
@@ -278,6 +286,8 @@ export async function exportStore(db: Database, ownerId: string): Promise<Store>
         ? rows.map((a) => ({ hash: a.hash, mime: a.mime, bytes: a.bytes, caption: opt(a.caption), id: a.id, at: a.createdAt, actor: a.actor }))
         : undefined;
 
+    const layoutRows = await db.select().from(layoutPositions).where(eq(layoutPositions.projectId, p.id)).orderBy(asc(layoutPositions.node));
+
     const fmtComments = (rows: typeof commentRows) =>
       rows.length > 0 ? rows.map((n) => ({ body: n.body, audience: n.audience, id: n.id, at: n.createdAt, actor: n.actor })) : undefined;
 
@@ -327,6 +337,7 @@ export async function exportStore(db: Database, ownerId: string): Promise<Store>
           attachments: fmtAttachments(attachmentsByItem.get(i.id) ?? []),
         };
       }),
+      layout: layoutRows.length > 0 ? Object.fromEntries(layoutRows.map((row) => [row.node, `${row.x},${row.y}`])) : undefined,
     });
   }
   return out;
@@ -553,6 +564,13 @@ async function insertStore(tx: Tx, store: Store, owner?: string): Promise<void> 
     if (nextValues.length > 0) {
       await tx.insert(projectNext).values(nextValues.map((itemId, position) => ({ projectId: p.id, itemId, position })));
     }
+
+    // The layout's memory, verbatim: nothing about a position refers to a row, so there is nothing to resolve.
+    const layoutValues = Object.entries(p.layout ?? {}).map(([node, at]) => {
+      const [x, y] = at.split(",").map(Number) as [number, number];
+      return { projectId: p.id, node, x, y };
+    });
+    if (layoutValues.length > 0) await tx.insert(layoutPositions).values(layoutValues);
 
     // Context sections: identity is the heading, so id/timestamps are regenerated ($defaultFn); the map's
     // order becomes the sort_order.

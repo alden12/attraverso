@@ -15,7 +15,7 @@ import { describe, expect, it } from "vitest";
 import { getTableColumns, is } from "drizzle-orm";
 import { PgTable } from "drizzle-orm/pg-core";
 import * as schema from "../db/schema";
-import { allowedEmails, areas, attachments, contextSections, dependencies, events, items, comments, measurements, projectNext, projects, scopedDependencies, users } from "../db/schema";
+import { allowedEmails, areas, attachments, contextSections, dependencies, events, items, comments, layoutPositions, measurements, projectNext, projects, scopedDependencies, users } from "../db/schema";
 
 interface Coverage {
   table: PgTable;
@@ -85,6 +85,12 @@ const COVERAGE: Record<string, Coverage> = {
     // hand-reordered file simply correct rather than inconsistent.
     exported: ["itemId"],
     omitted: ["projectId", "position"],
+  },
+  layoutPositions: {
+    table: layoutPositions,
+    // Folded onto the project as `layout: { node: "x,y" }` (`VIEW-23.1`). The project is the block it sits in.
+    exported: ["node", "x", "y"],
+    omitted: ["projectId"],
   },
   measurements: {
     table: measurements,

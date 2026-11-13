@@ -20,7 +20,7 @@ import remarkGfm from "remark-gfm";
 // The plan is fetched at runtime and handed in by `main.tsx` (VIEW-11), so this component renders whichever
 // store was served to it rather than one baked into the bundle, and whichever project of it the URL asked
 // for (VIEW-4).
-import type { Plan, Selection } from "./store";
+import { canWrite, saveLayout, type Plan, type Selection } from "./store";
 import { useExtensions } from "./extensions";
 import { areasOf, STATUSES, type Status, splitScope } from "../scripts/tickets";
 import { areaColours, buildGraph, buildEdges, memoryOf, remembered, type ColourMode, type LayoutMemory, type RoadmapNode } from "./graph";
@@ -203,10 +203,38 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
   // call would be a type error against it.
   const [nodes, setNodes] = useNodesState<RoadmapNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
-  // Persisted to localStorage per project: the layout's memory, and hand-resized box sizes (applied over the
-  // layout's own). `parents` is each node's container as last laid out, which a drag needs to record its drop
-  // in the memory's container-relative terms; `dropping` holds a drag's latest position until it ends.
-  const memory = useRef<LayoutMemory>(loadMemory(scope));
+  // The layout's memory lives in the plan (`VIEW-23.1`), so the map is the same on every device: read from the
+  // served plan and saved back through the write path. A host that cannot write (the dev server, a published
+  // copy) keeps it in this browser instead, and starts from the plan's when it has none of its own.
+  // Hand-resized box sizes stay per browser either way, applied over the layout's own. `parents` is each node's
+  // container as last laid out, which a drag needs to record its drop in the memory's container-relative terms;
+  // `dropping` holds a drag's latest position until it ends.
+  const shared = useMemo(() => canWrite(), []);
+  const memory = useRef<LayoutMemory>(
+    shared ? (project?.layout ?? {}) : (() => {
+      const local = loadMemory(scope);
+      return Object.keys(local).length > 0 ? local : (project?.layout ?? {});
+    })(),
+  );
+  // Saves are coalesced: a drag can settle several times in quick succession, and the plan file is rewritten on
+  // every save. A failed save keeps the layout in this browser rather than losing it.
+  const pendingSave = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Set by a drop or a reset, which must be saved even when the settled layout equals the memory they wrote.
+  const unsaved = useRef(false);
+  const remember = useCallback(
+    (layout: LayoutMemory) => {
+      if (!shared) return saveMemory(scope, layout);
+      if (pendingSave.current !== null) clearTimeout(pendingSave.current);
+      pendingSave.current = setTimeout(() => {
+        pendingSave.current = null;
+        saveLayout(scope, layout).catch((error: unknown) => {
+          console.warn("the layout could not be saved to the plan; keeping it in this browser", error);
+          saveMemory(scope, layout);
+        });
+      }, 400);
+    },
+    [scope, shared],
+  );
   const resizedSizes = useRef<Record<string, BoxSize>>(loadSizes(scope));
   const parents = useRef<Map<string, string | undefined>>(new Map());
   const dropping = useRef<Record<string, XYPosition>>({});
@@ -234,8 +262,8 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
           if (at) memory.current = { ...memory.current, [id]: remembered(parents.current.get(id), at) };
           delete dropping.current[id];
         }
-        saveMemory(scope, memory.current);
-        setLayoutNonce((nonce) => nonce + 1); // settle the map around the drop
+        unsaved.current = true;
+        setLayoutNonce((nonce) => nonce + 1); // settle the map around the drop, which then saves it
       }
     },
     [scope, setNodes],
@@ -246,6 +274,7 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
     clearLayout(scope);
     memory.current = {};
     resizedSizes.current = {};
+    unsaved.current = true;
     setLayoutNonce((nonce) => nonce + 1);
   }, [scope]);
 
@@ -256,9 +285,10 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
     const nodes = buildGraph(items, areas, colours, colourMode, selectedId, hiddenIds, memory.current);
     parents.current = new Map(nodes.map((node) => [node.id, node.parentId]));
     const next = memoryOf(nodes);
-    if (JSON.stringify(next) !== JSON.stringify(memory.current)) {
+    if (unsaved.current || JSON.stringify(next) !== JSON.stringify(memory.current)) {
+      unsaved.current = false;
       memory.current = next;
-      saveMemory(scope, next);
+      remember(next);
     }
     setNodes(
       nodes.map((node) => {
@@ -267,7 +297,7 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
       }),
     );
     // layoutNonce forces a re-run after a reset or a drop (the memory ref changed, which React cannot see).
-  }, [items, areas, colours, colourMode, selectedId, hiddenIds, layoutNonce, scope, setNodes]);
+  }, [items, areas, colours, colourMode, selectedId, hiddenIds, layoutNonce, remember, setNodes]);
 
   // Edges are their own layer: hover and selection restyle them here without touching the node layout above.
   useEffect(() => {

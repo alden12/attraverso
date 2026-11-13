@@ -13,6 +13,7 @@ import { one } from "../db/rows";
 import { createProject, listProjects } from "../domain/projects";
 import { createItem, deleteItem, listItems } from "../domain/items";
 import { listAttachments } from "../domain/attachments";
+import { getLayout } from "../domain/layout";
 import { getProjectByKey } from "../domain/projects";
 import { createViewerHost, fileSources } from "./viewer";
 import { createUnavailableMediaStore } from "../media/store";
@@ -365,6 +366,7 @@ describe("the write surface is guarded as a whole, not route by route (VIEW-17)"
   // stop covering it - which is the failure this whole describe exists to make loud.
   const WRITES = [
     { path: "/api/ticket?project=apm&ref=MCP-1", method: "POST", body: JSON.stringify({ status: "done" }) },
+    { path: "/api/layout?project=apm", method: "POST", body: JSON.stringify({ layout: { "MCP-1": { x: 0, y: 0 } } }) },
     { path: "/api/media?project=apm&ref=MCP-1", method: "POST", body: "x" },
     { path: "/api/media/deadbeef?project=apm", method: "DELETE", body: undefined },
   ];
@@ -410,6 +412,22 @@ describe("the write surface is guarded as a whole, not route by route (VIEW-17)"
     }
     // The real assertion: refused means refused, not "returned 403 and wrote anyway".
     expect(persisted).toBe(before);
+  });
+
+  it("saves the graph's layout through the same write-through as a ticket change (VIEW-23.1)", async () => {
+    const before = persisted;
+    const save = (layout: unknown) =>
+      fetch(`${origin}/api/layout?project=apm`, {
+        method: "POST",
+        headers: { "x-apm-token": token, origin, "content-type": "application/json" },
+        body: JSON.stringify({ layout }),
+      });
+    expect((await save({ "area:MCP": { x: 0, y: 0 }, "MCP-1": { x: 260, y: 10 } })).status).toBe(200);
+    expect(persisted).toBe(before + 1);
+    const project = (await getProjectByKey(db.db, db.ownerId, "apm"))!;
+    expect(await getLayout(db.db, project.id)).toEqual({ "area:MCP": { x: 0, y: 0 }, "MCP-1": { x: 260, y: 10 } });
+    // A fraction is refused at the boundary, before the domain sees it.
+    expect((await save({ "MCP-1": { x: 0.5, y: 0 } })).status).toBe(400);
   });
 
   /** A raw GET, because `fetch` normalises `../` out of a path before it reaches the wire - a traversal test

@@ -72,6 +72,19 @@ export async function setTicketStatus(projectKey: string, ref: string, status: S
   if (!response.ok) throw new Error(((await response.json()) as { error?: string }).error ?? `could not change the status (${response.status})`);
 }
 
+/**
+ * Save the graph's layout to the plan (`VIEW-23.1`), so the map is the same on every device and travels with the
+ * file. The whole layout every time: it is small, and a partial save would need a merge rule for nothing.
+ */
+export async function saveLayout(projectKey: string, layout: Record<string, { x: number; y: number }>): Promise<void> {
+  const response = await fetch(`/api/layout?project=${encodeURIComponent(projectKey)}`, {
+    method: "POST",
+    headers: { "content-type": "application/json", ...writeHeaders("save the layout") },
+    body: JSON.stringify({ layout }),
+  });
+  if (!response.ok) throw new Error(((await response.json()) as { error?: string }).error ?? `could not save the layout (${response.status})`);
+}
+
 /** Remove an attachment from its ticket. The blob stays on disk - another ticket may reference the same bytes
  *  - so this is "take it off this ticket", not "destroy it". */
 export async function deleteAttachment(projectKey: string, hash: string): Promise<void> {
@@ -125,6 +138,8 @@ interface StoreProject {
    *  renders what it is handed rather than re-deriving the rule. */
   next?: string[];
   items: StoreItem[];
+  /** The graph layout's memory (`VIEW-23.1`), node id -> "x,y", as the plan file holds it. */
+  layout?: Record<string, string>;
 }
 /** The path rides along with the store so the viewer can say *which* file it is showing - the question a
  *  Desktop user actually has, given the store could be in a repo or in their home dir. */
@@ -167,6 +182,8 @@ export interface ProjectPlan {
   items: RoadmapItem[];
   /** The agreed order, most important first. Empty when nobody has recorded one. */
   next: string[];
+  /** Where each node of the graph sat when the layout was last saved (`VIEW-23.1`). Empty when never saved. */
+  layout: Record<string, { x: number; y: number }>;
   bodies: Map<string, string>;
   attachments: Map<string, Attachment[]>;
   /** Metric summaries by item ref. Project-level readings are under the empty key, which nothing renders
@@ -220,6 +237,12 @@ export async function fetchPlan(): Promise<Plan> {
       // Refs that name no rendered item are dropped: the served store is a projection, and a panel row that
       // selects nothing would be a dead link rather than a jump.
       next: (project.next ?? []).filter((ref) => project.items.some((item) => item.ref === ref)),
+      layout: Object.fromEntries(
+        Object.entries(project.layout ?? {}).map(([node, at]) => {
+          const [x, y] = at.split(",").map(Number) as [number, number];
+          return [node, { x, y }];
+        }),
+      ),
       // A ticket's prose for the detail pane, read straight from its stored `body`.
       bodies: new Map(project.items.map((item) => [item.ref, item.body ?? ""])),
       attachments: new Map(project.items.filter((item) => item.attachments?.length).map((item) => [item.ref, item.attachments!])),

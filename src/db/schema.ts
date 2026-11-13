@@ -387,6 +387,25 @@ export const projectNext = pgTable(
   (t) => [primaryKey({ columns: [t.projectId, t.itemId] }), uniqueIndex("project_next_position").on(t.projectId, t.position)],
 );
 
+// Where each node of a project's graph sits (`VIEW-23.1`): the layout's memory, so the map keeps its shape as
+// the plan changes and is the same map on every device. Written by the viewer, never by a tool, and read back
+// by it alone - no query or ranking looks at it. Keyed by the graph's own node id (an item ref, or `area:KEY`
+// for an area box) rather than referencing `items`, because area boxes are not rows anywhere; a position for a
+// node that no longer exists is simply never looked up, and the next save drops it. `x`/`y` are relative to
+// the node's container, on the layout's grid.
+export const layoutPositions = pgTable(
+  "layout_positions",
+  {
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    node: text("node").notNull(),
+    x: integer("x").notNull(),
+    y: integer("y").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.projectId, t.node] })],
+);
+
 // Append-only audit over every mutation, written in the same transaction as the change it records. This is
 // what makes unattended agent edits reviewable and reversible. Locally these rows are flushed to a separate
 // `events.jsonl` (out of the human-readable plan YAML); see IMP-7.

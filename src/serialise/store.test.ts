@@ -15,6 +15,7 @@ import { ensureUser } from "../domain/users";
 import { setSection } from "../domain/context";
 import { addComment, MAX_BODY } from "../domain/comments";
 import { getNext, setNext } from "../domain/next";
+import { setLayout } from "../domain/layout";
 import { recordMeasurements } from "../domain/measurements";
 import type { MeasurementRecord } from "./measurements";
 import { YAML_FORMAT } from "./format";
@@ -61,6 +62,8 @@ async function seed(db: Awaited<ReturnType<typeof freshDb>>["db"], ownerId: stri
   // An agreed order (PROJ-8), deliberately including the done item: the export is the durable copy, so it
   // carries what was stored, and the filtering of done items belongs to `getNext` on the read side.
   await setNext(db, p.id, ["MCP-2", "DATA-1"], ACTOR);
+  // The graph's memory (`VIEW-23.1`), so the byte-identical round trip covers it, negative coordinates included.
+  await setLayout(db, p.id, { "area:MCP": { x: 0, y: 0 }, "MCP-1": { x: 260, y: -10 }, "area:DATA": { x: 1200, y: 40 } }, ACTOR);
   return p;
 }
 

@@ -31,10 +31,11 @@ import { asPlan, exportStore, type StoreAccess } from "../serialise/store";
 import { storeFeed } from "./storeFeed";
 import { addAttachment, removeAttachment } from "../domain/attachments";
 import { setStatus } from "../domain/items";
+import { setLayout } from "../domain/layout";
 import { getProjectByKey } from "../domain/projects";
 import type { Caller } from "./tools";
 import { createFileMediaStore, mediaDirFor, unacceptable, type MediaStore } from "../media/store";
-import { parseBody, readBody, ticketChange } from "./requests";
+import { layoutSave, parseBody, readBody, ticketChange } from "./requests";
 
 /** Above the dev server's 5176 so both can run at once (developing the viewer while a Desktop server is up). */
 const FIRST_PORT = 5177;
@@ -201,6 +202,7 @@ export function createViewerHost(db: Database, sources: ViewerSources, store: St
    */
   const WRITES: { matches: (path: string) => boolean; method: string; hint: string }[] = [
     { matches: (p) => p === "/api/ticket", method: "POST", hint: "POST a change here" },
+    { matches: (p) => p === "/api/layout", method: "POST", hint: "POST the layout here" },
     { matches: (p) => p === "/api/media", method: "POST", hint: "POST an image here" },
     { matches: (p) => p.startsWith("/api/media/"), method: "DELETE", hint: "DELETE an attachment here" },
   ];
@@ -300,6 +302,23 @@ export function createViewerHost(db: Database, sources: ViewerSources, store: St
         // and passes the `IMP-13` guard rather than going around it.
         await store.persist();
         return json(200, { ref: item.ref, status: item.status, title: item.title });
+      } catch (error) {
+        return json(400, { error: error instanceof Error ? error.message : String(error) });
+      }
+    }
+
+    /**
+     * Saving the graph's layout (`VIEW-23.1`): the whole of it, after a drag or a change the viewer drew. The
+     * same write-through as a ticket change, so the map lands in the plan file and travels with it.
+     */
+    if (path === "/api/layout") {
+      try {
+        const project = await getProjectByKey(db, caller.ownerId, params.get("project") ?? "");
+        if (project === null) return json(404, { error: `no project "${params.get("project") ?? ""}"` });
+        const { layout } = await parseBody(request, layoutSave);
+        await setLayout(db, project.id, layout, "user");
+        await store.persist();
+        return json(200, { saved: Object.keys(layout).length });
       } catch (error) {
         return json(400, { error: error instanceof Error ? error.message : String(error) });
       }

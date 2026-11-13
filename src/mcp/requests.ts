@@ -23,6 +23,14 @@ export const ticketChange = z.object({
 });
 
 /**
+ * A save of the graph layout's memory (`VIEW-23.1`): every node's position, relative to its container. Whole
+ * numbers because the layout works on a grid, and because a fraction would round differently on its way back.
+ */
+export const layoutSave = z.object({
+  layout: z.record(z.string().min(1), z.object({ x: z.number().int(), y: z.number().int() })),
+});
+
+/**
  * Validate a JSON request body against a zod schema, the way the MCP boundary validates a tool call.
  *
  * This boundary was hand-checking its one field, which was survivable at one field and stops being so at
