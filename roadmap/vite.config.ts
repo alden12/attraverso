@@ -68,7 +68,9 @@ function servePlan(): Plugin {
       // a full page reload over Vite's socket: that threw away the selection, the open pane and the filters, which
       // is exactly what a live refresh has to keep.
       server.watcher.on("change", (file) => {
-        if (storePaths.includes(file)) forgetSearch(); // rebuilt from the changed files on the next search
+        if (!storePaths.includes(file)) return;
+        forgetSearch();
+        void searchable().catch(() => {}); // rebuilt from the changed files straight away, for the same reason
       });
       // Live refresh (VIEW-7), through the same change feed the MCP server's host uses. The token is the files'
       // modification times: this server never writes, so anything that moves them is a change.
@@ -84,9 +86,13 @@ function servePlan(): Plugin {
       // The search box (VIEW-25). This server has no database, and search is a Postgres query, so it builds one
       // from the plan files the first time someone searches - the same in-memory engine the MCP server runs, and
       // the same `searchFeed`, so the dev server matches exactly as the real hosts do rather than imitating them.
-      // Lazily, because PGlite takes most of a second to start and most dev sessions never search.
-      // One item for the detail pane (VIEW-29), from the same lazily-built database as search: the bulk feed below
-      // no longer carries bodies or comments, so this server needs the per-item route the real hosts have.
+      // One item for the detail pane (VIEW-29), from the same database as search: the bulk feed below no longer
+      // carries bodies or comments, so this server needs the per-item route the real hosts have.
+      // **Built as the server starts, and again as soon as a plan file changes**, not on the first request. It was
+      // lazy while only search used it, since PGlite takes most of a second to start and most sessions never
+      // search; but every item opened now asks it, so the first one paid that second, and under a loaded e2e run
+      // that was long enough for a test waiting on the item's prose to give up.
+      server.httpServer?.once("listening", () => void searchable().catch(() => {}));
       server.middlewares.use("/api/item", async (request, response) => {
         response.setHeader("Content-Type", "application/json");
         try {
