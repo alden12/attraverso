@@ -229,6 +229,15 @@ body {
   border-radius: 10px;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
 }
+.settings__head {
+  /* Never shrunk: the dialog is a capped column, and on a phone its overflow squeezed this line to nothing. */
+  flex: none;
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .settings__label {
   margin-top: 4px;
   font-size: 11px;
@@ -249,12 +258,6 @@ body {
 }
 .topbar__title strong {
   letter-spacing: -0.01em;
-}
-.topbar__sub {
-  display: block;
-  color: var(--muted);
-  font-size: 12px;
-  margin-top: 2px;
 }
 
 /* Project switcher (VIEW-4). It carries the project's name where the title used to be, so it is weighted like
@@ -330,12 +333,6 @@ body {
   .topbar__title {
     min-width: 0;
     flex: 1 1 auto;
-  }
-  .topbar__sub {
-    display: block;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
   .picker {
     max-width: 100%;

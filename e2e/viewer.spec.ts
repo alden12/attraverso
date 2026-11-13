@@ -52,14 +52,13 @@ test.describe("the served store", () => {
     // Finished work is hidden by default; this suite is about the whole plan, so it starts with all of it - and
     // waits for it, or a test's first count reads the map from before the done items came back.
     await settings(page, "done");
-    await expect(page.locator(".topbar__sub")).toContainText(`${items.length} of ${items.length}`);
+    await expect(page.locator('.toolbtn[aria-haspopup="dialog"]')).toContainText("all shown");
   });
 
   test("hides finished work until asked, and says so on the settings button", async ({ page }) => {
     await settings(page, "done"); // back to the default
     const done = items.filter((item) => item.status === "done").length;
     expect(done).toBeGreaterThan(0); // the fixture has finished work in it; guard the guard
-    await expect(page.locator(".topbar__sub")).toContainText(`${items.length - done} of ${items.length} items`);
     await expect(page.locator('.toolbtn[aria-haspopup="dialog"]')).toContainText(`${done} hidden`);
   });
 
@@ -67,8 +66,10 @@ test.describe("the served store", () => {
     // The title is the served project's own name now, not a hardcoded string: the viewer renders whichever
     // store `/api/store` hands it (VIEW-11), so this asserts it picked up the right one.
     await expect(page.locator(".topbar__title")).toContainText(project.name);
-    await expect(page.locator(".topbar__sub")).toContainText(`${items.length} of ${items.length} items`);
-    await expect(page.locator(".topbar__sub")).toContainText("demo.apm.yaml");
+    // Which plan file this is lives at the top of the view dialog, with the project's name.
+    await page.locator('.toolbtn[aria-haspopup="dialog"]').click();
+    await expect(page.locator(".settings__head")).toHaveText(`${project.name} - demo.apm.yaml`);
+    await page.keyboard.press("Escape");
     // Two projects are served, so the switcher is present and offers both (VIEW-4).
     await expect(page.locator(".picker")).toBeVisible();
     await expect(page.locator(".picker option")).toHaveCount(2);
@@ -146,7 +147,7 @@ test.describe("the served store", () => {
 
     await settings(page, "PLAT");
 
-    await expect(page.locator(".topbar__sub")).toContainText(`${items.length - platItems} of ${items.length}`);
+    await expect(page.locator('.toolbtn[aria-haspopup="dialog"]')).toContainText(`${platItems} hidden`);
     // Polled: the subtitle updates a frame before the re-layout drops the filtered cards.
     await expect.poll(() => page.locator(".item-node").count()).toBeLessThan(before);
   });

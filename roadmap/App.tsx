@@ -599,17 +599,6 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
             <strong className="picker picker--static">{project?.name ?? "no project"}</strong>
           )}
           </span>
-          {/* No noun after the name. This graph is a roadmap for a software project and a curriculum for a
-              language one, and the domain layer is careful not to assume which - the toolbar should not either.
-              The store path, not a fixed filename: the viewer renders whichever store was served to it, so
-              "which plan am I looking at?" is a real question. Basename inline, since the full path is long
-              enough to crowd the toolbar and is only wanted occasionally; all of it on hover. */}
-          <span className="topbar__sub" title={plan.storePath ?? "a database is the source of truth here - there is no plan file"}>
-            {/* No path in cloud mode (OPS-11), where the database *is* the store. Named rather than left
-                blank, because "which plan am I looking at?" still has an answer, just not a filename - and
-                the connection string is not it, since it carries a password. */}
-            {visibleItems.length} of {items.length} items - {plan.storePath?.split("/").pop() ?? "database"}
-          </span>
         </div>
         <div className="filters">
           {/* Toolbar buttons carry their detail underneath rather than inline (a caption below the icon), which
@@ -659,6 +648,13 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
           <>
             <div className="settings__backdrop" onClick={() => setSettingsOpen(false)} />
             <div className="settings" role="dialog" aria-label="View settings">
+              {/* Which plan this is, here rather than under the title, where it was a second line on every screen
+                  for a question asked occasionally; the count beside it moved to the view button's caption. The
+                  basename, with the full path on hover. In cloud mode there is no file (OPS-11), and it says so
+                  rather than going blank: the connection string is not the answer, since it carries a password. */}
+              <div className="settings__head" title={plan.storePath ?? "a database is the source of truth here - there is no plan file"}>
+                {project?.name ?? "No project"} - {plan.storePath?.split("/").pop() ?? "database"}
+              </div>
               {!(view === "calendar" && allProjects) && <div className="settings__label">Areas</div>}
               {!(view === "calendar" && allProjects) && (
                 <div className="filters__group">
