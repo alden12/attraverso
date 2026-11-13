@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Panel, useStore } from "@xyflow/react";
+import { useEffect } from "react";
+import { useStore } from "@xyflow/react";
 
 /**
  * The fade from an area's cards to its overview as the graph zooms out (`VIEW-52`), as two CSS variables on the
@@ -10,9 +10,9 @@ import { Panel, useStore } from "@xyflow/react";
  * state they would re-render every node each time, where as variables only the browser repaints.
  *
  * **Two bands, so each can be tuned.** The cards fade out over one band of zoom and the overview fades in over
- * another. The defaults were set by eye with the sliders below on this repo's plan (2026-11-13): one crossfade,
- * late, from 0.19 to the floor at 0.05, which leaves the cards in place well past the point their text is legible,
- * since their shapes and edges still say where things are long after their words stop.
+ * another. These were set by eye with dev sliders on this repo's plan (2026-11-13): one crossfade, late, from 0.19
+ * to the floor at 0.05, which leaves the cards in place well past the point their text is legible, since their
+ * shapes and edges still say where things are long after their words stop.
  */
 export interface FadeBands {
   /** Zoom at which the cards start to fade, and at which they are gone. */
@@ -23,77 +23,23 @@ export interface FadeBands {
   overviewTo: number;
 }
 
-export const DEFAULT_BANDS: FadeBands = { cardsFrom: 0.19, cardsTo: 0.05, overviewFrom: 0.19, overviewTo: 0.05 };
-
-const TUNING_KEY = "attraverso.fade.bands";
+export const FADE_BANDS: FadeBands = { cardsFrom: 0.19, cardsTo: 0.05, overviewFrom: 0.19, overviewTo: 0.05 };
 
 /** How far into a band `zoom` is, 0 above its start to 1 past its end (zooming out runs from high to low). */
 const ramp = (zoom: number, from: number, to: number): number =>
   from === to ? (zoom <= to ? 1 : 0) : Math.min(Math.max((from - zoom) / (from - to), 0), 1);
 
-/**
- * Dev sliders for the bands, to settle the feel by eye: on the dev server, or anywhere with `?tune` in the URL. Kept in this browser between reloads; "copy" puts the values on the clipboard to make them the defaults.
- */
-const tuning =
-  typeof window !== "undefined" &&
-  // Not under an automated browser on the dev server, where the end-to-end suite runs, since it sits over the graph.
-  ((import.meta.env.DEV && !navigator.webdriver) || new URLSearchParams(window.location.search).has("tune"));
-
-function savedBands(): FadeBands {
-  if (!tuning) return DEFAULT_BANDS;
-  try {
-    return { ...DEFAULT_BANDS, ...(JSON.parse(window.localStorage.getItem(TUNING_KEY) ?? "{}") as Partial<FadeBands>) };
-  } catch {
-    return DEFAULT_BANDS;
-  }
-}
-
 export function ZoomFade() {
   const zoom = useStore((state) => state.transform[2]);
   const canvas = useStore((state) => state.domNode);
-  const [bands, setBands] = useState<FadeBands>(savedBands);
 
   useEffect(() => {
     if (canvas === null) return;
-    const cards = 1 - ramp(zoom, bands.cardsFrom, bands.cardsTo);
+    const cards = 1 - ramp(zoom, FADE_BANDS.cardsFrom, FADE_BANDS.cardsTo);
     canvas.style.setProperty("--cards", cards.toFixed(3));
-    canvas.style.setProperty("--overview", ramp(zoom, bands.overviewFrom, bands.overviewTo).toFixed(3));
+    canvas.style.setProperty("--overview", ramp(zoom, FADE_BANDS.overviewFrom, FADE_BANDS.overviewTo).toFixed(3));
     canvas.dataset.far = String(cards < 0.5);
-  }, [zoom, canvas, bands]);
+  }, [zoom, canvas]);
 
-  if (!tuning) return null;
-
-  const save = (next: FadeBands) => {
-    setBands(next);
-    try {
-      window.localStorage.setItem(TUNING_KEY, JSON.stringify(next));
-    } catch {
-      // Unsaved: the sliders still work for this page.
-    }
-  };
-  const set = (key: keyof FadeBands, value: number) => save({ ...bands, [key]: value });
-  const slider = (key: keyof FadeBands, label: string) => (
-    <label className="fade-tuner__row">
-      <span>{label}</span>
-      <input type="range" min={0.05} max={1.5} step={0.01} value={bands[key]} onChange={(event) => set(key, Number(event.target.value))} />
-      <output>{bands[key].toFixed(2)}</output>
-    </label>
-  );
-
-  return (
-    <Panel position="bottom-center" className="fade-tuner">
-      <div className="fade-tuner__head">
-        <strong>Fade</strong>
-        <span>zoom {zoom.toFixed(2)}</span>
-      </div>
-      {slider("cardsFrom", "cards start")}
-      {slider("cardsTo", "cards gone")}
-      {slider("overviewFrom", "overview start")}
-      {slider("overviewTo", "overview full")}
-      <div className="fade-tuner__actions">
-        <button onClick={() => void navigator.clipboard.writeText(JSON.stringify(bands))}>copy</button>
-        <button onClick={() => save(DEFAULT_BANDS)}>reset</button>
-      </div>
-    </Panel>
-  );
+  return null;
 }
