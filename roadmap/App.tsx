@@ -587,7 +587,9 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
               lose the phone's own picker, the keyboard and the screen reader for the sake of one caption. Clicking
               lands on the select, which opens the browser's own list, and the <label> is what ties the two. */}
           {(() => {
-            const file = plan.storePath === null ? null : plan.storePath.split(",")[0]!.split("/").pop()!;
+            // The project's own plan file, relative to its repo (VIEW-48): a split plan has two, which the
+            // basename alone named identically. An older server sends no map, so fall back to the basename.
+            const file = project?.file ?? (plan.storePath === null ? null : plan.storePath.split(",")[0]!.split("/").pop()!);
             const caption = file !== null && (
               <span className="picker__file" title={plan.storePath ?? undefined}>
                 {file}
@@ -680,7 +682,7 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
                   is the project's name alone: the connection string is not a name, and it carries a password. */}
               <div className="settings__head" title={plan.storePath ?? undefined}>
                 {project?.name ?? "No project"}
-                {plan.storePath !== null && ` - ${plan.storePath.split("/").pop()}`}
+                {plan.storePath !== null && ` - ${project?.file ?? plan.storePath.split("/").pop()}`}
               </div>
               {!(view === "calendar" && allProjects) && <div className="settings__label">Areas</div>}
               {!(view === "calendar" && allProjects) && (

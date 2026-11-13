@@ -17,7 +17,7 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { existsSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
-import { delimiter, dirname, isAbsolute, join } from "node:path";
+import { delimiter, dirname, isAbsolute, join, relative } from "node:path";
 import { isStoreFile, layoutPathFor, LEGACY_STORE_SUFFIX, STORE_FILE } from "./paths";
 import type { Database } from "../db/client";
 import { ensureUser, LOCAL_IDENTITY } from "../domain/users";
@@ -79,13 +79,25 @@ export function resolveStorePaths(explicit?: string[]): [string, ...string[]] {
  * The root of the git repo `start` is in, or undefined outside one. `.git` is a directory in a clone and a file
  * in a worktree or submodule, and either marks the root.
  */
-function repoRootAbove(start: string): string | undefined {
+export function repoRootAbove(start: string): string | undefined {
   for (let dir = start; ; ) {
     if (existsSync(join(dir, ".git"))) return dir;
     const parent = dirname(dir);
     if (parent === dir) return undefined;
     dir = parent;
   }
+}
+
+/**
+ * How a plan file is named to a person (`VIEW-48`): relative to the root of the repo it is in
+ * (`packages/cloud/attraverso.yaml`), which is what tells two plan files in one repo apart where the basename
+ * cannot; `~/...` for one in the home directory; the absolute path otherwise.
+ */
+export function displayPath(path: string): string {
+  const root = repoRootAbove(dirname(path));
+  if (root !== undefined) return relative(root, path);
+  const home = homedir();
+  return path.startsWith(`${home}/`) ? `~/${path.slice(home.length + 1)}` : path;
 }
 
 /**
@@ -399,6 +411,11 @@ export interface StoreFile {
    * recording one number expensive.
    */
   appendMeasurements(records: MeasurementRecord[]): Promise<void>;
+  /**
+   * The file a project lives in, by key: the one that supplied it, or the primary for a project created since,
+   * which is where a save puts it. Runtime knowledge rather than anything a file records about itself.
+   */
+  fileOf(key: string): string;
 }
 
 /**
@@ -532,6 +549,7 @@ export function createStoreFile(where: string | string[]): StoreFile {
   return {
     path: primary.path,
     paths: files.map((file) => file.path),
+    fileOf: (key) => (files.find((file) => file.keys.has(key)) ?? primary).path,
 
     // Not queued: this runs once at boot, before the server accepts a call, so there is nothing to race.
     async open(db) {

@@ -10,7 +10,7 @@ import { basename } from "node:path";
 import type { Database } from "../db/client";
 import { createInMemoryDb } from "../db/memory";
 import { requireCurrentSchema } from "../db/schemaVersion";
-import { accessTo, createStoreFile, resolveStorePaths, storePathsIn, type StoreAccess } from "../serialise/store";
+import { accessTo, createStoreFile, displayPath, resolveStorePaths, storePathsIn, type StoreAccess } from "../serialise/store";
 import { createUnavailableMediaStore } from "../media/store";
 import { isLegacyStore } from "../serialise/paths";
 import { fileSources, type ViewerSources } from "./viewer";
@@ -47,7 +47,7 @@ export async function fileBacked(): Promise<Runtime> {
     db,
     access: accessTo(store, db),
     // Media resolves against the primary store, which is also where a project created at runtime lands.
-    sources: fileSources(store.path),
+    sources: { ...fileSources(store.path), fileOf: (key) => displayPath(store.fileOf(key)) },
     describe: `store: ${store.paths.join(", ")}${created ? ", created" : ""}${legacyNote(store.paths)}`,
   };
 }

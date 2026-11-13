@@ -68,7 +68,8 @@ test.describe("the served store", () => {
     await expect(page.locator(".topbar__title")).toContainText(project.name);
     // Which plan file this is lives at the top of the view dialog, with the project's name.
     await page.locator('.toolbtn[aria-haspopup="dialog"]').click();
-    await expect(page.locator(".settings__head")).toHaveText(`${project.name} - demo.apm.yaml`);
+    // Relative to the repo root (VIEW-48), which is `packages/core/...` here and `e2e/...` in the public repo.
+    await expect(page.locator(".settings__head")).toHaveText(new RegExp(`^${project.name} - (.+/)?e2e/fixture/demo\\.apm\\.yaml$`));
     await page.keyboard.press("Escape");
     // Two projects are served, so the switcher is present and offers both (VIEW-4).
     await expect(page.locator(".picker")).toBeVisible();

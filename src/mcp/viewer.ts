@@ -163,6 +163,8 @@ export interface ViewerHost {
 export interface ViewerSources {
   media: MediaStore;
   storePath: string | null;
+  /** Each project's plan file as a person would name it (`VIEW-48`), or null where there are no files. */
+  fileOf?: (key: string) => string | null;
 }
 
 /** The local arrangement: blobs beside the plan file. The default everywhere except database mode. */
@@ -250,7 +252,13 @@ export function createViewerHost(db: Database, sources: ViewerSources, store: St
       // shapes - which they did until `METRIC-4` added a field to only one of them. `uploadsDisabled` is a
       // reason rather than a boolean: whatever the viewer shows in the drop zone's place should be the
       // store's own words (`OPS-11`).
-      return json(200, await storeFeed(db, caller.ownerId, { store, path: storePath, uploadsDisabled: media.unavailable ?? null }));
+      // Each project's own plan file (VIEW-48): a split plan has two, and the basename alone named both the same.
+      const files: Record<string, string> = {};
+      for (const p of store.projects) {
+        const file = sources.fileOf?.(p.key) ?? null;
+        if (file !== null) files[p.key] = file;
+      }
+      return json(200, await storeFeed(db, caller.ownerId, { store, path: storePath, uploadsDisabled: media.unavailable ?? null, files }));
     }
 
     // The search box (VIEW-25). A read, open like `/api/store`, through the one function every host shares.

@@ -199,6 +199,8 @@ interface StoreResponse {
   metrics?: Record<string, MetricSummary[]>;
   /** Why uploads are refused, or null when they work. */
   uploadsDisabled?: string | null;
+  /** Each project's plan file, relative to its repo (VIEW-48), by key. Absent where there are no files. */
+  files?: Record<string, string>;
 }
 
 /** One project, ready to render. */
@@ -217,6 +219,8 @@ export interface ProjectPlan {
   metrics: Map<string, MetricSummary[]>;
   /** The project's context sections (`VIEW-30`), `protocol` first and the rest in the project's own order. */
   context: ContextSection[];
+  /** Its plan file relative to the repo (`packages/cloud/attraverso.yaml`), or null where there is no file. */
+  file: string | null;
 }
 
 export interface ContextSection {
@@ -255,7 +259,7 @@ function groupBy<T>(rows: T[], key: (row: T) => string): Map<string, T[]> {
 export async function fetchPlan(): Promise<Plan> {
   const response = await fetch(STORE_ENDPOINT, { headers: authHeaders() });
   if (!response.ok) throw new Error(`${STORE_ENDPOINT} returned ${response.status} ${response.statusText}`);
-  const { path, store, metrics, uploadsDisabled } = (await response.json()) as StoreResponse;
+  const { path, store, metrics, uploadsDisabled, files } = (await response.json()) as StoreResponse;
 
   return {
     storePath: path,
@@ -291,6 +295,7 @@ export async function fetchPlan(): Promise<Plan> {
       attachments: new Map(project.items.filter((item) => item.attachments?.length).map((item) => [item.ref, item.attachments!])),
       metrics: groupBy(metrics?.[project.key] ?? [], (m) => m.ref ?? ""),
       context: orderSections(project.context ?? {}),
+      file: files?.[project.key] ?? null,
     })),
   };
 }

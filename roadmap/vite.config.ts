@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
 import { existsSync } from "node:fs";
-import { asPlan, mergeLayout, parseLayout, resolveStorePaths, type Store } from "../src/serialise/store";
+import { asPlan, displayPath, mergeLayout, parseLayout, resolveStorePaths, type Store } from "../src/serialise/store";
 import { layoutPathFor } from "../src/serialise/paths";
 import type { Database } from "../src/db/client";
 import { summariseFromFiles } from "../src/serialise/measurements";
@@ -111,7 +111,9 @@ function servePlan(): Plugin {
             {},
             ...(await Promise.all(loaded.map(({ path, store: one }) => summariseFromFiles(path, (one.projects ?? []).map((project) => project.key))))),
           );
-          response.end(JSON.stringify({ path: described, store, metrics }));
+          // Each project's own plan file, relative to its repo (VIEW-48), the same as the real hosts send.
+          const files = Object.fromEntries(loaded.flatMap(({ path, store: one }) => (one.projects ?? []).map((project) => [project.key, displayPath(path)])));
+          response.end(JSON.stringify({ path: described, store, metrics, files }));
         } catch (error) {
           // Report it as data rather than crashing the request: a missing store is the ordinary first-run
           // state, and the viewer turns this message into something the user can act on.

@@ -1441,3 +1441,35 @@ describe("the layout's own file (VIEW-23.2)", () => {
     await rm(dir, { recursive: true, force: true });
   });
 });
+
+describe("naming a project's plan file (VIEW-48)", () => {
+  it("is relative to the repo root, so two plan files in one repo are told apart", async () => {
+    const { displayPath } = await import("./store");
+    const root = await mkdtemp(join(tmpdir(), "apm-display-"));
+    await mkdir(join(root, ".git"));
+    await mkdir(join(root, "packages", "cloud"), { recursive: true });
+    expect(displayPath(join(root, "attraverso.yaml"))).toBe("attraverso.yaml");
+    expect(displayPath(join(root, "packages", "cloud", "attraverso.yaml"))).toBe(join("packages", "cloud", "attraverso.yaml"));
+    await rm(root, { recursive: true, force: true });
+  });
+
+  it("knows which file each project came from, and puts a new one in the primary", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "apm-fileof-"));
+    const [core, cloud] = [join(dir, "core.apm.yaml"), join(dir, "cloud.apm.yaml")];
+    const seeded = await freshDb();
+    await createProject(seeded.db, { key: "apm", name: "Core", type: "software", ownerId: seeded.ownerId }, ACTOR);
+    await saveStore(seeded.db, core);
+    const other = await freshDb();
+    await createProject(other.db, { key: "cloud", name: "Cloud", type: "software", ownerId: other.ownerId }, ACTOR);
+    await saveStore(other.db, cloud);
+
+    const { db, close } = await freshDb();
+    const store = createStoreFile([core, cloud]);
+    await store.open(db);
+    expect(store.fileOf("apm")).toBe(core);
+    expect(store.fileOf("cloud")).toBe(cloud);
+    expect(store.fileOf("new")).toBe(core);
+    await Promise.all([close(), seeded.close(), other.close()]);
+    await rm(dir, { recursive: true, force: true });
+  });
+});

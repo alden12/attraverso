@@ -27,6 +27,8 @@ export interface StoreFeed {
   metrics: Record<string, MetricSummary[]>;
   /** Why uploads are refused, or null when they work (`OPS-11`). */
   uploadsDisabled: string | null;
+  /** Each project's plan file, relative to its repo (`VIEW-48`), by key. Absent where there are no files. */
+  files?: Record<string, string>;
 }
 
 /** Assemble the feed. `store` is passed in already projected, because the two callers reach `asPlan` by
@@ -34,7 +36,7 @@ export interface StoreFeed {
 export async function storeFeed(
   db: Database,
   ownerId: string,
-  parts: { store: Store; path: string | null; uploadsDisabled: string | null },
+  parts: { store: Store; path: string | null; uploadsDisabled: string | null; files?: Record<string, string> },
 ): Promise<StoreFeed> {
   return { ...parts, metrics: await metricsForFeed(db, ownerId) };
 }
