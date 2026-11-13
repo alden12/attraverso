@@ -85,7 +85,13 @@ const buildStamp = (): string =>
 /** The dependency field, shared by create and edit so the two cannot describe it differently. Declarative on
  *  purpose: the array is the whole set, which is what lets a wrong edit be corrected rather than only added to. */
 /** A planned date (`CAL-1`). Validated in the domain, which names what was wrong with it. */
-const date = (what: string, more?: string) => z.string().describe(`${what}, as YYYY-MM-DD: a calendar day, not a time.${more ? ` ${more}` : ""}`);
+const dateText = (what: string, more?: string) => `${what}, as YYYY-MM-DD: a calendar day, not a time.${more ? ` ${more}` : ""}`;
+const date = (what: string, more?: string) => z.string().describe(dateText(what, more));
+/**
+ * A date that `null` clears. Described *after* `.nullable()`, because zod 4 writes a nullable as an `anyOf` and
+ * a description set first lands on the string branch inside it, where a client showing the field never looks.
+ */
+const clearableDate = (what: string) => z.string().nullable().describe(dateText(`${what}; null clears it`));
 
 const DEPS = z
   .array(z.string())
@@ -855,8 +861,8 @@ export function registerTools(server: McpServer, db: Database, store: StoreAcces
         title: z.string().optional(),
         body: z.string().describe("The item's description, in markdown.").optional(),
         deps: DEPS,
-        start: date("When work on it is planned to begin; null clears it").nullable().optional(),
-        due: date("When it is due; null clears it").nullable().optional(),
+        start: clearableDate("When work on it is planned to begin").optional(),
+        due: clearableDate("When it is due").optional(),
       },
     },
     async ({ project, ref, title, body, deps, start, due }): Promise<CallToolResult> =>

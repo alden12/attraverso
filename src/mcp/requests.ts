@@ -19,7 +19,7 @@ import { STATUS_VALUES } from "../../scripts/tickets";
  * phrased for a developer reading a stack trace, and this string is shown to whoever is using the viewer.
  */
 export const ticketChange = z.object({
-  status: z.enum(STATUS_VALUES, { errorMap: () => ({ message: `must be one of: ${STATUS_VALUES.join(", ")}` }) }),
+  status: z.enum(STATUS_VALUES, { error: `must be one of: ${STATUS_VALUES.join(", ")}` }),
 });
 
 /**
