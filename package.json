@@ -37,6 +37,7 @@
     "pg:down": "docker compose -f docker-compose.test.yml down -v",
     "typecheck": "tsc --noEmit",
     "apm:check": "vite-node scripts/checkStore.ts",
+    "layout:history": "vite-node scripts/layoutHistory.ts",
     "setup:desktop": "vite-node scripts/setupDesktop.ts",
     "verify": "yarn typecheck && yarn viewer:build && yarn test",
     "verify:all": "yarn verify && yarn test:e2e",
