@@ -17,8 +17,8 @@ export function AreaGroupNode({ data, selected }: NodeProps<AreaNode>) {
       <div className="area-box area-box--collapsed" style={{ "--area": data.colour } as React.CSSProperties} title="Click to open this area">
         <Handle type="target" position={Position.Left} />
         <div className="area-box__title">
-          <span className="area-box__name">{data.area}</span>
-          {named(data) && <span className="area-box__label">{data.name}</span>}
+          <span className="area-box__name">{named(data) ? data.name : data.area}</span>
+          {named(data) && <span className="area-box__label">{data.area}</span>}
           <span className="area-box__count">{data.count}</span>
         </div>
         <div className="area-box__summary">
@@ -42,8 +42,10 @@ export function AreaGroupNode({ data, selected }: NodeProps<AreaNode>) {
         handleClassName="box-resize-handle"
       />
       <div className="area-box__title">
-        <span className="area-box__name">{data.area}</span>
-        {named(data) && <span className="area-box__label">{data.name}</span>}
+        {/* The name leads, in the area's colour, with the key it goes by on refs after it; the key alone where the
+            plan gives it no name. */}
+        <span className="area-box__name">{named(data) ? data.name : data.area}</span>
+        {named(data) && <span className="area-box__label">{data.area}</span>}
         <span className="area-box__count">{data.count}</span>
       </div>
       {/* What the area is, for when its cards are too small to read (VIEW-52): faded in by `--overview`, which the graph

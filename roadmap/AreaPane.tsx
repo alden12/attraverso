@@ -78,12 +78,17 @@ export function AreaPane({
           ×
         </button>
       </div>
-      {/* The name the plan gives it, with the key it goes by on refs beside it; the key alone where it has none. */}
+      {/* The name the plan gives it, in the area's colour, with the key it goes by on refs after it, greyed; the key
+          alone, coloured, where it has no name. */}
       <h2 className="detail__title area-pane__title">
-        {name !== undefined && name !== area && <span>{name}</span>}
-        <span className="area-pane__key" style={{ color: colour }}>
-          {area}
-        </span>
+        {name !== undefined && name !== area ? (
+          <>
+            <span style={{ color: colour }}>{name}</span>
+            <span className="area-pane__key">{area}</span>
+          </>
+        ) : (
+          <span style={{ color: colour }}>{area}</span>
+        )}
       </h2>
 
       <div className="area-pane__progress">

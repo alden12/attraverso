@@ -970,22 +970,22 @@ body {
   display: flex;
   align-items: baseline;
   gap: 8px;
-  padding: 9px 14px;
+  padding: 13px 14px 9px;
   font-weight: 700;
   letter-spacing: 0.04em;
 }
-/* Bigger than a card's text, since an area is what you find your way by, and it fits the 46px the layout keeps
-   for the title bar (`PAD_TOP` in graph.ts), so nothing moves. */
+/* Bigger than a card's text, since an area is what you find your way by, and it fits the 52px the layout keeps
+   for the title bar (`AREA_PAD_TOP` in graph.ts). */
 .area-box__name {
   color: var(--area);
   font-size: 18px;
 }
-/* The area's own name beside its key, quieter, since the key is what refs carry. */
+/* The key after the area's name, greyed: it is what refs carry, and the name is what you read the map by. */
 .area-box__label {
-  color: var(--text);
+  color: var(--muted);
   font-size: 15px;
-  font-weight: 600;
-  letter-spacing: 0;
+  font-weight: 700;
+  letter-spacing: 0.04em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1515,6 +1515,7 @@ body {
   gap: 0 10px;
 }
 .area-pane__key {
+  color: var(--muted);
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.04em;

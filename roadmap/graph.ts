@@ -207,6 +207,11 @@ const itemHeight = (item: RoadmapItem): number => Math.max(ITEM_HEIGHT, CARD_CHR
 const GAP = 34; // horizontal/vertical space between packed cards
 const PAD_X = 18; // box inner side padding
 const PAD_TOP = 46; // box title bar
+// An area frame's title bar, taller than a parent item's: its title is bigger (18px, so it reads as the place you
+// find your way by), and the extra height is given back above it so it does not sit cramped against the cards.
+const AREA_PAD_TOP = 52;
+/** The title bar above a container's children: an area frame's (`area:KEY`) or a parent item's box. */
+const padTopOf = (containerId: string | undefined): number => (containerId?.startsWith("area:") ? AREA_PAD_TOP : PAD_TOP);
 const PAD_BOTTOM = 20;
 const AREA_GAP = 68; // between area boxes - a wide gutter so cross-area links have room to run
 // A collapsed area's summary box (`VIEW-34`): one card wide, so it sits in the map at the scale of what it stands
@@ -810,7 +815,7 @@ export function buildGraph(
     const { placements, box } = layoutSiblings(siblings, items, memory);
     const nodes = siblings.flatMap((sibling): RoadmapNode[] => {
       const placement = placements.get(sibling.id)!;
-      const position = { x: PAD_X + placement.x, y: PAD_TOP + placement.y };
+      const position = { x: PAD_X + placement.x, y: padTopOf(containerId) + placement.y };
       const kids = childrenOf(items, sibling.id);
       if (kids.length > 0) {
         const inner = buildContainer(sibling.id, kids);
@@ -850,7 +855,9 @@ export function buildGraph(
     if (topTickets.length === 0) return [];
     if (collapsed.has(area)) return [{ area, inner: { nodes: [], box: COLLAPSED_SIZE }, size: COLLAPSED_SIZE }];
     const inner = buildContainer(`area:${area}`, topTickets);
-    return [{ area, inner, size: inner.box }];
+    // `boxOf` sizes every container for a parent item's title bar; an area's is taller.
+    const size = { ...inner.box, height: inner.box.height + AREA_PAD_TOP - PAD_TOP };
+    return [{ area, inner: { ...inner, box: size }, size }];
   });
 
   // One box per foreign project, holding a placeholder for each of its refs this plan points at. A box rather
@@ -869,7 +876,7 @@ export function buildGraph(
           id: ghostId,
           type: "ghost",
           parentId: `area:${foreignArea(project)}`,
-          position: { x: PAD_X, y: PAD_TOP + index * (GHOST_HEIGHT + GHOST_GAP) },
+          position: { x: PAD_X, y: AREA_PAD_TOP + index * (GHOST_HEIGHT + GHOST_GAP) },
           // Hidden with the last item that referenced it, matching the rule for an area box.
           hidden: (dependentsByGhost.get(ghostId) ?? []).every((id) => hiddenIds.has(id)),
           data: { project, ref, dimmed: neighbours ? !neighbours.has(ghostId) : false },
@@ -879,7 +886,7 @@ export function buildGraph(
       });
       const size = {
         width: ITEM_WIDTH + PAD_X * 2,
-        height: PAD_TOP + refs.length * GHOST_HEIGHT + (refs.length - 1) * GHOST_GAP + PAD_BOTTOM,
+        height: AREA_PAD_TOP + refs.length * GHOST_HEIGHT + (refs.length - 1) * GHOST_GAP + PAD_BOTTOM,
       };
       return { area: foreignArea(project), foreign: project, inner: { nodes, box: size }, size };
     });
@@ -968,7 +975,7 @@ export function memoryOf(nodes: RoadmapNode[]): LayoutMemory {
 /** A node's position as the memory holds it: relative to its container's content origin, inside the padding
  *  React Flow's own position includes. Also how a drag is recorded, so a dropped node becomes its new place. */
 export const remembered = (parentId: string | undefined, position: { x: number; y: number }): { x: number; y: number } =>
-  parentId ? { x: snap(position.x - PAD_X), y: snap(position.y - PAD_TOP) } : { x: snap(position.x), y: snap(position.y) };
+  parentId ? { x: snap(position.x - PAD_X), y: snap(position.y - padTopOf(parentId)) } : { x: snap(position.x), y: snap(position.y) };
 
 /**
  * Build the dependency edges as a layer independent of the node layout, so hover and selection restyle them

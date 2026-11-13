@@ -269,7 +269,8 @@ test.describe("the served store", () => {
     });
     await page.reload();
     const frame = page.locator('.react-flow__node[data-id="area:DATA"]');
-    await expect(frame.locator(".area-box__label")).toHaveText("Storage"); // beside the key on the frame
+    await expect(frame.locator(".area-box__title .area-box__name")).toHaveText("Storage"); // leading the frame's title
+    await expect(frame.locator(".area-box__label")).toHaveText("DATA"); // with the key after it
     await expect(frame.locator(".area-box__overview-name")).toHaveText("Storage"); // and the zoomed-out overview
     await expect(frame.locator(".area-box__overview-description")).toHaveText("Where the plan lives.");
 
