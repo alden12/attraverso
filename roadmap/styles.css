@@ -1089,8 +1089,8 @@ body {
 /* More below the bottom edge: the last of it fades out rather than stopping at a hard line, which says there is more
    to scroll to. Gone once the end is reached. */
 .pane[data-more="true"] .detail {
-  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 48px), transparent);
-  mask-image: linear-gradient(to bottom, #000 calc(100% - 48px), transparent);
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent);
 }
 .pane__resize {
   position: absolute;
