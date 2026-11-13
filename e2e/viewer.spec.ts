@@ -232,6 +232,16 @@ test.describe("the served store", () => {
     await expect.poll(async () => Math.round((await pane.boundingBox())!.width)).toBe(Math.round(before + 123));
   });
 
+  test("fades the pane's bottom edge while there is more to scroll to, and not at the end (VIEW-50)", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 320 }); // short enough that an item's pane overflows
+    await page.locator(".item-node", { hasText: "DATA-1" }).first().click();
+    await expect(page.locator(".detail__doc")).toContainText("Drizzle ORM over");
+    const pane = page.locator(".pane");
+    await expect(pane).toHaveAttribute("data-more", "true");
+    await page.locator(".pane .detail").evaluate((element) => element.scrollTo({ top: element.scrollHeight }));
+    await expect(pane).toHaveAttribute("data-more", "false");
+  });
+
   test("captures the full graph for visual inspection", async ({ page }) => {
     // Give the dagre layout and the fitView transition time to settle before capturing.
     await page.waitForTimeout(1200);

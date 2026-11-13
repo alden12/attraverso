@@ -575,6 +575,30 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
 
   const selected = selectedId ? (items.find((item) => item.id === selectedId) ?? null) : null;
   const paneOpen = selected !== null || contextView !== null || areaShown !== null || listPane !== null;
+  // Whether the pane's content runs on below its bottom edge, for the fade that says so. Watched rather than
+  // computed, since the answer changes with scrolling, with an item's details arriving, with a section opening
+  // and with a resize; the scroller is looked up each time, because what the pane holds swaps it for another.
+  const paneRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const pane = paneRef.current;
+    if (!paneOpen || pane === null) return;
+    const update = () => {
+      const scroller = pane.querySelector<HTMLElement>(".detail");
+      const more = scroller !== null && scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight > 2;
+      pane.dataset.more = String(more);
+    };
+    update();
+    pane.addEventListener("scroll", update, true); // scroll does not bubble, so caught on the way down
+    const mutations = new MutationObserver(update);
+    mutations.observe(pane, { childList: true, subtree: true, characterData: true });
+    const sizes = new ResizeObserver(update);
+    sizes.observe(pane);
+    return () => {
+      pane.removeEventListener("scroll", update, true);
+      mutations.disconnect();
+      sizes.disconnect();
+    };
+  }, [paneOpen]);
 
   /**
    * What the calendar places (`CAL-3`). For one project it is exactly what the graph shows - the filters apply
@@ -1089,7 +1113,7 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
         {/* The pane floats over the canvas's top right rather than taking a column of its own, and is only as tall
             as what it holds, so a short one (the next list, an area) leaves the graph below it in view. */}
         {paneOpen && (
-          <div className="pane" style={{ width: paneWidth }}>
+          <div className="pane" ref={paneRef} style={{ width: paneWidth }}>
             <div className="pane__resize" onPointerDown={startResize} title="Drag to resize" aria-hidden="true" />
         {selected && (
           <aside className="detail">
