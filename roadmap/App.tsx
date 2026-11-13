@@ -112,6 +112,11 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
   const items = project?.items ?? NO_ITEMS; // fetched once and held in state above, so the reference is stable
   const areas = useMemo(() => areasOf(items), [items]);
   const colours = useMemo(() => areaColours(areas, project?.areaOrder), [areas, project?.areaOrder]);
+  /** An area's own name (PROJ-3), where the plan gives it one other than its key. */
+  const areaName = (area: string): string | null => {
+    const name = project?.areaInfo[area]?.name;
+    return name === undefined || name === area ? null : name;
+  };
 
   const [hiddenAreas, setHiddenAreas] = useState<Set<string>>(new Set());
   // Finished work is hidden by default: on a plan that has been running a while it is most of the map, and the
@@ -533,12 +538,16 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
       const picked = new Set(current.filter((node) => node.selected === true).map((node) => node.id));
       return drawn.map((node) => {
         const resized = resizedSizes.current[node.id];
-        const sized = resized ? { ...node, style: { ...node.style, width: resized.width, height: resized.height } } : node;
+        let sized: RoadmapNode = resized ? { ...node, style: { ...node.style, width: resized.width, height: resized.height } } : node;
+        // An area's name and description (PROJ-3), for its title and its zoomed-out overview. Laid on here rather
+        // than passed into the layout, which places boxes and has no use for what they are called.
+        const info = node.type === "area" ? project?.areaInfo[(node.data as { area: string }).area] : undefined;
+        if (info !== undefined) sized = { ...sized, data: { ...sized.data, name: info.name, description: info.description } } as RoadmapNode;
         return picked.has(node.id) ? { ...sized, selected: true } : sized;
       });
     });
     // layoutNonce forces a re-run after a reset or a drop (the memory ref changed, which React cannot see).
-  }, [items, areas, colours, colourMode, selectedId, hiddenIds, collapsedAreas, layoutNonce, remember, setNodes]);
+  }, [items, areas, colours, colourMode, selectedId, hiddenIds, collapsedAreas, layoutNonce, remember, setNodes, project?.areaInfo]);
 
   // Edges are their own layer: hover and selection restyle them here without touching the node layout above.
   useEffect(() => {
@@ -846,6 +855,7 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
                         >
                           <span className="chip__dot" />
                           {area}
+                          {areaName(area) !== null && <span className="chip__name">{areaName(area)}</span>}
                           <span className="chip__count">{counts.byArea.get(area)}</span>
                         </button>
                         <button
@@ -871,6 +881,7 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
                       >
                         <span className="chip__dot" />
                         {area}
+                        {areaName(area) !== null && <span className="chip__name">{areaName(area)}</span>}
                         <span className="chip__count">{counts.byArea.get(area)}</span>
                       </button>
                     ),

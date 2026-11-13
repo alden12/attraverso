@@ -259,6 +259,28 @@ test.describe("the served store", () => {
     await expect(page.locator('aside[aria-label="Area DATA"]')).toBeVisible();
   });
 
+  test("shows an area's name and description wherever the area is (PROJ-3)", async ({ page }) => {
+    // Named in the served plan, as set_area would have left it.
+    await page.route("**/api/store", async (route) => {
+      const json = await (await route.fetch()).json();
+      for (const p of json.store.projects)
+        if (p.key === "demo") p.areas = [{ key: "DATA", name: "Storage", description: "Where the plan lives.", sort_order: 0, id: "a1", created_at: "2026-01-01T00:00:00.000Z" }];
+      await route.fulfill({ json });
+    });
+    await page.reload();
+    const frame = page.locator('.react-flow__node[data-id="area:DATA"]');
+    await expect(frame.locator(".area-box__label")).toHaveText("Storage"); // beside the key on the frame
+    await expect(frame.locator(".area-box__overview-name")).toHaveText("Storage"); // and the zoomed-out overview
+    await expect(frame.locator(".area-box__overview-description")).toHaveText("Where the plan lives.");
+
+    await page.locator('.toolbtn[aria-haspopup="dialog"]').click();
+    await expect(page.locator(".settings .chip", { hasText: "DATA" }).first().locator(".chip__name")).toHaveText("Storage");
+    await page.keyboard.press("Escape");
+
+    await frame.click({ position: { x: 12, y: 12 } });
+    await expect(page.locator('aside[aria-label="Area DATA"] .detail__title')).toHaveText("Storage");
+  });
+
   test("captures the full graph for visual inspection", async ({ page }) => {
     // Give the dagre layout and the fitView transition time to settle before capturing.
     await page.waitForTimeout(1200);

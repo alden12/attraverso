@@ -18,6 +18,7 @@ export function AreaGroupNode({ data, selected }: NodeProps<AreaNode>) {
         <Handle type="target" position={Position.Left} />
         <div className="area-box__title">
           <span className="area-box__name">{data.area}</span>
+          {named(data) && <span className="area-box__label">{data.name}</span>}
           <span className="area-box__count">{data.count}</span>
         </div>
         <div className="area-box__summary">
@@ -42,6 +43,7 @@ export function AreaGroupNode({ data, selected }: NodeProps<AreaNode>) {
       />
       <div className="area-box__title">
         <span className="area-box__name">{data.area}</span>
+        {named(data) && <span className="area-box__label">{data.name}</span>}
         <span className="area-box__count">{data.count}</span>
       </div>
       {/* What the area is, for when its cards are too small to read (VIEW-52): faded in by `--overview`, which the graph
@@ -49,7 +51,15 @@ export function AreaGroupNode({ data, selected }: NodeProps<AreaNode>) {
           re-render, and it lets clicks through to the frame. */}
       {data.byStatus !== undefined && data.foreign !== true && (
         <div className="area-box__overview" aria-hidden="true">
-          <div className="area-box__overview-name">{data.area}</div>
+          {/* Sized to fit its own length: about 0.6em a character, so a font of 140cqw over the length fills most of
+              the width, capped by height for a wide, short frame and in pixels for a huge one. */}
+          <div
+            className="area-box__overview-name"
+            style={{ fontSize: `min(${140 / Math.max((named(data) ? data.name : data.area).length, 3)}cqw, 30cqh, 110px)` }}
+          >
+            {named(data) ? data.name : data.area}
+          </div>
+          {named(data) && <div className="area-box__overview-key">{data.area}</div>}
           <div className="area-box__overview-bar">
             {data.byStatus.map(([status, count]) => (
               <span key={status} style={{ flexGrow: count, background: STATUSES[status].colour }} />
@@ -62,8 +72,12 @@ export function AreaGroupNode({ data, selected }: NodeProps<AreaNode>) {
               </span>
             ))}
           </div>
+          {data.description !== undefined && data.description !== null && <div className="area-box__overview-description">{data.description}</div>}
         </div>
       )}
     </div>
   );
 }
+
+/** Whether the plan gives the area a name of its own, rather than the key it would otherwise be called. */
+const named = (data: AreaNode["data"]): data is AreaNode["data"] & { name: string } => data.name !== undefined && data.name !== data.area;

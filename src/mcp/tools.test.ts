@@ -794,7 +794,7 @@ describe("list_areas returns records", () => {
     const result = await tools.get("list_areas")!({ project: "apm" });
     // `name` is null rather than the key repeated back: an area nobody has named should read as unnamed, not
     // as one whose name happens to be its prefix.
-    expect((result.structuredContent as { areas: unknown[] }).areas).toEqual([{ key: "MCP", name: null, open: 1, total: 2 }]);
+    expect((result.structuredContent as { areas: unknown[] }).areas).toEqual([{ key: "MCP", name: null, description: null, open: 1, total: 2 }]);
     expect(said(result)).toContain("MCP    1 open of 2");  // padded into a column, since this is scanned
   });
 });

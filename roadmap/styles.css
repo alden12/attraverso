@@ -434,6 +434,15 @@ body {
   border-radius: 50%;
   background: var(--area, var(--muted));
 }
+/* An area's name beside its key in the view menu (PROJ-3): quieter than the key, and cut short rather than letting
+   one long name stretch its row. */
+.chip__name {
+  max-width: 14em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+}
 .chip__count {
   color: var(--muted);
   font-variant-numeric: tabular-nums;
@@ -898,9 +907,29 @@ body {
 .area-box__overview-name {
   color: var(--area);
   font-weight: 800;
-  letter-spacing: 0.04em;
-  font-size: min(22cqw, 30cqh, 110px);
-  line-height: 1;
+  letter-spacing: 0.02em;
+  line-height: 1.05;
+  text-align: center;
+  text-wrap: balance;
+}
+/* Beneath a name, the key it goes by on refs. */
+.area-box__overview-key {
+  margin-top: -0.4em;
+  color: color-mix(in srgb, var(--area) 70%, var(--muted));
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  font-size: min(7cqw, 9cqh, 34px);
+}
+.area-box__overview-description {
+  max-width: 90%;
+  color: var(--text);
+  text-align: center;
+  font-size: min(5.5cqw, 8cqh, 30px);
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 .area-box__overview-bar {
   display: flex;
@@ -950,6 +979,17 @@ body {
 .area-box__name {
   color: var(--area);
   font-size: 16px;
+}
+/* The area's own name beside its key, quieter, since the key is what refs carry. */
+.area-box__label {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 .area-box__count {
   color: var(--muted);

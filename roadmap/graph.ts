@@ -45,6 +45,9 @@ export interface AreaNodeData extends Record<string, unknown> {
   /** Its items counted by status, in workflow order, for the overview an open area fades to when zoomed out
    *  (`VIEW-52`). Absent on a box of another project's placeholders. */
   byStatus?: [Status, number][];
+  /** What the plan calls it and says it holds (`PROJ-3`), where somebody has said. Laid on by the viewer. */
+  name?: string;
+  description?: string;
 }
 export type AreaNode = Node<AreaNodeData, "area">;
 

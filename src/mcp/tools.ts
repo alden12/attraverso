@@ -23,7 +23,7 @@ import { addComment, deleteComment, editComment, listComments, shortCommentId, A
 import { deleteSection, getSection, listSections, setSection, PROTOCOL_HEADING } from "../domain/context";
 import { resumeProject, type ContextPack, type PackBoard } from "../domain/memory";
 import { setNext, type NextItem } from "../domain/next";
-import { listAreas, type AreaSummary } from "../domain/areas";
+import { listAreas, MAX_AREA_DESCRIPTION, setArea, type AreaSummary } from "../domain/areas";
 import { aggregateSeries, listMetrics, recordMeasurements, type Measurement } from "../domain/measurements";
 import { toRecords } from "../serialise/measurements";
 import { search, DEFAULT_LIMIT as SEARCH_LIMIT, type SearchHit } from "../domain/search";
@@ -159,7 +159,11 @@ const fmtAreas = (list: AreaSummary[]): string => {
   const key = Math.max(0, ...list.map((a) => a.key.length));
   const total = Math.max(0, ...list.map((a) => String(a.total).length));
   return list
-    .map((a) => `${a.key.padEnd(key)}  ${String(a.open).padStart(3)} open of ${String(a.total).padEnd(total)}${a.name === null ? "" : `  ${a.name}`}`)
+    .map(
+      (a) =>
+        `${a.key.padEnd(key)}  ${String(a.open).padStart(3)} open of ${String(a.total).padEnd(total)}${a.name === null ? "" : `  ${a.name}`}` +
+        (a.description === null ? "" : ` - ${a.description}`),
+    )
     .join("\n");
 };
 
@@ -514,7 +518,8 @@ export function registerTools(server: McpServer, db: Database, store: StoreAcces
         areas: z.array(
           z.object({
             key: z.string().describe('The ref prefix, e.g. "MCP". This is what list_items takes as `area`.'),
-            name: z.string().nullable().describe("Null for an area that exists only because an item uses the prefix."),
+            name: z.string().nullable().describe("Null for an area nobody has named with set_area."),
+            description: z.string().nullable().describe("What the area holds, in a line or two; null where nobody has said."),
             open: z.number().int().describe("Items not done and not deleted."),
             total: z.number().int(),
           }),
@@ -530,6 +535,32 @@ export function registerTools(server: McpServer, db: Database, store: StoreAcces
           // Derived from the same rows as the text, in the same call, so the two cannot drift (MCP-26).
           structuredContent: { areas: list },
         };
+      }),
+  );
+
+  server.registerTool(
+    "set_area",
+    {
+      annotations: WRITE,
+      description:
+        "Name an area or describe it, or both. An area is a ref prefix (MCP, VIEW); it exists as soon as an item uses " +
+        "it, and this only says what it is: a name in full words (\"The graph viewer\" for VIEW) and a line or two " +
+        "on what belongs in it, which the viewer shows over the area and list_areas returns. Omit a field to leave " +
+        `it; pass description: null to clear it. The description is at most ${MAX_AREA_DESCRIPTION} characters - a longer ` +
+        "account is a context section (set_context).",
+      inputSchema: {
+        project: z.string(),
+        key: z.string().describe('The area\'s ref prefix, e.g. "VIEW".'),
+        name: z.string().optional().describe("What the area is called, in words."),
+        description: z.string().nullable().optional().describe("What belongs in it, in a line or two. Null clears it."),
+      },
+    },
+    async ({ project, key, name, description }): Promise<CallToolResult> =>
+      guarded(async () => {
+        const p = await resolveProject(db, caller, project);
+        const area = await setArea(db, p.id, { key, name, description }, ACTOR);
+        await store.persist();
+        return text(`${area.key}: ${area.name}${area.description === null ? "" : `\n${area.description}`}`);
       }),
   );
 
