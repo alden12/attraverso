@@ -125,6 +125,24 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
   // Seeded from the URL (`#apm/CAL-1`), which is how the calendar opens another project's item: it switches
   // project, which remounts this, so the item has to arrive with the new mount.
   const [selectedId, setSelectedId] = useState<string | null>(focus);
+  // Collapsed areas (VIEW-34): each is a summary box until opened, and the map closes up around it through the
+  // same re-layout from memory a filter uses. Open by default, so the map is the whole plan until you fold
+  // something away.
+  const [collapsedAreas, setCollapsedAreas] = useState<Set<string>>(new Set());
+  const expandArea = useCallback((area: string) => {
+    setCollapsedAreas((collapsed) => {
+      if (!collapsed.has(area)) return collapsed;
+      const next = new Set(collapsed);
+      next.delete(area);
+      return next;
+    });
+  }, []);
+  // Selecting an item, from the next list or a link, opens its area: a selection inside a summary box would show
+  // nothing selected.
+  useEffect(() => {
+    const area = selectedId?.split("-")[0];
+    if (area !== undefined) expandArea(area);
+  }, [selectedId, expandArea]);
   useEffect(() => setSelectedId(focus), [focus]);
   const [view, setView] = usePreference<View>("attraverso.view", "graph", VIEWS);
   const otherView: View = view === "graph" ? "calendar" : "graph";
@@ -332,15 +350,21 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
     // previews them in place (the ghost effect below) and a hidden child needs its box to exist.
     const shown = items.filter((item) => !hiddenIds.has(item.id));
     let drawn = nodes;
-    if (shown.length < items.length) {
+    // A collapsed area is the same move (VIEW-34): drawn small, from the same memory, so the map closes up around
+    // it and opens back out exactly when it is opened.
+    if (shown.length < items.length || collapsedAreas.size > 0) {
       const full = new Map(nodes.map((node) => [node.id, node]));
-      const compact = buildGraph(shown, areasOf(shown), colours, colourMode, selectedId, new Set(), next);
+      const compact = buildGraph(shown, areasOf(shown), colours, colourMode, selectedId, new Set(), next, collapsedAreas);
       const compactIds = new Set(compact.map((node) => node.id));
+      const inCollapsed = (node: RoadmapNode) => node.type !== "ghost" && collapsedAreas.has(node.id.split("-")[0] ?? "");
       // Data from the full pass: it alone knows which links lead to something filtered out (the handle hints)
-      // and counts an area's hidden items. Positions and box sizes from the compact one.
+      // and counts an area's hidden items. Positions and box sizes from the compact one. A collapsed area keeps
+      // its own data, which is its summary.
       drawn = [
-        ...compact.map((node) => ({ ...node, data: full.get(node.id)?.data ?? node.data }) as RoadmapNode),
-        ...nodes.filter((node) => !compactIds.has(node.id)),
+        ...compact.map((node) =>
+          node.type === "area" && node.data.collapsed !== undefined ? node : ({ ...node, data: full.get(node.id)?.data ?? node.data } as RoadmapNode),
+        ),
+        ...nodes.filter((node) => !compactIds.has(node.id)).map((node) => (inCollapsed(node) ? { ...node, hidden: true } : node)),
       ];
     }
     setNodes(
@@ -350,12 +374,12 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
       }),
     );
     // layoutNonce forces a re-run after a reset or a drop (the memory ref changed, which React cannot see).
-  }, [items, areas, colours, colourMode, selectedId, hiddenIds, layoutNonce, remember, setNodes]);
+  }, [items, areas, colours, colourMode, selectedId, hiddenIds, collapsedAreas, layoutNonce, remember, setNodes]);
 
   // Edges are their own layer: hover and selection restyle them here without touching the node layout above.
   useEffect(() => {
-    setEdges(buildEdges(items, colours, colourMode, selectedId, hoveredId, hoveredEdgeId, hiddenIds));
-  }, [items, colours, colourMode, selectedId, hoveredId, hoveredEdgeId, hiddenIds, setEdges]);
+    setEdges(buildEdges(items, colours, colourMode, selectedId, hoveredId, hoveredEdgeId, hiddenIds, collapsedAreas));
+  }, [items, colours, colourMode, selectedId, hoveredId, hoveredEdgeId, hiddenIds, collapsedAreas, setEdges]);
 
   // Ghost preview: while a ticket with filtered-out links is hovered, un-hide those neighbours as translucent
   // ghosts (and restore them on leave). A targeted patch of just those nodes - not a rebuild - so the rest of
@@ -427,6 +451,17 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
   const onNodeClick: NodeMouseHandler = (_event, node) => {
     if (node.type === "item" || node.type === "ticket") {
       setSelectedId((node.data as { item: RoadmapItem }).item.id);
+    }
+    const summary = node.data as { area?: string; collapsed?: unknown };
+    if (node.type === "area" && summary.collapsed !== undefined && summary.area !== undefined) expandArea(summary.area);
+  };
+  // Double-clicking an open area's frame folds it back up.
+  const onNodeDoubleClick: NodeMouseHandler = (_event, node) => {
+    const box = node.data as { area?: string; collapsed?: unknown; foreign?: boolean };
+    if (node.type === "area" && box.collapsed === undefined && box.foreign !== true && box.area !== undefined) {
+      const area = box.area;
+      setCollapsedAreas((collapsed) => new Set(collapsed).add(area));
+      if (selectedId?.split("-")[0] === area) setSelectedId(null);
     }
   };
 
@@ -605,6 +640,30 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
                   {locked ? "🔒 move selected only" : "🔓 move anything"}
                 </button>
               )}
+              {/* Both, rather than one toggle: with some areas folded, which way a toggle goes is a guess. */}
+              {view === "graph" && (
+                <button
+                  className="chip"
+                  disabled={collapsedAreas.size === 0}
+                  onClick={() => setCollapsedAreas(new Set())}
+                  title="Open every area. Click a folded area to open just that one"
+                >
+                  expand all
+                </button>
+              )}
+              {view === "graph" && (
+                <button
+                  className="chip"
+                  disabled={areas.every((area) => collapsedAreas.has(area))}
+                  onClick={() => {
+                    setSelectedId(null); // or the selection would open its area straight back up
+                    setCollapsedAreas(new Set(areas));
+                  }}
+                  title="Fold every area into a summary. Double-click an open area's frame to fold just that one"
+                >
+                  collapse all
+                </button>
+              )}
               {view === "graph" && (
                 <button className="chip" onClick={resetLayout} title="Lay the map out afresh, forgetting where everything was">
                   reset layout
@@ -694,6 +753,8 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
                 onNodesChange={handleNodesChange}
                 onEdgesChange={onEdgesChange}
                 onNodeClick={onNodeClick}
+                onNodeDoubleClick={onNodeDoubleClick}
+                zoomOnDoubleClick={false}
                 onNodeMouseEnter={onNodeMouseEnter}
                 onNodeMouseLeave={onNodeMouseLeave}
                 onEdgeMouseEnter={onEdgeMouseEnter}

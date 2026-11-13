@@ -1,6 +1,6 @@
 import dagre from "@dagrejs/dagre";
 import type { Edge, Node } from "@xyflow/react";
-import { STATUSES, type RoadmapItem, splitScope } from "../scripts/tickets";
+import { STATUSES, type RoadmapItem, type Status, splitScope } from "../scripts/tickets";
 
 export type ColourMode = "status" | "area";
 
@@ -40,6 +40,8 @@ export interface AreaNodeData extends Record<string, unknown> {
   count: number;
   /** True for a box holding another project's placeholders, which is styled as absent rather than as an area. */
   foreign?: boolean;
+  /** Collapsed (`VIEW-34`): drawn as a summary of its open work instead of its cards, with their edges ending on it. */
+  collapsed?: { byStatus: [Status, number][] };
 }
 export type AreaNode = Node<AreaNodeData, "area">;
 
@@ -147,6 +149,10 @@ const PAD_X = 18; // box inner side padding
 const PAD_TOP = 46; // box title bar
 const PAD_BOTTOM = 20;
 const AREA_GAP = 68; // between area boxes - a wide gutter so cross-area links have room to run
+// A collapsed area's summary box (`VIEW-34`): one card wide, so it sits in the map at the scale of what it stands
+// for, and tall enough for the title bar and a row of status counts.
+const COLLAPSED_SIZE = { width: ITEM_WIDTH + 2 * PAD_X, height: 104 };
+export const collapsedNodeId = (area: string): string => `area:${area}`;
 const GHOST_HEIGHT = 34; // a placeholder carries a ref and nothing else, so it needs no room for a title
 const GHOST_GAP = 12;
 const RANKSEP = 92; // dagre horizontal rank spacing (the flow direction)
@@ -672,6 +678,7 @@ export function buildGraph(
   selectedId: string | null,
   hiddenIds: Set<string>,
   memory: LayoutMemory = {},
+  collapsed: Set<string> = new Set(),
 ): RoadmapNode[] {
   const visibleIds = new Set(items.map((item) => item.id));
   const depEdges = items.flatMap((item) =>
@@ -781,6 +788,7 @@ export function buildGraph(
   const built: BuiltArea[] = areas.flatMap((area) => {
     const topTickets = items.filter((item) => item.area === area && item.parent === null);
     if (topTickets.length === 0) return [];
+    if (collapsed.has(area)) return [{ area, inner: { nodes: [], box: COLLAPSED_SIZE }, size: COLLAPSED_SIZE }];
     const inner = buildContainer(`area:${area}`, topTickets);
     return [{ area, inner, size: inner.box }];
   });
@@ -850,6 +858,26 @@ export function buildGraph(
       return [foreignBox, ...entry.inner.nodes];
     }
     const areaItems = items.filter((item) => item.area === entry.area);
+    if (collapsed.has(entry.area)) {
+      const byStatus = new Map<Status, number>();
+      for (const item of areaItems) byStatus.set(item.status, (byStatus.get(item.status) ?? 0) + 1);
+      const summary: AreaNode = {
+        id: collapsedNodeId(entry.area),
+        type: "area",
+        position: { x: position.x, y: position.y },
+        hidden: areaItems.every((item) => hiddenIds.has(item.id)),
+        data: {
+          area: entry.area,
+          colour: colours[entry.area] ?? "#94a3b8",
+          count: areaItems.length,
+          collapsed: { byStatus: (Object.keys(STATUSES) as Status[]).flatMap((status) => (byStatus.has(status) ? [[status, byStatus.get(status)!]] : [])) },
+        },
+        style: { width: COLLAPSED_SIZE.width, height: COLLAPSED_SIZE.height },
+        // Above the cards' z, since it is the endpoint of edges now and must take their clicks like a card does.
+        zIndex: 3,
+      };
+      return [summary];
+    }
     const areaBox: AreaNode = {
       id: `area:${entry.area}`,
       type: "area",
@@ -907,8 +935,11 @@ export function buildEdges(
   hoveredId: string | null,
   hoveredEdgeId: string | null,
   hiddenIds: Set<string>,
+  collapsed: Set<string> = new Set(),
 ): Edge[] {
   const visibleIds = new Set(items.map((item) => item.id));
+  // Where an edge ends when its item's area is collapsed (`VIEW-34`): on the area's summary box instead.
+  const endOf = (id: string): string => (collapsed.has(id.split("-")[0] ?? id) ? collapsedNodeId(id.split("-")[0] ?? id) : id);
   const doneIds = new Set(items.filter((item) => item.status === "done").map((item) => item.id));
   const areaOf = (id: string): string => id.split("-")[0] ?? id;
   const hueOf = (item: RoadmapItem): string =>
@@ -928,7 +959,7 @@ export function buildEdges(
       return {
         id,
         source: link.ghostId,
-        target: link.dependent,
+        target: endOf(link.dependent),
         type: "smoothstep",
         pathOptions: { borderRadius: 12 },
         hidden: filteredHidden && !hoveredEnd,
@@ -976,5 +1007,35 @@ export function buildEdges(
       }),
   );
 
-  return [...withinPlan, ...ghostEdges];
+  return [...aggregate(withinPlan, endOf, collapsed.size > 0), ...ghostEdges.filter((edge, index, all) => all.findIndex((other) => other.source === edge.source && other.target === edge.target) === index)];
+}
+
+/**
+ * Reroute edges into collapsed areas onto their summary boxes, merging the ones that now join the same two nodes
+ * so a collapsed area is one line per neighbour rather than a hairball hub (`VIEW-34`'s first open question). A
+ * merged line is hidden only when every edge in it would be, lit when any is, and labelled with how many it holds.
+ * An edge inside one collapsed area joins the box to itself and is dropped.
+ */
+function aggregate(edges: Edge[], endOf: (id: string) => string, any: boolean): Edge[] {
+  if (!any) return edges;
+  const merged = new Map<string, { edge: Edge; count: number; allHidden: boolean }>();
+  for (const edge of edges) {
+    const [source, target] = [endOf(edge.source), endOf(edge.target)];
+    if (source === target) continue;
+    const key = `${source}->${target}`;
+    const lit = (edge.style?.opacity ?? 0) === 1;
+    const existing = merged.get(key);
+    if (existing === undefined) {
+      merged.set(key, { edge: { ...edge, id: key, source, target }, count: 1, allHidden: edge.hidden === true });
+      continue;
+    }
+    existing.count += 1;
+    existing.allHidden &&= edge.hidden === true;
+    if (lit) existing.edge = { ...edge, id: key, source, target };
+  }
+  return [...merged.values()].map(({ edge, count, allHidden }) => ({
+    ...edge,
+    hidden: allHidden,
+    ...(count > 1 ? { label: String(count), labelBgPadding: [4, 2] as [number, number], labelBgBorderRadius: 4, labelStyle: { fill: "#dce3ec", fontSize: 11 }, labelBgStyle: { fill: "#1e2836" } } : {}),
+  }));
 }

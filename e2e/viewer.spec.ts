@@ -444,6 +444,33 @@ test.describe("the map follows the filters (VIEW-23.1)", () => {
     await settings(page, area);
     expect(await transforms(page)).toEqual(before);
   });
+
+  // Collapsing an area is the same move as a filter (VIEW-34), so it has to restore the map the same way.
+  test("folds an area on a double-click, opens it on a click, and puts the map back exactly", async ({ page }) => {
+    // An area with open work, since finished work is hidden by default and an area of it would not be drawn.
+    const area = areas.find((key) => items.some((item) => item.area === key && item.status !== "done"))!;
+    await expect(page.locator(".area-box--collapsed")).toHaveCount(0); // open by default
+    const before = await transforms(page);
+
+    await page.locator(".area-box__title", { hasText: area }).dblclick();
+    await expect(page.locator(".area-box--collapsed")).toHaveCount(1);
+    const folded = await transforms(page);
+    expect(Object.keys(folded).filter((id) => id.startsWith(`${area}-`))).toEqual([]); // its cards are gone
+
+    await page.locator(".area-box--collapsed").click();
+    await expect(page.locator(".area-box--collapsed")).toHaveCount(0);
+    expect(await transforms(page)).toEqual(before);
+  });
+
+  test("collapses and expands every area from the view settings", async ({ page }) => {
+    const before = await transforms(page);
+    await settings(page, "collapse all");
+    await expect(page.locator(".area-box--collapsed").first()).toBeVisible();
+    await expect(page.locator(".react-flow__node-item:visible")).toHaveCount(0);
+    await settings(page, "expand all");
+    await expect(page.locator(".area-box--collapsed")).toHaveCount(0);
+    expect(await transforms(page)).toEqual(before);
+  });
 });
 
 test.describe("moving cards (VIEW-41)", () => {

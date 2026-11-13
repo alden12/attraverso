@@ -262,6 +262,11 @@ body {
 .chip[data-off="true"] {
   opacity: 0.4;
 }
+/* Nothing to do: "expand all" with every area open, for one. */
+.chip:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
 .chip__dot {
   width: 9px;
   height: 9px;
@@ -683,6 +688,28 @@ body {
   color: var(--muted);
   font-weight: 500;
   font-variant-numeric: tabular-nums;
+}
+
+/* A collapsed area (VIEW-34): the same frame, a little stronger since it now stands in for a whole area, holding
+   a count per status where the cards were. */
+.area-box--collapsed {
+  cursor: pointer;
+  background: color-mix(in srgb, var(--area) 16%, var(--panel-2));
+  border-color: color-mix(in srgb, var(--area) 65%, var(--line));
+}
+.area-box--collapsed:hover {
+  border-color: var(--area);
+}
+.area-box__summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  padding: 2px 14px 10px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.area-box__status {
+  white-space: nowrap;
 }
 
 /* Ticket box (parent ticket with nested sub-tickets) ------------------------ */
