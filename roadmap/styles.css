@@ -1182,6 +1182,12 @@ body {
 .detail__close:hover {
   color: var(--text);
 }
+/* The way back, the close button's mirror at the head's other end: an arrow and nothing else, its destination in
+   the tooltip. */
+.detail__back {
+  margin-right: 8px;
+  padding: 0 6px 0 0;
+}
 .detail__deps {
   padding: 8px 16px;
   border-bottom: 1px solid var(--line);

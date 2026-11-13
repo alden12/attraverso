@@ -1120,8 +1120,13 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
             <div className="detail__head">
               <div>
                 {cameFrom !== null && (
-                  <button className="detail__dep detail__back" onClick={() => goBack(cameFrom)}>
-                    ‹ {typeof cameFrom === "string" ? (cameFrom === "next" ? "Next" : "Search") : cameFrom.area}
+                  <button
+                    className="detail__close detail__back"
+                    onClick={() => goBack(cameFrom)}
+                    aria-label={`Back to ${typeof cameFrom === "string" ? (cameFrom === "next" ? "Next" : "Search") : cameFrom.area}`}
+                    title={`Back to ${typeof cameFrom === "string" ? (cameFrom === "next" ? "Next" : "Search") : cameFrom.area}`}
+                  >
+                    ‹
                   </button>
                 )}
                 <span className="detail__id" style={{ color: colours[selected.area] }}>
@@ -1263,13 +1268,12 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
           <aside className="detail" aria-label="Context">
             <div className="detail__head">
               <div>
-                {contextView.heading === null ? (
-                  <span className="detail__id">Context</span>
-                ) : (
-                  <button className="detail__dep" onClick={() => setContextView({ heading: null })}>
-                    ‹ Context
+                {contextView.heading !== null && (
+                  <button className="detail__close detail__back" onClick={() => setContextView({ heading: null })} aria-label="Back to Context" title="Back to Context">
+                    ‹
                   </button>
                 )}
+                <span className="detail__id">Context</span>
               </div>
               <button className="detail__close" onClick={() => setContextView(null)} aria-label="Close">
                 ×

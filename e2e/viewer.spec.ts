@@ -310,7 +310,7 @@ test.describe("several projects in one store", () => {
     // the way back to the list.
     await list.locator(".next__item").first().click();
     await expect(page.locator(".detail__id")).toHaveText("MCP-2");
-    await page.locator(".detail__back", { hasText: "Next" }).click();
+    await page.getByRole("button", { name: "Back to Next" }).click();
     await expect(list.locator(".next__item")).toHaveCount(2);
 
     // Dismissible, leaving the floating button with the count, so closing it does not hide that an order exists,
@@ -668,7 +668,7 @@ test.describe("the project's context sections (VIEW-30)", () => {
     await page.reload();
     await expect(pane(page).locator(".detail__title")).toHaveText("Goals");
 
-    await pane(page).locator("button", { hasText: "‹ Context" }).click();
+    await pane(page).getByRole("button", { name: "Back to Context" }).click();
     await expect(pane(page).locator(".context__item")).toHaveCount(2);
   });
 
@@ -703,7 +703,7 @@ test.describe("searching the plan (VIEW-25)", () => {
     await expect(page.locator(".search")).toHaveCount(0);
     await expect(page.locator("aside.detail .detail__title")).toHaveText("Serve the tools over stdio");
     // Back to the search as it was left, query and all.
-    await page.locator(".detail__back", { hasText: "Search" }).click();
+    await page.getByRole("button", { name: "Back to Search" }).click();
     await expect(box(page)).toHaveValue("stdi");
     await expect(hits(page).first()).toContainText("Serve the tools over stdio");
   });
