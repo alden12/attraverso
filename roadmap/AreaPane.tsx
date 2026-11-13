@@ -65,7 +65,7 @@ export function AreaPane({
     <aside className="detail" aria-label={`Area ${area}`}>
       <div className="detail__head">
         <div className="area-pane__tools">
-          <button className="detail__dep area-pane__zoom" onClick={onZoom}>
+          <button className="chip area-pane__zoom" onClick={onZoom}>
             <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
               <circle cx="8" cy="8" r="5" fill="none" stroke="currentColor" strokeWidth="1.5" />
               <circle cx="8" cy="8" r="1.6" fill="currentColor" />

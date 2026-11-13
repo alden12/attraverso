@@ -1504,12 +1504,9 @@ body {
   display: flex;
   align-items: center;
 }
+/* A chip, like the view menu's controls; only the icon's gap is its own. */
 .area-pane__zoom {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 12px;
-  line-height: 1;
+  gap: 5px;
 }
 .area-pane__title {
   display: flex;
