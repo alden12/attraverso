@@ -101,6 +101,11 @@ const AREA_GAP = 68; // between area boxes - a wide gutter so cross-area links h
 const GHOST_HEIGHT = 34; // a placeholder carries a ref and nothing else, so it needs no room for a title
 const GHOST_GAP = 12;
 const RANKSEP = 92; // dagre horizontal rank spacing (the flow direction)
+/** The layout's memory snaps to this grid (`VIEW-23.1`), so two nodes a pixel or two apart count as level
+ *  rather than one being permanently "after" the other, and a small nudge or a card resize changes nothing. */
+const GRID = 10;
+const snap = (value: number): number => Math.round(value / GRID) * GRID;
+const snapUp = (value: number): number => Math.ceil(value / GRID) * GRID;
 const NODESEP = 30; // dagre spacing within a rank
 
 interface Size {
@@ -127,10 +132,10 @@ const childrenOf = (items: RoadmapItem[], parentId: string | null): RoadmapItem[
 const structuralEdge = (a: string, b: string): boolean => a === b || a.startsWith(`${b}.`) || b.startsWith(`${a}.`);
 
 /** The rendered size of one item: a leaf card, or (if it has children) the box that frames them. */
-function sizeOf(item: RoadmapItem, items: RoadmapItem[]): Size {
+function sizeOf(item: RoadmapItem, items: RoadmapItem[], memory: LayoutMemory): Size {
   const kids = childrenOf(items, item.id);
   if (kids.length === 0) return { width: ITEM_WIDTH, height: ITEM_HEIGHT };
-  const box = layoutSiblings(kids, items).box;
+  const box = layoutSiblings(kids, items, memory).box;
   return { width: box.width, height: box.height };
 }
 
@@ -292,19 +297,14 @@ function packWidth(boxes: Size[], gap: number, spread = 2.8): number {
 }
 
 /**
- * Lay a set of sibling tickets out relative to a (0,0) content origin, in two zones: siblings joined by
+ * The layout a set of siblings gets with nothing remembered (first open, or a reset), relative to a (0,0)
+ * content origin, in two zones: siblings joined by
  * dependencies flow left-to-right (dagre), and the dependency-free remainder packs into a compact grid below
- * them. Splitting the two matters because dagre lays disconnected nodes out as separate components and
+ * them. `arrange` then tidies it like any other frame (`VIEW-23.1`). Splitting the two matters because dagre lays disconnected nodes out as separate components and
  * strands them in half-empty ranks - feeding it the loose cards is what made mixed areas sprawl. A group with
- * no dependencies at all is just the grid; a fully-connected group is just the flow. Returns each sibling's
- * placement (top-left, content-relative) and the enclosing box (content extent + container title/side/bottom
- * padding), computed from the actual placements so a box always frames its children.
+ * no dependencies at all is just the grid; a fully-connected group is just the flow.
  */
-function layoutSiblings(
-  siblings: RoadmapItem[],
-  items: RoadmapItem[],
-): { placements: Map<string, Placement>; box: Size } {
-  const sizes = new Map(siblings.map((sibling) => [sibling.id, sizeOf(sibling, items)]));
+function freshSiblings(siblings: RoadmapItem[], sizes: Map<string, Size>): Map<string, Placement> {
   const siblingIds = new Set(siblings.map((sibling) => sibling.id));
   const intraEdges = siblings.flatMap((sibling) =>
     sibling.deps.filter((dep) => siblingIds.has(dep)).map((dep) => [dep, sibling.id] as const),
@@ -334,7 +334,211 @@ function layoutSiblings(
     }
   }
 
+  return placements;
+}
+
+/**
+ * Lay a set of sibling tickets out relative to a (0,0) content origin: from memory where there is one, from
+ * `freshSiblings` where there is none. Returns each sibling's placement (top-left, content-relative) and the
+ * enclosing box (content extent + container title/side/bottom padding), computed from the actual placements so a
+ * box always frames its children.
+ */
+function layoutSiblings(
+  siblings: RoadmapItem[],
+  items: RoadmapItem[],
+  memory: LayoutMemory,
+): { placements: Map<string, Placement>; box: Size } {
+  const sizes = new Map(siblings.map((sibling) => [sibling.id, sizeOf(sibling, items, memory)]));
+  const siblingIds = new Set(siblings.map((sibling) => sibling.id));
+  const placements = arrange(
+    siblings.map((sibling) => ({ id: sibling.id, ...sizes.get(sibling.id)!, deps: sibling.deps.filter((dep) => siblingIds.has(dep)) })),
+    (id) => memory[id],
+    GAP,
+    2.8,
+    () => freshSiblings(siblings, sizes),
+  );
   return { placements, box: boxOf(placements) };
+}
+
+/**
+ * Where each node sat when the layout last ran (`VIEW-23.1`), keyed by node id (a ref, or `area:KEY`) and
+ * relative to its container's content origin - the top-left inside the padding - so moving a box never rewrites
+ * anything inside it. The layout reads it back on the next run, which is what makes the map stay put.
+ */
+export type LayoutMemory = Record<string, { x: number; y: number }>;
+
+/** One box being arranged: its size, its dependencies among the same siblings, and (once placed) its position. */
+type Arranged = Boxed & { deps: string[] };
+interface Placed extends Placement {
+  id: string;
+}
+
+type Axis = "x" | "y";
+const extentOf = (axis: Axis): "width" | "height" => (axis === "x" ? "width" : "height");
+const across = (axis: Axis): Axis => (axis === "x" ? "y" : "x");
+
+/** Closer than `gap` on this axis - which, on both axes at once, is an overlap. */
+const crowded = (a: Placed, b: Placed, axis: Axis, gap: number): boolean =>
+  a[axis] + a[extentOf(axis)] + gap > b[axis] && b[axis] + b[extentOf(axis)] + gap > a[axis];
+
+/**
+ * Lay a set of sibling boxes out with a memory (`VIEW-23.1`): remembered boxes start where they were, new ones
+ * are seeded beside what they belong to, overlaps are pushed apart and the result is compacted - and neither of
+ * the last two steps can reverse the left/right or above/below order of any pair, which is the property the
+ * whole thing exists for. With nothing remembered at all, `fresh` supplies the starting frame (the layout a
+ * first open or a reset shows), and it is tidied the same way.
+ *
+ * `spread` is `packWidth`'s, and sets the row width past which a new box starts a new row instead of joining
+ * the end of its predecessor's.
+ */
+function arrange(
+  boxes: Arranged[],
+  remembered: (id: string) => { x: number; y: number } | undefined,
+  gap: number,
+  spread: number,
+  fresh: () => Map<string, Placement>,
+  newcomers: "after-previous" | "best-fit" = "after-previous",
+): Map<string, Placement> {
+  const known = boxes.some((box) => remembered(box.id) !== undefined);
+  const start = known ? null : fresh();
+  const placed = new Map<string, Placed>();
+  for (const box of boxes) {
+    const at = start ? start.get(box.id) : remembered(box.id);
+    if (at) placed.set(box.id, { id: box.id, x: snap(at.x), y: snap(at.y), width: box.width, height: box.height });
+  }
+
+  // Seed the newcomers, in list order so a run of new siblings lines up behind one another.
+  const fresher = new Set<string>();
+  const budget = packWidth(boxes, gap, spread);
+  boxes.forEach((box, index) => {
+    if (placed.has(box.id)) return;
+    fresher.add(box.id);
+    const at = newcomers === "best-fit" ? bestFit(box, placed, gap, budget) : seed(box, boxes.slice(0, index), placed, gap, budget);
+    placed.set(box.id, { id: box.id, x: snapUp(at.x), y: snapUp(at.y), width: box.width, height: box.height });
+  });
+
+  const all = [...placed.values()];
+  pushApart(all, gap, fresher);
+  compact(all, gap);
+  return new Map(all.map(({ id, ...placement }) => [id, placement]));
+}
+
+/** Where a box nobody has placed before goes: just right of its rightmost dependency, so a link points forward
+ *  and stays short; otherwise just after the sibling listed before it (the end of the list, for a new ref); and
+ *  when that row is already full, the start of a new row along the bottom. */
+function seed(box: Arranged, before: Arranged[], placed: Map<string, Placed>, gap: number, budget: number): { x: number; y: number } {
+  const deps = box.deps.flatMap((dep) => placed.get(dep) ?? []);
+  if (deps.length > 0) {
+    const rightmost = deps.reduce((best, dep) => (dep.x + dep.width > best.x + best.width ? dep : best));
+    return { x: rightmost.x + rightmost.width + gap, y: rightmost.y };
+  }
+  const previous = [...before].reverse().flatMap((sibling) => placed.get(sibling.id) ?? [])[0];
+  if (previous && previous.x + previous.width + gap + box.width <= budget) return { x: previous.x + previous.width + gap, y: previous.y };
+  const bottom = Math.max(-gap, ...[...placed.values()].map((other) => other.y + other.height));
+  return { x: 0, y: bottom + gap };
+}
+
+/**
+ * Where a new box fits with the least growth of the whole, for siblings whose order carries no meaning for a
+ * newcomer (the area boxes: a new area has no neighbours yet to be found beside). It takes a free spot - beside
+ * or below some box already placed - rather than pushing anything, so placing it moves nothing else. Among the
+ * spots that fit, the one whose bounding box is smallest wins, with anything past `budget` wide penalised so
+ * the map keeps its landscape shape; ties go to the highest, then leftmost.
+ */
+function bestFit(box: Arranged, placed: Map<string, Placed>, gap: number, budget: number): { x: number; y: number } {
+  const others = [...placed.values()];
+  const right = Math.max(0, ...others.map((other) => other.x + other.width));
+  const bottom = Math.max(0, ...others.map((other) => other.y + other.height));
+  const candidates = [{ x: 0, y: 0 }, ...others.flatMap((other) => [
+    { x: other.x + other.width + gap, y: other.y },
+    { x: other.x, y: other.y + other.height + gap },
+  ])];
+  let best: { x: number; y: number; score: number } | null = null;
+  for (const spot of candidates) {
+    const probe = { id: box.id, ...spot, width: box.width, height: box.height };
+    if (others.some((other) => crowded(probe, other, "x", gap) && crowded(probe, other, "y", gap))) continue;
+    const width = Math.max(right, spot.x + box.width);
+    const height = Math.max(bottom, spot.y + box.height);
+    const score = width * height * (width > budget ? 4 : 1);
+    if (best === null || score < best.score || (score === best.score && (spot.y < best.y || (spot.y === best.y && spot.x < best.x)))) {
+      best = { ...spot, score };
+    }
+  }
+  return best ?? { x: 0, y: bottom + gap };
+}
+
+/**
+ * Resolve every overlap by **shifting a half-plane**: pick the axis the overlapping pair sits apart on, and move the box
+ * further along it - with everything at or beyond it on that axis - by just enough. Everything shifted moves by
+ * the same amount and everything else stays, so no pair's order on either axis can reverse, and a shift only
+ * ever widens the space between the two sides, so it cannot create a new overlap. Each round clears at least
+ * one pair, which bounds the loop.
+ *
+ * When the pair is level on that axis, the newcomer is the one that stays, so a new box claims the spot it was
+ * seeded into and the existing ones make room - insertion, rather than the newcomer being shunted to the end.
+ */
+function pushApart(boxes: Placed[], gap: number, fresher: Set<string>): void {
+  for (let round = 0; round <= boxes.length * boxes.length; round++) {
+    let pair: [Placed, Placed] | null = null;
+    search: for (let a = 0; a < boxes.length; a++) {
+      for (let b = a + 1; b < boxes.length; b++) {
+        if (crowded(boxes[a]!, boxes[b]!, "x", gap) && crowded(boxes[a]!, boxes[b]!, "y", gap)) {
+          pair = [boxes[a]!, boxes[b]!];
+          break search;
+        }
+      }
+    }
+    if (pair === null) return;
+    const [a, b] = pair;
+    const plan = (axis: Axis) => {
+      const aFirst = a[axis] < b[axis] || (a[axis] === b[axis] && (fresher.has(a.id) || !fresher.has(b.id)));
+      const [stays, moves] = aFirst ? [a, b] : [b, a];
+      return { axis, stays, moves, by: snapUp(stays[axis] + stays[extentOf(axis)] + gap - moves[axis]) };
+    };
+    // Push along the axis they overlap *less* on, as a share of their size: a pair overlapping slightly
+    // side to side and almost entirely top to bottom is a pair sitting side by side, so it is pushed sideways.
+    // The cheaper push is the wrong test: a box grown wider into its neighbour would drop below it instead
+    // whenever it happened to sit a pixel lower, turning "beside" into "under".
+    const share = (axis: Axis) =>
+      (Math.min(a[axis] + a[extentOf(axis)], b[axis] + b[extentOf(axis)]) + gap - Math.max(a[axis], b[axis])) /
+      (Math.min(a[extentOf(axis)], b[extentOf(axis)]) + gap);
+    const { axis, stays, moves, by } = share("x") <= share("y") ? plan("x") : plan("y");
+    const line = moves[axis];
+    for (const box of boxes) if (box !== stays && box[axis] >= line) box[axis] += by;
+  }
+}
+
+/**
+ * Slide everything toward the origin, one axis at a time, as far as two rules allow: a box keeps `gap` from any
+ * box beside it on the other axis, and it never passes a box that was before it on this axis (and stays strictly
+ * after one it was strictly after - by a grid step - so a pair cannot reverse over two runs by way of a tie). Every
+ * position lands on the grid, rounding up so a gap is never short. Repeated until
+ * nothing moves, which is what makes running the layout again on its own output a no-op: each pass only ever
+ * lowers a coordinate, so it settles.
+ */
+function compact(boxes: Placed[], gap: number): void {
+  for (let pass = 0; pass < 32; pass++) {
+    const before = boxes.map((box) => box.x + box.y * 1e6);
+    compactAxis(boxes, "x", gap);
+    compactAxis(boxes, "y", gap);
+    if (boxes.every((box, index) => box.x + box.y * 1e6 === before[index])) return;
+  }
+}
+
+function compactAxis(boxes: Placed[], axis: Axis, gap: number): void {
+  const other = across(axis);
+  const order = [...boxes].sort((a, b) => a[axis] - b[axis]);
+  const was = new Map(order.map((box) => [box, box[axis]]));
+  const done: Placed[] = [];
+  for (const box of order) {
+    let at = 0;
+    for (const earlier of done) {
+      at = Math.max(at, earlier[axis] + (was.get(earlier)! < was.get(box)! ? GRID : 0));
+      if (crowded(box, earlier, other, gap)) at = Math.max(at, earlier[axis] + earlier[extentOf(axis)] + gap);
+    }
+    box[axis] = snapUp(at);
+    done.push(box);
+  }
 }
 
 /** The box that encloses a set of placed children: their extent plus the container padding (title bar on
@@ -397,8 +601,11 @@ function orderAreasByLinkage(built: BuiltArea[], items: RoadmapItem[]): BuiltAre
 
 /**
  * Build the React Flow graph: one box per area, tickets laid out inside by dependency flow, parent tickets
- * framing their sub-tickets (nested boxes). Area boxes are shelf-packed into a roughly square block (with
- * dependency-linked areas ordered adjacent) so the whole map fits a screen. Dependency edges are drawn at the
+ * framing their sub-tickets (nested boxes). Every container's children - the area boxes included - are placed by
+ * `arrange` from `memory`, the previous layout (`memoryOf`), so the map keeps its shape as the plan changes: a new
+ * item makes room for itself and a growing box pushes its neighbours aside, and no two siblings ever swap sides.
+ * With no memory (a first open, or a reset) the starting frame is the dependency flow inside a box and the
+ * skyline-packed area boxes, with dependency-linked areas ordered adjacent. Dependency edges are drawn at the
  * ticket level and flow forward (dep -> dependent). `colourMode` chooses the item hue; `selectedId` drives the
  * selection glow, neighbour highlight, and dimming.
  *
@@ -415,6 +622,7 @@ export function buildGraph(
   colourMode: ColourMode,
   selectedId: string | null,
   hiddenIds: Set<string>,
+  memory: LayoutMemory = {},
 ): RoadmapNode[] {
   const visibleIds = new Set(items.map((item) => item.id));
   const depEdges = items.flatMap((item) =>
@@ -474,7 +682,7 @@ export function buildGraph(
   // that has children of its own becomes a nested ticket-box and recurses. `parentId` (without `extent`)
   // keeps children moving with their box when it is dragged, but doesn't clamp the auto-layout into overlap.
   const buildContainer = (containerId: string, siblings: RoadmapItem[]): { nodes: RoadmapNode[]; box: Size } => {
-    const { placements, box } = layoutSiblings(siblings, items);
+    const { placements, box } = layoutSiblings(siblings, items, memory);
     const nodes = siblings.flatMap((sibling): RoadmapNode[] => {
       const placement = placements.get(sibling.id)!;
       const position = { x: PAD_X + placement.x, y: PAD_TOP + placement.y };
@@ -550,18 +758,23 @@ export function buildGraph(
       return { area: foreignArea(project), foreign: project, inner: { nodes, box: size }, size };
     });
 
+  // The area boxes are arranged like any siblings (`VIEW-23.1`): from memory, so a growing area pushes its
+  // neighbours aside instead of the map being re-packed around it. The skyline packer, ordered so linked areas
+  // sit together, is only the starting frame when nothing is remembered.
   const ordered = orderAreasByLinkage([...ghostAreas, ...built], items);
-  const packed = packBoxes(
-    ordered.map((entry) => ({ id: entry.area, ...entry.size })),
-    // Skyline packing backfills the gaps shelf packing left, so it needs far less width slack: ~1.6 lands the
-    // densest, roughly-landscape block (empirically ~88% filled).
-    packWidth(
-      ordered.map((entry) => entry.size),
+  const areaBoxes = ordered.map((entry) => ({ id: entry.area, ...entry.size }));
+  const packed = {
+    placements: arrange(
+      areaBoxes.map((box) => ({ ...box, deps: [] })),
+      (area) => memory[`area:${area}`],
       AREA_GAP,
+      // Skyline packing backfills the gaps shelf packing left, so it needs far less width slack: ~1.6 lands the
+      // densest, roughly-landscape block (empirically ~88% filled).
       1.6,
+      () => packBoxes(areaBoxes, packWidth(areaBoxes, AREA_GAP, 1.6), AREA_GAP).placements,
+      "best-fit",
     ),
-    AREA_GAP,
-  );
+  };
 
   const nodes: RoadmapNode[] = ordered.flatMap((entry) => {
     const position = packed.placements.get(entry.area)!;
@@ -593,6 +806,22 @@ export function buildGraph(
 
   return nodes;
 }
+
+/**
+ * What to remember of a layout for next time (`VIEW-23.1`): each node's position relative to its container's
+ * content origin, which is how `buildGraph` reads it back. Placeholders are left out, because their box lays
+ * them out as a fixed list and nothing about them is worth keeping.
+ */
+export function memoryOf(nodes: RoadmapNode[]): LayoutMemory {
+  const memory: LayoutMemory = {};
+  for (const node of nodes) if (node.type !== "ghost") memory[node.id] = remembered(node.parentId, node.position);
+  return memory;
+}
+
+/** A node's position as the memory holds it: relative to its container's content origin, inside the padding
+ *  React Flow's own position includes. Also how a drag is recorded, so a dropped node becomes its new place. */
+export const remembered = (parentId: string | undefined, position: { x: number; y: number }): { x: number; y: number } =>
+  parentId ? { x: snap(position.x - PAD_X), y: snap(position.y - PAD_TOP) } : { x: snap(position.x), y: snap(position.y) };
 
 /**
  * Build the dependency edges as a layer independent of the node layout, so hover and selection restyle them

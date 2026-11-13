@@ -23,12 +23,12 @@ import remarkGfm from "remark-gfm";
 import type { Plan, Selection } from "./store";
 import { useExtensions } from "./extensions";
 import { areasOf, STATUSES, type Status, splitScope } from "../scripts/tickets";
-import { areaColours, buildGraph, buildEdges, type ColourMode, type RoadmapNode } from "./graph";
+import { areaColours, buildGraph, buildEdges, memoryOf, remembered, type ColourMode, type LayoutMemory, type RoadmapNode } from "./graph";
 import { ItemNodeView } from "./ItemNode";
 import { AreaGroupNode } from "./AreaGroupNode";
 import { TicketGroupNode } from "./TicketGroupNode";
 import { GhostNodeView } from "./GhostNode";
-import { loadPositions, savePositions, loadSizes, saveSizes, clearLayout, type BoxSize } from "./positions";
+import { loadMemory, saveMemory, loadSizes, saveSizes, clearLayout, type BoxSize } from "./positions";
 import { LockContext } from "./lockContext";
 import { StatusPicker } from "./StatusPicker";
 import type { RoadmapItem } from "../scripts/tickets";
@@ -194,66 +194,80 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
     return reveal;
   }, [items, hiddenIds]);
 
-  // React Flow needs controlled node/edge state (with change handlers) for dragging to take effect. The
-  // layout is rebuilt from the markers whenever the filters/colour/selection change, but any node the user
-  // has dragged keeps its manual position (tracked in `draggedPositions`), so re-layouts don't undo drags.
+  // React Flow needs controlled node/edge state (with change handlers) for dragging to take effect. The layout
+  // is rebuilt whenever the items, filters, colour or selection change, from the layout's memory (`VIEW-23.1`):
+  // every node's last position, so a rebuild puts things back where they were and a new item makes room for
+  // itself instead of reshuffling the map. A drag is written into that memory, so a dropped node becomes its
+  // new place and its neighbours are pushed aside around it.
   // Explicit generics: an empty literal would otherwise infer `never[]` and every later setNodes/setEdges
   // call would be a type error against it.
   const [nodes, setNodes] = useNodesState<RoadmapNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
-  // Manual layout overrides, applied on top of the auto-layout and persisted to localStorage: dragged node
-  // positions and hand-resized box sizes. Both are keyed by node id, so they survive re-layouts and reloads.
-  const draggedPositions = useRef<Record<string, XYPosition>>(loadPositions(scope));
+  // Persisted to localStorage per project: the layout's memory, and hand-resized box sizes (applied over the
+  // layout's own). `parents` is each node's container as last laid out, which a drag needs to record its drop
+  // in the memory's container-relative terms; `dropping` holds a drag's latest position until it ends.
+  const memory = useRef<LayoutMemory>(loadMemory(scope));
   const resizedSizes = useRef<Record<string, BoxSize>>(loadSizes(scope));
+  const parents = useRef<Map<string, string | undefined>>(new Map());
+  const dropping = useRef<Record<string, XYPosition>>({});
 
   const handleNodesChange = useCallback(
     (changes: NodeChange<RoadmapNode>[]) => {
-      let positionEnded = false;
+      const dropped: string[] = [];
       let sizeEnded = false;
       for (const change of changes) {
-        if (change.type === "position" && change.position) {
-          draggedPositions.current[change.id] = change.position;
-          if (change.dragging === false) positionEnded = true;
-        } else if (change.type === "dimensions" && change.dimensions) {
+        if (change.type === "position") {
+          if (change.position) dropping.current[change.id] = change.position;
+          if (change.dragging === false) dropped.push(change.id);
+        } else if (change.type === "dimensions" && change.dimensions && change.resizing !== undefined) {
+          // Only a hand resize: React Flow also reports every node's measured size, without `resizing`, and
+          // recording those would pin each box at its old size when the layout later grows it.
           resizedSizes.current[change.id] = change.dimensions;
           if (change.resizing === false) sizeEnded = true;
         }
       }
-      if (positionEnded) savePositions(scope, draggedPositions.current);
       if (sizeEnded) saveSizes(scope, resizedSizes.current);
       setNodes((current) => applyNodeChanges(changes, current));
+      if (dropped.length > 0) {
+        for (const id of dropped) {
+          const at = dropping.current[id];
+          if (at) memory.current = { ...memory.current, [id]: remembered(parents.current.get(id), at) };
+          delete dropping.current[id];
+        }
+        saveMemory(scope, memory.current);
+        setLayoutNonce((nonce) => nonce + 1); // settle the map around the drop
+      }
     },
     [scope, setNodes],
   );
 
   const resetLayout = useCallback(() => {
-    const hasManualLayout =
-      Object.keys(draggedPositions.current).length > 0 || Object.keys(resizedSizes.current).length > 0;
-    if (hasManualLayout && !window.confirm("Reset the layout? This discards your saved node positions and sizes.")) {
-      return;
-    }
+    if (!window.confirm("Lay the map out afresh? Everything moves, including anything you arranged by hand.")) return;
     clearLayout(scope);
-    draggedPositions.current = {};
+    memory.current = {};
     resizedSizes.current = {};
     setLayoutNonce((nonce) => nonce + 1);
   }, [scope]);
 
   useEffect(() => {
-    // Lay out the full item set (so filtering only toggles `hidden`, never re-flows), then apply the manual
-    // position/size overrides. Nodes deliberately do NOT depend on `hoveredId` - hover restyles edges only
-    // (see the edge effect below), so it never rebuilds and repaints the node layer.
-    const nodes = buildGraph(items, areas, colours, colourMode, selectedId, hiddenIds);
+    // Lay out the full item set (so filtering only toggles `hidden`, never re-flows), from the memory, and
+    // remember the result. Nodes deliberately do NOT depend on `hoveredId` - hover restyles edges only (see the
+    // edge effect below), so it never rebuilds and repaints the node layer.
+    const nodes = buildGraph(items, areas, colours, colourMode, selectedId, hiddenIds, memory.current);
+    parents.current = new Map(nodes.map((node) => [node.id, node.parentId]));
+    const next = memoryOf(nodes);
+    if (JSON.stringify(next) !== JSON.stringify(memory.current)) {
+      memory.current = next;
+      saveMemory(scope, next);
+    }
     setNodes(
       nodes.map((node) => {
-        const dragged = draggedPositions.current[node.id];
         const resized = resizedSizes.current[node.id];
-        const position = dragged ?? node.position;
-        const style = resized ? { ...node.style, width: resized.width, height: resized.height } : node.style;
-        return { ...node, position, style };
+        return resized ? { ...node, style: { ...node.style, width: resized.width, height: resized.height } } : node;
       }),
     );
-    // layoutNonce forces a re-run after a reset (the override refs were cleared).
-  }, [items, areas, colours, colourMode, selectedId, hiddenIds, layoutNonce, setNodes]);
+    // layoutNonce forces a re-run after a reset or a drop (the memory ref changed, which React cannot see).
+  }, [items, areas, colours, colourMode, selectedId, hiddenIds, layoutNonce, scope, setNodes]);
 
   // Edges are their own layer: hover and selection restyle them here without touching the node layout above.
   useEffect(() => {
@@ -462,7 +476,7 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
             </button>
           )}
           {view === "graph" && (
-            <button className="chip" onClick={resetLayout} title="Clear saved positions and re-run auto-layout">
+            <button className="chip" onClick={resetLayout} title="Lay the map out afresh, forgetting where everything was">
               reset layout
             </button>
           )}

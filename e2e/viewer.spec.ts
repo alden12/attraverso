@@ -361,3 +361,23 @@ test.describe("the calendar", () => {
     await expect(page.locator(".graph__notice")).toContainText("Nothing here has a date yet");
   });
 });
+
+test.describe("the layout's memory (VIEW-23.1)", () => {
+  test("puts every node back where it was after a reload", async ({ page }) => {
+    // Cleared once rather than in an init script, which would run again on the reload and wipe what is tested.
+    await page.goto("/#demo");
+    await page.evaluate(() => window.localStorage.clear());
+    await page.reload();
+    await expect(page.locator(".react-flow__node").first()).toBeVisible();
+    const positions = () =>
+      page.locator(".react-flow__node").evaluateAll((nodes) =>
+        Object.fromEntries(nodes.map((node) => [node.getAttribute("data-id"), (node as HTMLElement).style.transform])),
+      );
+    const before = await positions();
+    expect(await page.evaluate(() => window.localStorage.getItem("roadmap.layout.v1:demo"))).not.toBeNull();
+
+    await page.reload();
+    await expect(page.locator(".react-flow__node").first()).toBeVisible();
+    expect(await positions()).toEqual(before);
+  });
+});

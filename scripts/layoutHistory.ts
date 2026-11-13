@@ -4,7 +4,9 @@
  * The question `VIEW-23` says to settle by measurement rather than argument: as a plan grows, do things stay
  * where they were? Each committed version of the plan file is laid out exactly as the viewer would lay it out,
  * and each consecutive pair is compared by `compareLayouts` - the share of item pairs, and of area pairs, whose
- * left/right or above/below order flipped. A CLI, so stdout is fine.
+ * left/right or above/below order flipped. Both ways: `fresh` lays each version out from nothing, as the layout
+ * did before `VIEW-23.1` and as a reset still does, and `remembered` carries each version's layout into the next.
+ * A CLI, so stdout is fine.
  *
  *   yarn workspace attraverso layout:history [--project <key>] [--file attraverso.yaml --file roadmap.apm.yaml]
  *
@@ -14,7 +16,7 @@
  */
 import { execFileSync } from "node:child_process";
 import { parse } from "yaml";
-import { compareLayouts, currentLayout, describe, summarise, type Stability } from "../roadmap/layoutStability";
+import { describe, replay } from "../roadmap/layoutStability";
 import { asPlan, type Store } from "../src/serialise/plan";
 import { areasOf, type RoadmapItem, type Status } from "./tickets";
 
@@ -72,19 +74,13 @@ function main(): void {
     process.exit(1);
   }
 
-  const areaResults: Stability[] = [];
-  const itemResults: Stability[] = [];
-  let previous = currentLayout(versions[0]!);
-  for (const items of versions.slice(1)) {
-    const frame = currentLayout(items);
-    areaResults.push(compareLayouts(previous.rects, frame.rects, frame.areas));
-    itemResults.push(compareLayouts(previous.rects, frame.rects, frame.items));
-    previous = frame;
-  }
+  const results = replay(versions);
   const last = versions[versions.length - 1]!;
   console.log(`${versions.length} versions of ${project ?? "the first project"}, ${versions[0]!.length} to ${last.length} items, ${areasOf(last).length} areas at the end`);
-  console.log(describe("areas", summarise(areaResults)));
-  console.log(describe("items", summarise(itemResults)));
+  for (const mode of ["fresh", "remembered"] as const) {
+    console.log(describe(`${mode}, areas`, results[mode].areas));
+    console.log(describe(`${mode}, items`, results[mode].items));
+  }
 }
 
 main();
