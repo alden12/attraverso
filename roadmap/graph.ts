@@ -65,7 +65,15 @@ export interface GhostNodeData extends Record<string, unknown> {
 }
 export type GhostNode = Node<GhostNodeData, "ghost">;
 
-export type RoadmapNode = AreaNode | TicketNode | ItemNode | GhostNode;
+/**
+ * An open area's zoomed-out overview (`VIEW-52`), as a node of its own over the area's frame rather than drawn
+ * inside it: React Flow always draws a container's children above the container, so inside the frame the nested
+ * boxes covered it partway through the fade. As a sibling layer at the top of the stack it covers them instead.
+ * Same size and place as the frame, never selected, dragged or clicked.
+ */
+export type OverviewNode = Node<AreaNodeData, "overview">;
+export const overviewIdFor = (area: string): string => `overview:${area}`;
+export type RoadmapNode = AreaNode | TicketNode | ItemNode | GhostNode | OverviewNode;
 
 /** The placeholder's node id, namespaced so it can never collide with a ref in this project. */
 export const ghostIdFor = (project: string, ref: string): string => `elsewhere:${project}:${ref}`;
@@ -955,7 +963,21 @@ export function buildGraph(
       style: { width: entry.size.width, height: entry.size.height },
       zIndex: 0,
     };
-    return [areaBox, ...entry.inner.nodes];
+    const overview: OverviewNode = {
+      id: overviewIdFor(entry.area),
+      type: "overview",
+      parentId: areaBox.id,
+      position: { x: 0, y: 0 },
+      hidden: areaBox.hidden,
+      data: areaBox.data,
+      style: { width: entry.size.width, height: entry.size.height },
+      selectable: false,
+      draggable: false,
+      focusable: false,
+      // Above everything the area holds, however deep it nests.
+      zIndex: 1000,
+    };
+    return [areaBox, ...entry.inner.nodes, overview];
   });
 
   return nodes;
@@ -968,7 +990,8 @@ export function buildGraph(
  */
 export function memoryOf(nodes: RoadmapNode[]): LayoutMemory {
   const memory: LayoutMemory = {};
-  for (const node of nodes) if (node.type !== "ghost") memory[node.id] = remembered(node.parentId, node.position);
+  // Not placeholders, which are a fixed list, nor overviews, which sit wherever their area does.
+  for (const node of nodes) if (node.type !== "ghost" && node.type !== "overview") memory[node.id] = remembered(node.parentId, node.position);
   return memory;
 }
 

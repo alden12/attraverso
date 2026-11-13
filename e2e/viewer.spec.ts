@@ -243,7 +243,7 @@ test.describe("the served store", () => {
   });
 
   test("zoomed far out, an area shows its overview in place of its cards, and a click opens it (VIEW-52)", async ({ page }) => {
-    const overview = page.locator('.react-flow__node[data-id="area:DATA"] .area-box__overview');
+    const overview = page.locator('.react-flow__node[data-id="overview:DATA"] .area-box__overview');
     const opacity = (locator: typeof overview) => locator.evaluate((element) => Number(getComputedStyle(element).opacity));
     await expect.poll(() => opacity(overview)).toBe(0); // close enough to read the cards: nothing over them
 
@@ -271,8 +271,9 @@ test.describe("the served store", () => {
     const frame = page.locator('.react-flow__node[data-id="area:DATA"]');
     await expect(frame.locator(".area-box__title .area-box__name")).toHaveText("Storage"); // leading the frame's title
     await expect(frame.locator(".area-box__label")).toHaveText("DATA"); // with the key after it
-    await expect(frame.locator(".area-box__overview-name")).toHaveText("Storage"); // and the zoomed-out overview
-    await expect(frame.locator(".area-box__overview-description")).toHaveText("Where the plan lives.");
+    const overview = page.locator('.react-flow__node[data-id="overview:DATA"]');
+    await expect(overview.locator(".area-box__overview-name")).toHaveText("Storage"); // and the zoomed-out overview
+    await expect(overview.locator(".area-box__overview-description")).toHaveText("Where the plan lives.");
 
     await page.locator('.toolbtn[aria-haspopup="dialog"]').click();
     await expect(page.locator(".settings .chip", { hasText: "DATA" }).first().locator(".chip__name")).toHaveText("Storage");

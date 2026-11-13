@@ -890,6 +890,18 @@ body {
   position: relative;
   container-type: size;
 }
+/* The overview's own node (OverviewNode in graph.ts), laid exactly over its area's frame. It never takes a click:
+   `!important` because React Flow writes pointer-events onto each node inline. */
+.react-flow__node-overview {
+  pointer-events: none !important;
+}
+.area-overview {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 12px;
+  container-type: size;
+}
 .area-box__overview {
   position: absolute;
   inset: 0;

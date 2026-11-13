@@ -27,7 +27,7 @@ import { useExtensions } from "./extensions";
 import { areasOf, STATUSES, type Status, splitScope } from "../scripts/tickets";
 import { areaColours, buildGraph, buildEdges, memoryOf, remembered, type ColourMode, type LayoutMemory, type RoadmapNode } from "./graph";
 import { ItemNodeView } from "./ItemNode";
-import { AreaGroupNode } from "./AreaGroupNode";
+import { AreaGroupNode, AreaOverviewNode } from "./AreaGroupNode";
 import { TicketGroupNode } from "./TicketGroupNode";
 import { GhostNodeView } from "./GhostNode";
 import { loadMemory, saveMemory, loadSizes, saveSizes, clearLayout, type BoxSize } from "./positions";
@@ -42,7 +42,7 @@ import { Comments } from "./Comments";
 import { AreaPane } from "./AreaPane";
 import { ZoomFade } from "./ZoomFade";
 
-const nodeTypes = { item: ItemNodeView, area: AreaGroupNode, ticket: TicketGroupNode, ghost: GhostNodeView };
+const nodeTypes = { item: ItemNodeView, area: AreaGroupNode, ticket: TicketGroupNode, ghost: GhostNodeView, overview: AreaOverviewNode };
 const STATUS_KEYS = Object.keys(STATUSES) as Status[];
 const COLOUR_MODES: ColourMode[] = ["status", "area"];
 const GRID = 20; // drag/resize snap grid, aligned to the background dots
@@ -456,7 +456,22 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
         }
       }
       if (sizeEnded) saveSizes(scope, resizedSizes.current);
-      setNodes((current) => applyNodeChanges(changes, current));
+      // An area resized by hand takes its overview with it as it goes, so the layer over it never lags the frame.
+      const areaSizes = new Map<string, { width: number; height: number }>(
+        changes.flatMap((change) =>
+          change.type === "dimensions" && change.resizing !== undefined && change.dimensions && change.id.startsWith("area:")
+            ? [[`overview:${change.id.slice("area:".length)}`, change.dimensions] as const]
+            : [],
+        ),
+      );
+      setNodes((current) => {
+        const applied = applyNodeChanges(changes, current);
+        if (areaSizes.size === 0) return applied;
+        return applied.map((node) => {
+          const size = areaSizes.get(node.id);
+          return size === undefined ? node : { ...node, style: { ...node.style, width: size.width, height: size.height } };
+        });
+      });
       if (dropped.length > 0) {
         for (const id of dropped) {
           const at = dropping.current[id];
@@ -520,7 +535,9 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
       const full = new Map(nodes.map((node) => [node.id, node]));
       const compact = buildGraph(shown, areasOf(shown), colours, colourMode, selectedId, new Set(), next, collapsedAreas);
       const compactIds = new Set(compact.map((node) => node.id));
-      const inCollapsed = (node: RoadmapNode) => node.type !== "ghost" && collapsedAreas.has(node.id.split("-")[0] ?? "");
+      // An overview's area is in its id (`overview:KEY`); a card's is its ref's prefix.
+      const inCollapsed = (node: RoadmapNode) =>
+        node.type !== "ghost" && collapsedAreas.has(node.type === "overview" ? (node.data as { area: string }).area : (node.id.split("-")[0] ?? ""));
       // Data from the full pass: it alone knows which links lead to something filtered out (the handle hints)
       // and counts an area's hidden items. Positions and box sizes from the compact one. A collapsed area keeps
       // its own data, which is its summary.
@@ -537,11 +554,12 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
     setNodes((current) => {
       const picked = new Set(current.filter((node) => node.selected === true).map((node) => node.id));
       return drawn.map((node) => {
-        const resized = resizedSizes.current[node.id];
+        // An overview takes its area's hand-set size, so it keeps covering the frame after a resize.
+        const resized = resizedSizes.current[node.type === "overview" ? `area:${(node.data as { area: string }).area}` : node.id];
         let sized: RoadmapNode = resized ? { ...node, style: { ...node.style, width: resized.width, height: resized.height } } : node;
         // An area's name and description (PROJ-3), for its title and its zoomed-out overview. Laid on here rather
         // than passed into the layout, which places boxes and has no use for what they are called.
-        const info = node.type === "area" ? project?.areaInfo[(node.data as { area: string }).area] : undefined;
+        const info = node.type === "area" || node.type === "overview" ? project?.areaInfo[(node.data as { area: string }).area] : undefined;
         if (info !== undefined) sized = { ...sized, data: { ...sized.data, name: info.name, description: info.description } } as RoadmapNode;
         return picked.has(node.id) ? { ...sized, selected: true } : sized;
       });
@@ -1110,7 +1128,8 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
                 <MiniMap
                   pannable
                   zoomable
-                  nodeColor={(node) => (node.data as { colour?: string }).colour ?? "#2b3644"}
+                  // An overview sits exactly over its area, so drawing it too would only paint the same box twice.
+                  nodeColor={(node) => (node.type === "overview" ? "transparent" : ((node.data as { colour?: string }).colour ?? "#2b3644"))}
                   nodeStrokeColor="#0b0f14"
                   nodeBorderRadius={4}
                   maskColor="rgba(11,15,20,0.6)"

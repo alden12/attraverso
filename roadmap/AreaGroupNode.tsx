@@ -1,5 +1,5 @@
 import { Handle, NodeResizer, Position, type NodeProps } from "@xyflow/react";
-import type { AreaNode } from "./graph";
+import type { AreaNode, OverviewNode } from "./graph";
 import { STATUSES } from "../scripts/tickets";
 
 /** The container box for one area (epic): a tinted, titled frame the area's item cards sit inside. Selecting
@@ -48,38 +48,44 @@ export function AreaGroupNode({ data, selected }: NodeProps<AreaNode>) {
         {named(data) && <span className="area-box__label">{data.area}</span>}
         <span className="area-box__count">{data.count}</span>
       </div>
-      {/* What the area is, for when its cards are too small to read (VIEW-52): faded in by `--overview`, which the graph
-          sets from the zoom, while the cards fade out over it. Always mounted, so the fade is a style and never a
-          re-render, and it lets clicks through to the frame. */}
-      {data.byStatus !== undefined && data.foreign !== true && (
-        <div className="area-box__overview" aria-hidden="true">
-          {/* Sized to fit its own length: about 0.6em a character, so a font of 140cqw over the length fills most of
-              the width, capped by height for a wide, short frame and in pixels for a huge one. */}
-          <div
-            className="area-box__overview-name"
-            style={{ fontSize: `min(${140 / Math.max((named(data) ? data.name : data.area).length, 3)}cqw, 30cqh, 110px)` }}
-          >
-            {named(data) ? data.name : data.area}
-          </div>
-          {named(data) && <div className="area-box__overview-key">{data.area}</div>}
-          <div className="area-box__overview-bar">
-            {data.byStatus.map(([status, count]) => (
-              <span key={status} style={{ flexGrow: count, background: STATUSES[status].colour }} />
-            ))}
-          </div>
-          <div className="area-box__overview-counts">
-            {data.byStatus.map(([status, count]) => (
-              <span key={status} style={{ color: STATUSES[status].colour }}>
-                {STATUSES[status].icon} {count}
-              </span>
-            ))}
-          </div>
-          {data.description !== undefined && data.description !== null && <div className="area-box__overview-description">{data.description}</div>}
-        </div>
-      )}
     </div>
   );
 }
 
 /** Whether the plan gives the area a name of its own, rather than the key it would otherwise be called. */
 const named = (data: AreaNode["data"]): data is AreaNode["data"] & { name: string } => data.name !== undefined && data.name !== data.area;
+
+/**
+ * What an open area is, for when its cards are too small to read (`VIEW-52`): its name large, a progress bar and
+ * counts by status, and its description. A node of its own over the frame (see `OverviewNode`), faded in by
+ * `--overview`, which the graph sets from the zoom; always mounted, so the fade is a style and never a re-render.
+ */
+export function AreaOverviewNode({ data }: NodeProps<OverviewNode>) {
+  if (data.byStatus === undefined) return null;
+  const title = named(data) ? data.name : data.area;
+  return (
+    <div className="area-overview" style={{ "--area": data.colour } as React.CSSProperties} aria-hidden="true">
+      <div className="area-box__overview">
+        {/* Sized to fit its own length: about 0.6em a character, so a font of 140cqw over the length fills most of
+            the width, capped by height for a wide, short frame and in pixels for a huge one. */}
+        <div className="area-box__overview-name" style={{ fontSize: `min(${140 / Math.max(title.length, 3)}cqw, 30cqh, 110px)` }}>
+          {title}
+        </div>
+        {named(data) && <div className="area-box__overview-key">{data.area}</div>}
+        <div className="area-box__overview-bar">
+          {data.byStatus.map(([status, count]) => (
+            <span key={status} style={{ flexGrow: count, background: STATUSES[status].colour }} />
+          ))}
+        </div>
+        <div className="area-box__overview-counts">
+          {data.byStatus.map(([status, count]) => (
+            <span key={status} style={{ color: STATUSES[status].colour }}>
+              {STATUSES[status].icon} {count}
+            </span>
+          ))}
+        </div>
+        {data.description !== undefined && data.description !== null && <div className="area-box__overview-description">{data.description}</div>}
+      </div>
+    </div>
+  );
+}

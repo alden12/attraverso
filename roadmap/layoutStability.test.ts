@@ -128,7 +128,9 @@ describe("the layout with a memory (VIEW-23.1)", () => {
       const nodes = buildGraph(items, areasOf(items), {}, "area", null, new Set(), memory);
       memory = memoryOf(nodes);
       const byParent = new Map<string, RoadmapNode[]>();
-      for (const node of nodes) byParent.set(node.parentId ?? "", [...(byParent.get(node.parentId ?? "") ?? []), node]);
+      // An area's overview lies over its cards on purpose (VIEW-52): it is a layer, not a sibling with a place.
+      for (const node of nodes.filter((candidate) => candidate.type !== "overview"))
+        byParent.set(node.parentId ?? "", [...(byParent.get(node.parentId ?? "") ?? []), node]);
       for (const siblings of byParent.values()) {
         for (let a = 0; a < siblings.length; a++) {
           for (let b = a + 1; b < siblings.length; b++) {
