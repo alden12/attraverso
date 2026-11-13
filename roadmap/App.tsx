@@ -317,14 +317,18 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
     if (panTo === null || flow.current === null) return;
     const node = nodes.find((candidate) => candidate.id === panTo);
     if (node === undefined || node.hidden === true) return;
-    void flow.current.fitView({ nodes: [{ id: panTo }], duration: 400, maxZoom: 1.1, padding: 0.6 });
+    // An area's frame fills the canvas (VIEW-36); a card keeps some of its neighbourhood around it.
+    const frame = panTo.startsWith("area:");
+    void flow.current.fitView({ nodes: [{ id: panTo }], duration: 400, maxZoom: frame ? 1.2 : 1.1, padding: frame ? 0.08 : 0.6 });
     setPanTo(null);
   }, [panTo, nodes]);
   // Zoom to an area's frame from the view menu: the whole frame, open or folded, rather than one card, so a big
-  // plan is a menu of places to go. A narrow screen closes the menu on the way, since it covers the canvas there;
-  // a wide one keeps it open, so you can hop from area to area.
+  // plan is a menu of places to go. Asking to go to a hidden area shows it first, since that is plainly what was
+  // meant, and the pan waits for its frame to be drawn. A narrow screen closes the menu on the way, since it covers
+  // the canvas there; a wide one keeps it open, so you can hop from area to area.
   const zoomToArea = (area: string) => {
-    void flow.current?.fitView({ nodes: [{ id: `area:${area}` }], duration: 400, maxZoom: 1.2, padding: 0.08 });
+    setHiddenAreas((set) => (set.has(area) ? toggle(set, area) : set));
+    setPanTo(`area:${area}`);
     if (narrow) setSettingsOpen(false);
   };
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
@@ -719,31 +723,29 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
                 <div className="filters__group">
                   {areas.map((area) =>
                     view === "graph" ? (
-                      // Two buttons in one pill: the name shows and hides, the target beside it goes there. Two,
-                      // because a button cannot hold a button, and a hidden area has no frame to go to.
+                      // Two buttons in one pill: the name goes there, the eye beside it shows and hides. Going is the
+                      // big target because it is the common act on a big plan; two buttons because one cannot hold another.
                       <span key={area} className="chip-pair" data-off={hiddenAreas.has(area)}>
                         <button
                           className="chip"
-                          data-off={hiddenAreas.has(area)}
                           style={{ "--area": colours[area] } as React.CSSProperties}
-                          onClick={() => setHiddenAreas((set) => toggle(set, area))}
-                          title={hiddenAreas.has(area) ? `Show ${area}` : `Hide ${area}`}
+                          onClick={() => zoomToArea(area)}
+                          title={hiddenAreas.has(area) ? `Show ${area} and zoom to it` : `Zoom to ${area}`}
                         >
                           <span className="chip__dot" />
                           {area}
                           <span className="chip__count">{counts.byArea.get(area)}</span>
                         </button>
                         <button
-                          className="chip chip--zoom"
-                          disabled={hiddenAreas.has(area)}
-                          onClick={() => zoomToArea(area)}
-                          title={hiddenAreas.has(area) ? `${area} is hidden` : `Zoom to ${area}`}
-                          aria-label={`Zoom to ${area}`}
+                          className="chip chip--eye"
+                          onClick={() => setHiddenAreas((set) => toggle(set, area))}
+                          title={hiddenAreas.has(area) ? `Show ${area}` : `Hide ${area}`}
+                          aria-label={hiddenAreas.has(area) ? `Show ${area}` : `Hide ${area}`}
                         >
-                          <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
-                            <circle cx="8" cy="8" r="5" fill="none" stroke="currentColor" strokeWidth="1.5" />
-                            <circle cx="8" cy="8" r="1.6" fill="currentColor" />
-                            <path d="M8 0.5v2.5M8 13v2.5M0.5 8h2.5M13 8h2.5" stroke="currentColor" strokeWidth="1.5" />
+                          <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">
+                            <path d="M1 8s2.6-4.5 7-4.5S15 8 15 8s-2.6 4.5-7 4.5S1 8 1 8z" fill="none" stroke="currentColor" strokeWidth="1.4" />
+                            <circle cx="8" cy="8" r="2" fill="currentColor" />
+                            {hiddenAreas.has(area) && <path d="M2.5 13.5l11-11" stroke="currentColor" strokeWidth="1.4" />}
                           </svg>
                         </button>
                       </span>

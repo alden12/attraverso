@@ -422,7 +422,7 @@ body {
   opacity: 0.4;
   cursor: default;
 }
-/* An area's chip and its zoom target, joined into one pill (VIEW-36). */
+/* An area's chip, which zooms to it, and its show/hide eye, joined into one pill (VIEW-36). */
 .chip-pair {
   display: inline-flex;
 }
@@ -430,21 +430,18 @@ body {
   border-top-right-radius: 0;
   border-bottom-right-radius: 0;
 }
-.chip-pair > .chip--zoom {
+.chip-pair > .chip--eye {
   border-top-left-radius: 0;
   border-bottom-left-radius: 0;
   border-left: none;
   padding: 4px 7px;
   color: var(--muted);
 }
-.chip-pair > .chip--zoom:not(:disabled):hover {
+.chip-pair > .chip--eye:hover {
   color: var(--text);
 }
-/* The pill fades as one when its area is hidden, rather than the target fading twice. */
-.chip-pair[data-off="true"] > .chip {
-  opacity: 1;
-}
-.chip-pair[data-off="true"] {
+/* A hidden area's name fades, and its eye stays full strength, since the eye is how it comes back. */
+.chip-pair[data-off="true"] > .chip:first-child {
   opacity: 0.4;
 }
 .chip__dot {

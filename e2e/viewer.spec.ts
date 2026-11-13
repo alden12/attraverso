@@ -34,7 +34,12 @@ const foreignProjects = [...new Set(foreign.map((dep) => dep.split(":")[0]!))];
  */
 async function settings(page: Page, ...chips: string[]): Promise<void> {
   await page.locator('.toolbtn[aria-haspopup="dialog"]').click();
-  for (const chip of chips) await page.locator(".settings .chip", { hasText: chip }).first().click();
+  // An area's chip zooms to it in the graph (VIEW-36), and its eye beside it is the toggle, so that is clicked where
+  // there is one; a status or a calendar's area chip is the toggle itself.
+  for (const chip of chips) {
+    const eye = page.locator(".settings").getByRole("button", { name: new RegExp(`^(Hide|Show) ${chip}$`) });
+    await ((await eye.count()) > 0 ? eye : page.locator(".settings .chip", { hasText: chip }).first()).click();
+  }
   await page.keyboard.press("Escape");
   await expect(page.locator(".settings")).toHaveCount(0);
 }
@@ -153,25 +158,23 @@ test.describe("the served store", () => {
     await expect.poll(() => page.locator(".item-node").count()).toBeLessThan(before);
   });
 
-  test("zooms to an area from the view menu, and not to a hidden one (VIEW-36)", async ({ page }) => {
+  test("zooms to an area from the view menu, showing it first if it was hidden (VIEW-36)", async ({ page }) => {
     await expect(page.locator(".item-node").first()).toBeVisible();
-    const viewport = () => page.locator(".react-flow__viewport").evaluate((element) => (element as HTMLElement).style.transform);
-    await page.waitForTimeout(600); // the opening fitView's transition
-    const whole = await viewport();
-
-    await page.locator('.toolbtn[aria-haspopup="dialog"]').click();
-    await page.getByRole("button", { name: "Zoom to PLAT" }).click();
-    await expect.poll(viewport).not.toBe(whole);
-    // Once the transition settles, the PLAT frame sits in the middle of the canvas.
     const canvas = (await page.locator(".react-flow").boundingBox())!;
     const offCentre = async () => {
-      const frame = (await page.locator('.react-flow__node[data-id="area:PLAT"]').boundingBox())!;
+      const frame = await page.locator('.react-flow__node[data-id="area:PLAT"]').boundingBox();
+      if (frame === null) return Infinity;
       return Math.round(Math.abs(frame.x + frame.width / 2 - (canvas.x + canvas.width / 2)) + Math.abs(frame.y + frame.height / 2 - (canvas.y + canvas.height / 2)));
     };
-    await expect.poll(offCentre).toBeLessThan(4);
 
+    await page.locator('.toolbtn[aria-haspopup="dialog"]').click();
+    await page.getByRole("button", { name: "Hide PLAT" }).click();
+    await expect(page.locator('.react-flow__node[data-id="area:PLAT"]')).toBeHidden();
+
+    // The name goes there, bringing a hidden area back on the way.
     await page.locator(".settings .chip", { hasText: "PLAT" }).first().click();
-    await expect(page.getByRole("button", { name: "Zoom to PLAT" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Hide PLAT" })).toBeVisible();
+    await expect.poll(offCentre).toBeLessThan(4);
   });
 
   test("captures the full graph for visual inspection", async ({ page }) => {
