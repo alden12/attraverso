@@ -14,6 +14,7 @@ import { ensureUser, LOCAL_IDENTITY } from "../domain/users";
 import { databaseBacked, fileBacked } from "./runtime";
 import { INSTRUCTIONS, registerTools } from "./tools";
 import { createViewerHost } from "./viewer";
+import { runViewer } from "./viewerCommand";
 
 async function main(): Promise<void> {
   const url = process.env.APM_DATABASE_URL;
@@ -38,7 +39,16 @@ async function main(): Promise<void> {
   process.stderr.write(`${pkg.name} MCP server ready on stdio (${describe})\n`);
 }
 
-main().catch((error) => {
-  process.stderr.write(`fatal: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}\n`);
+// `attraverso viewer` (VIEW-47) serves the graph from a terminal instead; with no subcommand this is the stdio
+// server Claude launches, as it always was. Only the first argument is a subcommand: `--store` and the rest are
+// read by whichever mode runs.
+const viewer = process.argv[2] === "viewer";
+const run = viewer ? () => runViewer(process.argv.slice(3)) : main;
+
+run().catch((error) => {
+  // A person at a terminal gets the reason, not a stack: in viewer mode the likely failure is no plan here, which
+  // is theirs to fix. The server keeps the stack, since its stderr is a log someone reads when it broke.
+  const detail = error instanceof Error ? (viewer ? error.message : (error.stack ?? error.message)) : String(error);
+  process.stderr.write(`${viewer ? "attraverso viewer" : "fatal"}: ${detail}\n`);
   process.exit(1);
 });

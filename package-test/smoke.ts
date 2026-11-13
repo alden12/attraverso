@@ -17,8 +17,8 @@
  * pglite's `nodefs.js` warns about `__vite-browser-external` during the browser build: that is PGlite's own Node
  * filesystem, reached only when given a path, and the warning is the same in any vite app that uses PGlite.
  */
-import { execFileSync } from "node:child_process";
-import { mkdir, mkdtemp, readdir, realpath, rm, writeFile } from "node:fs/promises";
+import { execFileSync, spawn } from "node:child_process";
+import { copyFile, mkdir, mkdtemp, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
@@ -148,11 +148,51 @@ async function main(): Promise<void> {
       await new Promise<void>((resolve) => server.httpServer.close(() => resolve()));
     }
 
+    // 5. The bin's viewer command (VIEW-47), from the installed package, over a copy of the e2e fixture plan.
+    await viewerCommand(project);
+
     const assets = (await readdir(join(project, "dist", "assets"))).filter((name) => name.endsWith(".wasm"));
     console.error(`  browser bundle carried ${assets.join(", ") || "no wasm"}`);
     console.error("package smoke test passed");
   } finally {
     await rm(scratch, { recursive: true, force: true });
+  }
+}
+
+/**
+ * `attraverso viewer` as a user runs it: the installed bin, a plan named with `--store`, the URL read from what it
+ * prints, and the plan fetched from that URL. Then Ctrl+C's signal, which must end it.
+ */
+async function viewerCommand(project: string): Promise<void> {
+  const plan = join(project, "attraverso.yaml");
+  await copyFile(join(coreRoot, "e2e", "fixture", "demo.apm.yaml"), plan);
+  const child = spawn("node", [join(project, "node_modules", "attraverso", "server.js"), "viewer", "--store", plan], { cwd: project });
+  try {
+    const url = await new Promise<string>((resolve, reject) => {
+      let out = "";
+      const timer = setTimeout(() => reject(new Error(`viewer: no URL within 30s; it printed:\n${out}`)), 30_000);
+      child.stdout.on("data", (chunk: Buffer) => {
+        out += chunk.toString();
+        const found = /http:\/\/127\.0\.0\.1:\d+\/\S*/.exec(out);
+        if (found !== null) {
+          clearTimeout(timer);
+          resolve(found[0]);
+        }
+      });
+      child.on("exit", (code) => reject(new Error(`viewer exited with ${code} before printing a URL:\n${out}`)));
+    });
+    const response = await fetch(new URL("/api/store", url));
+    const body = (await response.json()) as { store: { projects: { key: string }[] } };
+    if (!body.store.projects.some((p) => p.key === "demo")) throw new Error(`viewer: /api/store did not serve the plan: ${JSON.stringify(body).slice(0, 200)}`);
+    const page = await fetch(url);
+    if (!(await page.text()).includes("<div id=")) throw new Error("viewer: the page it serves is not the viewer");
+    console.error(`  viewer command: ok (${new URL(url).origin})`);
+  } finally {
+    if (child.exitCode === null) {
+      const exited = new Promise((resolve) => child.once("exit", resolve));
+      child.kill("SIGINT");
+      await exited;
+    }
   }
 }
 

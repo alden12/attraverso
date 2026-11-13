@@ -64,6 +64,16 @@ loaded, and always will be. To move one over, rename both: `git mv roadmap.apm.y
 Ask the agent to open the viewer (the `open_viewer` tool). It serves the plan as a dependency graph on a
 `127.0.0.1` address, so it only opens on the machine running the server.
 
+Or open it yourself from a terminal, in the project:
+
+```bash
+npx attraverso viewer --open
+```
+
+It finds the plan the way the server does (or takes `--store <path>`), prints the URL, and opens it with
+`--open`. `--project <key>` picks which project it lands on. It can edit the plan as the agent's viewer can, and
+is safe to run beside a connected server on the same file. Ctrl+C stops it.
+
 ### Claude Desktop
 
 Claude Desktop starts servers without your shell's `PATH`, so a bare `npx` or `node` is often not found. See
