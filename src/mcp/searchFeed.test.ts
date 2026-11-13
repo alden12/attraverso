@@ -23,6 +23,14 @@ describe("searchFeed (VIEW-25)", () => {
     await close();
   });
 
+  it("knows a ref typed with a space, an underscore or nothing in place of the dash", async () => {
+    const { db, ownerId, close } = await seeded();
+    for (const typed of ["view 2", "VIEW_2", "view2", "View  -  2"]) {
+      expect((await searchFeed(db, ownerId, "apm", typed))?.hits[0], typed).toMatchObject({ ref: "VIEW-2" });
+    }
+    await close();
+  });
+
   it("does not name a deleted item, and searches as typed otherwise", async () => {
     const { db, ownerId, project, close } = await seeded();
     await deleteItem(db, { projectId: project.id, ref: "VIEW-2" }, ACTOR);

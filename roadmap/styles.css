@@ -876,18 +876,21 @@ body {
 }
 .area-box__title {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 8px;
   padding: 9px 14px;
-  font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.04em;
 }
+/* Bigger than a card's text, since an area is what you find your way by, and it fits the 46px the layout keeps
+   for the title bar (`PAD_TOP` in graph.ts), so nothing moves. */
 .area-box__name {
   color: var(--area);
+  font-size: 16px;
 }
 .area-box__count {
   color: var(--muted);
+  font-size: 13px;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }

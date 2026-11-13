@@ -16,8 +16,13 @@ export { MATCH_OPEN, MATCH_CLOSE } from "../domain/search";
 /** Enough to fill the dropdown under the box without scrolling it on a laptop. */
 const LIMIT = 12;
 
-/** A ref as typed (`view-34`, `MCP-3.1`): a prefix, a dash, and a dotted number. */
-const REF = /^([A-Za-z][A-Za-z0-9]*)-(\d+(?:\.\d+)*)$/;
+/**
+ * A ref as typed: a prefix and a dotted number, with a dash, a space, an underscore or nothing between them -
+ * `view-34`, `proj 3`, `MCP_3.1`, `plat9`. Only a dash was accepted at first, and "proj 3" found nothing by its
+ * ref, which is how people say one out loud. Loose is safe here, because a match only leads when that item exists.
+ * The prefix is lazy, so `plat9` splits before the digits while `A2-1` still keeps its digit.
+ */
+const REF = /^([A-Za-z][A-Za-z0-9]*?)[\s_-]*(\d+(?:\.\d+)*)$/;
 
 export interface SearchFeed {
   hits: SearchHit[];
