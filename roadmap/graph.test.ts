@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { RoadmapItem } from "../scripts/tickets";
-import { areaColours, buildGraph, colourOf, titleLines } from "./graph";
+import { areaColours, buildGraph, titleLines } from "./graph";
 
 const item = (id: string, deps: string[] = []): RoadmapItem => {
   const parent = id.includes(".") ? id.slice(0, id.lastIndexOf(".")) : null;
@@ -49,15 +49,45 @@ describe("card height follows the title (VIEW-43)", () => {
   });
 });
 
-describe("area colours (VIEW-36)", () => {
-  it("depend on the key alone, not on which other areas exist or their order", () => {
-    const alone = areaColours(["VIEW"]);
-    const crowded = areaColours(["MCP", "DATA", "VIEW", "PLAT"]);
-    expect(crowded.VIEW).toBe(alone.VIEW);
-    expect(areaColours(["PLAT", "MCP"])).toEqual({ MCP: crowded.MCP, PLAT: crowded.PLAT });
+describe("area colours (VIEW-36, VIEW-51)", () => {
+  const many = ["VIEW", "MCP", "DATA", "PLAT", "PROJ", "CTX", "IMP", "OPS", "SCHED", "METRIC", "CAL", "DIST", "MEDIA", "LEARN"];
+
+  it("gives every area its own colour while the palette lasts", () => {
+    const ten = areaColours(many.slice(0, 10), many);
+    expect(new Set(Object.values(ten)).size).toBe(10);
+    // And past ten, the lighter ring, still all different.
+    expect(new Set(Object.values(areaColours(many, many))).size).toBe(many.length);
   });
 
-  it("spread similar keys apart", () => {
-    expect(colourOf("VIEW")).not.toBe(colourOf("VIEW2"));
+  it("never recolours an older area when a newer one arrives", () => {
+    const before = areaColours(many.slice(0, 6), many);
+    const after = areaColours(many, many);
+    for (const area of many.slice(0, 6)) expect(after[area]).toBe(before[area]);
+  });
+
+  it("is the same answer whatever order the areas are listed in, given the same age order", () => {
+    expect(areaColours([...many].reverse(), many)).toEqual(areaColours(many, many));
+  });
+
+  it("lets an older area keep a colour a newer one also wanted", () => {
+    // Two keys that hash to the same preferred colour: whichever is older keeps it.
+    const pair = findClash();
+    const olderFirst = areaColours(pair, pair);
+    const newerFirst = areaColours(pair, [...pair].reverse());
+    expect(olderFirst[pair[0]!]).toBe(newerFirst[pair[1]!]);
+    expect(olderFirst[pair[0]!]).not.toBe(olderFirst[pair[1]!]);
   });
 });
+
+/** Two keys whose preferred colours are the same: alone, each gets its preferred one. */
+function findClash(): [string, string] {
+  const alone = (key: string) => areaColours([key])[key];
+  const seen = new Map<string, string>();
+  for (let index = 0; ; index++) {
+    const key = `A${index}`;
+    const colour = alone(key)!;
+    const other = seen.get(colour);
+    if (other !== undefined) return [other, key];
+    seen.set(colour, key);
+  }
+}

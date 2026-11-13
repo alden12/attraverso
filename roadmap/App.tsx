@@ -110,7 +110,7 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
   const scope = project?.key ?? "";
   const items = project?.items ?? NO_ITEMS; // fetched once and held in state above, so the reference is stable
   const areas = useMemo(() => areasOf(items), [items]);
-  const colours = useMemo(() => areaColours(areas), [areas]);
+  const colours = useMemo(() => areaColours(areas, project?.areaOrder), [areas, project?.areaOrder]);
 
   const [hiddenAreas, setHiddenAreas] = useState<Set<string>>(new Set());
   // Finished work is hidden by default: on a plan that has been running a while it is most of the map, and the

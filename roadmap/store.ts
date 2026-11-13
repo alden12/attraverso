@@ -176,6 +176,7 @@ interface StoreItem {
   start?: string;
   due?: string;
   closed_at?: string;
+  created_at?: string;
   body?: string;
   attachments?: Attachment[];
 }
@@ -258,6 +259,9 @@ export interface ProjectPlan {
   /** Each area's name and description, by key, where the plan records them (`VIEW-49`). Most areas have none,
    *  since filing an item in a new area writes no row (`PROJ-3`). */
   areaInfo: Record<string, { name: string; description?: string }>;
+  /** The areas oldest first, by each one's earliest item, so an older area keeps its colour when a new one
+   *  arrives (`VIEW-51`). */
+  areaOrder: string[];
 }
 
 export interface ContextSection {
@@ -291,6 +295,17 @@ function groupBy<T>(rows: T[], key: (row: T) => string): Map<string, T[]> {
   const out = new Map<string, T[]>();
   for (const row of rows) out.set(key(row), [...(out.get(key(row)) ?? []), row]);
   return out;
+}
+
+/** Each area once, ordered by its earliest item's creation; an item with no timestamp counts as oldest. */
+function areasOldestFirst(items: StoreItem[]): string[] {
+  const first = new Map<string, string>();
+  for (const item of items) {
+    const at = item.created_at ?? "";
+    const seen = first.get(item.area);
+    if (seen === undefined || at < seen) first.set(item.area, at);
+  }
+  return [...first].sort(([a, atA], [b, atB]) => (atA === atB ? a.localeCompare(b) : atA < atB ? -1 : 1)).map(([area]) => area);
 }
 
 export async function fetchPlan(): Promise<Plan> {
@@ -331,6 +346,7 @@ export async function fetchPlan(): Promise<Plan> {
       context: orderSections(project.context ?? {}),
       file: files?.[project.key] ?? null,
       areaInfo: Object.fromEntries((project.areas ?? []).map((area) => [area.key, { name: area.name, description: area.description }])),
+      areaOrder: areasOldestFirst(project.items),
     })),
   };
 }

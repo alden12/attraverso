@@ -78,28 +78,73 @@ export function foreignLinks(items: RoadmapItem[]): { ghostId: string; project: 
 }
 
 /**
- * An area's colour, from its key alone (`VIEW-36`), so VIEW is the same colour in every plan, every session and
- * whatever else is loaded or hidden. It was a palette handed out by first-seen order, which recoloured every area
- * after a new one whenever one was added, and colour is the fastest way to find an area only while it holds still.
- *
- * A string hash into the hue wheel, at a fixed saturation and one of three lightnesses that read on the dark canvas and keep
- * text legible (`VIEW-27`). Two keys can land close together; that is the accepted cost, far better than every
- * area moving. A stored colour (`PROJ-3`) would override this later, and this stays the default needing no state.
+ * The colours an area can have (`VIEW-51`): ten picked to be told apart on the dark canvas, then the same ten
+ * lighter for a plan with more areas than that. A fixed palette rather than any hue on the wheel, because much of
+ * the wheel - the yellows and greens - is near indistinguishable, and a hash landing anywhere on it clumped:
+ * one plan came out almost all yellow and green, another everything but yellow.
  */
-const LIGHTNESS = [54, 66, 78];
+const AREA_PALETTE = [
+  "#4f9dff", // blue
+  "#f472b6", // pink
+  "#34d399", // green
+  "#fb923c", // orange
+  "#a884f3", // violet
+  "#22d3ee", // cyan
+  "#fbbf24", // amber
+  "#f87171", // red
+  "#a3e635", // lime
+  "#e879f9", // fuchsia
+];
+// The same ten mixed 55/45 with white, written out rather than as `color-mix()`: the minimap paints with SVG
+// `fill` attributes, which want a plain colour.
+const LIGHTER = [
+  "#9ec9ff", // blue, lighter
+  "#f9b1d7", // pink, lighter
+  "#8fe7c7", // green, lighter
+  "#fdc394", // orange, lighter
+  "#cfbbf8", // violet, lighter
+  "#85e7f6", // cyan, lighter
+  "#fddc87", // amber, lighter
+  "#fbb1b1", // red, lighter
+  "#ccf190", // lime, lighter
+  "#f2b5fc", // fuchsia, lighter
+];
 
-export function colourOf(key: string): string {
+/** Where an area would like to sit in the palette: a hash of its key, so it is the same every time. */
+function preferredSlot(key: string): number {
   // FNV-1a: tiny, and spreads short similar keys (VIEW, VIEW2) apart, which a plain character sum does not.
   let hash = 0x811c9dc5;
   for (let index = 0; index < key.length; index++) hash = Math.imul(hash ^ key.charCodeAt(index), 0x01000193);
-  hash >>>= 0;
-  // The hue alone bunches up: fourteen keys on a wheel put four in the reds here. A lightness band from the hash's
-  // other bits pulls neighbours apart, and the darkest band is still light enough to read on the canvas.
-  return `hsl(${hash % 360} 72% ${LIGHTNESS[Math.floor(hash / 360) % LIGHTNESS.length]}%)`;
+  return (hash >>> 0) % AREA_PALETTE.length;
 }
 
-export function areaColours(areas: string[]): Record<string, string> {
-  return Object.fromEntries(areas.map((area) => [area, colourOf(area)]));
+/**
+ * Each area's colour (`VIEW-36`, `VIEW-51`): its preferred palette colour, unless an older area in the plan has it,
+ * in which case the next free one round the palette, then round the lighter ring.
+ *
+ * **Older areas choose first**, `order` being oldest first (the viewer passes each area's earliest item), so
+ * adding an area never recolours an existing one: only the newcomer moves, and it lands on a free colour while
+ * there is one. That keeps an area the same colour in its plan from one day to the next, which is what makes
+ * colour the fastest way to find it. What it gives up is the same key meaning the same colour in every plan:
+ * `VIEW` may be pink here and blue elsewhere. A stored colour (`PROJ-3`) would override all of this.
+ */
+export function areaColours(areas: string[], order: readonly string[] = []): Record<string, string> {
+  const wanted = new Set(areas);
+  const ordered = [...order.filter((key) => wanted.has(key)), ...areas.filter((key) => !order.includes(key))];
+  const ring = [...AREA_PALETTE, ...LIGHTER];
+  const taken = new Set<number>();
+  const colours: Record<string, string> = {};
+  for (const key of new Set(ordered)) {
+    const preferred = preferredSlot(key);
+    // Round the first ring from the preferred colour, then round the lighter one from its lighter twin.
+    const candidates = Array.from({ length: ring.length }, (_, step) =>
+      step < AREA_PALETTE.length ? (preferred + step) % AREA_PALETTE.length : AREA_PALETTE.length + ((preferred + step) % AREA_PALETTE.length),
+    );
+    const slot = candidates.find((candidate) => !taken.has(candidate)) ?? preferred; // past twenty, sharing is fine
+    taken.add(slot);
+    colours[key] = ring[slot]!;
+  }
+  return colours;
 }
 
 const ITEM_WIDTH = 212;
