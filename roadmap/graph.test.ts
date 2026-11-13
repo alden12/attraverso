@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { RoadmapItem } from "../scripts/tickets";
-import { buildGraph, titleLines } from "./graph";
+import { areaColours, buildGraph, colourOf, titleLines } from "./graph";
 
 const item = (id: string, deps: string[] = []): RoadmapItem => {
   const parent = id.includes(".") ? id.slice(0, id.lastIndexOf(".")) : null;
@@ -46,5 +46,18 @@ describe("card height follows the title (VIEW-43)", () => {
       ["VIEW"], {}, "area", null, new Set(),
     ).find((node) => node.id === "VIEW-1")!;
     expect(Number(long.style!.height)).toBeGreaterThan(Number(short.style!.height));
+  });
+});
+
+describe("area colours (VIEW-36)", () => {
+  it("depend on the key alone, not on which other areas exist or their order", () => {
+    const alone = areaColours(["VIEW"]);
+    const crowded = areaColours(["MCP", "DATA", "VIEW", "PLAT"]);
+    expect(crowded.VIEW).toBe(alone.VIEW);
+    expect(areaColours(["PLAT", "MCP"])).toEqual({ MCP: crowded.MCP, PLAT: crowded.PLAT });
+  });
+
+  it("spread similar keys apart", () => {
+    expect(colourOf("VIEW")).not.toBe(colourOf("VIEW2"));
   });
 });

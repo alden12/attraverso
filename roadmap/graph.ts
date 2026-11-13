@@ -77,20 +77,29 @@ export function foreignLinks(items: RoadmapItem[]): { ghostId: string; project: 
   );
 }
 
-/** A distinct hue per area, assigned by first-seen order (areas are open, so this cycles). */
-const AREA_PALETTE = [
-  "#4f9dff", // blue
-  "#34d399", // green
-  "#a884f3", // violet
-  "#fbbf24", // amber
-  "#f472b6", // pink
-  "#22d3ee", // cyan
-  "#fb923c", // orange
-  "#a3e635", // lime
-];
+/**
+ * An area's colour, from its key alone (`VIEW-36`), so VIEW is the same colour in every plan, every session and
+ * whatever else is loaded or hidden. It was a palette handed out by first-seen order, which recoloured every area
+ * after a new one whenever one was added, and colour is the fastest way to find an area only while it holds still.
+ *
+ * A string hash into the hue wheel, at a fixed saturation and one of three lightnesses that read on the dark canvas and keep
+ * text legible (`VIEW-27`). Two keys can land close together; that is the accepted cost, far better than every
+ * area moving. A stored colour (`PROJ-3`) would override this later, and this stays the default needing no state.
+ */
+const LIGHTNESS = [54, 66, 78];
+
+export function colourOf(key: string): string {
+  // FNV-1a: tiny, and spreads short similar keys (VIEW, VIEW2) apart, which a plain character sum does not.
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < key.length; index++) hash = Math.imul(hash ^ key.charCodeAt(index), 0x01000193);
+  hash >>>= 0;
+  // The hue alone bunches up: fourteen keys on a wheel put four in the reds here. A lightness band from the hash's
+  // other bits pulls neighbours apart, and the darkest band is still light enough to read on the canvas.
+  return `hsl(${hash % 360} 72% ${LIGHTNESS[Math.floor(hash / 360) % LIGHTNESS.length]}%)`;
+}
 
 export function areaColours(areas: string[]): Record<string, string> {
-  return Object.fromEntries(areas.map((area, index) => [area, AREA_PALETTE[index % AREA_PALETTE.length]!]));
+  return Object.fromEntries(areas.map((area) => [area, colourOf(area)]));
 }
 
 const ITEM_WIDTH = 212;

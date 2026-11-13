@@ -153,6 +153,27 @@ test.describe("the served store", () => {
     await expect.poll(() => page.locator(".item-node").count()).toBeLessThan(before);
   });
 
+  test("zooms to an area from the view menu, and not to a hidden one (VIEW-36)", async ({ page }) => {
+    await expect(page.locator(".item-node").first()).toBeVisible();
+    const viewport = () => page.locator(".react-flow__viewport").evaluate((element) => (element as HTMLElement).style.transform);
+    await page.waitForTimeout(600); // the opening fitView's transition
+    const whole = await viewport();
+
+    await page.locator('.toolbtn[aria-haspopup="dialog"]').click();
+    await page.getByRole("button", { name: "Zoom to PLAT" }).click();
+    await expect.poll(viewport).not.toBe(whole);
+    // Once the transition settles, the PLAT frame sits in the middle of the canvas.
+    const canvas = (await page.locator(".react-flow").boundingBox())!;
+    const offCentre = async () => {
+      const frame = (await page.locator('.react-flow__node[data-id="area:PLAT"]').boundingBox())!;
+      return Math.round(Math.abs(frame.x + frame.width / 2 - (canvas.x + canvas.width / 2)) + Math.abs(frame.y + frame.height / 2 - (canvas.y + canvas.height / 2)));
+    };
+    await expect.poll(offCentre).toBeLessThan(4);
+
+    await page.locator(".settings .chip", { hasText: "PLAT" }).first().click();
+    await expect(page.getByRole("button", { name: "Zoom to PLAT" })).toBeDisabled();
+  });
+
   test("captures the full graph for visual inspection", async ({ page }) => {
     // Give the dagre layout and the fitView transition time to settle before capturing.
     await page.waitForTimeout(1200);

@@ -320,6 +320,13 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
     void flow.current.fitView({ nodes: [{ id: panTo }], duration: 400, maxZoom: 1.1, padding: 0.6 });
     setPanTo(null);
   }, [panTo, nodes]);
+  // Zoom to an area's frame from the view menu: the whole frame, open or folded, rather than one card, so a big
+  // plan is a menu of places to go. A narrow screen closes the menu on the way, since it covers the canvas there;
+  // a wide one keeps it open, so you can hop from area to area.
+  const zoomToArea = (area: string) => {
+    void flow.current?.fitView({ nodes: [{ id: `area:${area}` }], duration: 400, maxZoom: 1.2, padding: 0.08 });
+    if (narrow) setSettingsOpen(false);
+  };
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   // The layout's memory lives in the plan (`VIEW-23.1`), so the map is the same on every device: read from the
   // served plan and saved back through the write path. A host that cannot write (the dev server, a published
@@ -710,19 +717,50 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
               {!(view === "calendar" && allProjects) && <div className="settings__label">Areas</div>}
               {!(view === "calendar" && allProjects) && (
                 <div className="filters__group">
-                  {areas.map((area) => (
-                    <button
-                      key={area}
-                      className="chip"
-                      data-off={hiddenAreas.has(area)}
-                      style={{ "--area": colours[area] } as React.CSSProperties}
-                      onClick={() => setHiddenAreas((set) => toggle(set, area))}
-                    >
-                      <span className="chip__dot" />
-                      {area}
-                      <span className="chip__count">{counts.byArea.get(area)}</span>
-                    </button>
-                  ))}
+                  {areas.map((area) =>
+                    view === "graph" ? (
+                      // Two buttons in one pill: the name shows and hides, the target beside it goes there. Two,
+                      // because a button cannot hold a button, and a hidden area has no frame to go to.
+                      <span key={area} className="chip-pair" data-off={hiddenAreas.has(area)}>
+                        <button
+                          className="chip"
+                          data-off={hiddenAreas.has(area)}
+                          style={{ "--area": colours[area] } as React.CSSProperties}
+                          onClick={() => setHiddenAreas((set) => toggle(set, area))}
+                          title={hiddenAreas.has(area) ? `Show ${area}` : `Hide ${area}`}
+                        >
+                          <span className="chip__dot" />
+                          {area}
+                          <span className="chip__count">{counts.byArea.get(area)}</span>
+                        </button>
+                        <button
+                          className="chip chip--zoom"
+                          disabled={hiddenAreas.has(area)}
+                          onClick={() => zoomToArea(area)}
+                          title={hiddenAreas.has(area) ? `${area} is hidden` : `Zoom to ${area}`}
+                          aria-label={`Zoom to ${area}`}
+                        >
+                          <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+                            <circle cx="8" cy="8" r="5" fill="none" stroke="currentColor" strokeWidth="1.5" />
+                            <circle cx="8" cy="8" r="1.6" fill="currentColor" />
+                            <path d="M8 0.5v2.5M8 13v2.5M0.5 8h2.5M13 8h2.5" stroke="currentColor" strokeWidth="1.5" />
+                          </svg>
+                        </button>
+                      </span>
+                    ) : (
+                      <button
+                        key={area}
+                        className="chip"
+                        data-off={hiddenAreas.has(area)}
+                        style={{ "--area": colours[area] } as React.CSSProperties}
+                        onClick={() => setHiddenAreas((set) => toggle(set, area))}
+                      >
+                        <span className="chip__dot" />
+                        {area}
+                        <span className="chip__count">{counts.byArea.get(area)}</span>
+                      </button>
+                    ),
+                  )}
                 </div>
               )}
               <div className="settings__label">Statuses</div>
