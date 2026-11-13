@@ -1442,6 +1442,31 @@ describe("the layout's own file (VIEW-23.2)", () => {
   });
 });
 
+describe("counting reloads from disk (VIEW-7)", () => {
+  it("counts each foreign change it reloads, and nothing for its own writes", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "apm-reloads-"));
+    const path = join(dir, "attraverso.yaml");
+    const a = await freshDb();
+    const aStore = createStoreFile(path);
+    await aStore.open(a.db);
+    const project = await createProject(a.db, { key: "apm", name: "AI PM", type: "software", ownerId: a.ownerId }, ACTOR);
+    await aStore.save(a.db);
+    expect(await aStore.refresh(a.db)).toBe(false); // its own write, seen again
+    expect(aStore.reloads()).toBe(0);
+
+    const b = await freshDb();
+    const bStore = createStoreFile(path);
+    await bStore.open(b.db);
+    await createItem(b.db, { projectId: one(await listProjects(b.db, b.ownerId)).id, area: "IMP", title: "from elsewhere" }, ACTOR);
+    await bStore.save(b.db);
+
+    expect(await aStore.refresh(a.db)).toBe(true);
+    expect(aStore.reloads()).toBe(1);
+    expect(project.key).toBe("apm");
+    await Promise.all([a.close(), b.close()]);
+  });
+});
+
 describe("naming a project's plan file (VIEW-48)", () => {
   it("is relative to the repo root, so two plan files in one repo are told apart", async () => {
     const { displayPath } = await import("./store");

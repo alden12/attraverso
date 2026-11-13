@@ -88,6 +88,12 @@ export async function saveLayout(projectKey: string, layout: Record<string, { x:
 /** Remove an attachment from its ticket. The blob stays on disk - another ticket may reference the same bytes
  *  - so this is "take it off this ticket", not "destroy it". */
 /**
+ * Where an open viewer listens for the plan changing (`VIEW-7`): server-sent events carrying a version token. Only
+ * a local host serves it; anywhere else the stream fails to open and the viewer stops listening.
+ */
+export const CHANGES_ENDPOINT = "/api/changes";
+
+/**
  * Everything the detail pane draws for one item (`VIEW-29`), fetched when the pane opens it rather than shipped
  * for every item on every page load: the body, every comment (newest first, agent ones tagged) and the images.
  */

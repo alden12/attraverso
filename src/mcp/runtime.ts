@@ -98,7 +98,7 @@ export async function databaseBacked(url: string): Promise<Runtime> {
     // Both no-ops for the same reason, and `appendMeasurements` joins them: in database mode the write
     // has already committed, so there is nothing to persist, no file to have changed underneath us, and
     // no month file for a measurement to be appended to (`OPS-11`, `METRIC-2`).
-    access: { persist: async () => {}, refresh: async () => false, appendMeasurements: async () => {} },
+    access: { persist: async () => {}, refresh: async () => false, reloads: () => 0, appendMeasurements: async () => {} },
     sources: {
       media: createUnavailableMediaStore("uploads are not available in cloud mode yet - this deployment has no object storage (OPS-11)"),
       storePath: null,

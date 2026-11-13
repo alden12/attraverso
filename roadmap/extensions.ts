@@ -17,6 +17,12 @@ export interface ViewerExtensions {
   ToolbarActions?: ComponentType<{ plan: Plan; project: ProjectPlan | null; reload: () => void }>;
   /** Shown over an empty graph in place of the notice, when this host has a way to fill an empty plan. */
   EmptyPlan?: ComponentType<{ reload: () => void }>;
+  /**
+   * Whether this host pushes plan changes down `/api/changes` (`VIEW-7`). On unless a host says otherwise: both of
+   * this package's hosts do. A host without the stream says so here rather than leaving the viewer to find out from
+   * a 404, which would be one needless error in the console on every page load.
+   */
+  liveRefresh?: boolean;
 }
 
 export const ExtensionsContext = createContext<ViewerExtensions>({});

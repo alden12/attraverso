@@ -407,6 +407,21 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
     setLayoutNonce((nonce) => nonce + 1);
   }, [scope]);
 
+  // A layout that changed on disk while the page was open - a `git stash`, a pull, another tab's drag - replaces
+  // this page's memory when a live refresh brings it (VIEW-7). Without this the page kept the positions it opened
+  // with and, on its next save, wrote them back over the change: a `git stash` was undone a moment later, and
+  // `git stash pop` then conflicted with the page's rewrite. A drag of this page's own still waiting to be saved
+  // wins, since its save follows and is the newer of the two.
+  const servedLayout = useRef<LayoutMemory>(project?.layout ?? {});
+  useEffect(() => {
+    const served = project?.layout ?? {};
+    if (!shared || sameLayout(served, servedLayout.current)) return;
+    servedLayout.current = served;
+    if (pendingSave.current !== null || unsaved.current || sameLayout(served, memory.current)) return;
+    memory.current = served;
+    setLayoutNonce((nonce) => nonce + 1);
+  }, [project?.layout, shared]);
+
   useEffect(() => {
     // Lay out the full item set (so filtering only toggles `hidden`, never re-flows), from the memory, and
     // remember the result. Nodes deliberately do NOT depend on `hoveredId` - hover restyles edges only (see the
@@ -414,7 +429,7 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
     const nodes = buildGraph(items, areas, colours, colourMode, selectedId, hiddenIds, memory.current);
     parents.current = new Map(nodes.map((node) => [node.id, node.parentId]));
     const next = memoryOf(nodes);
-    if (unsaved.current || JSON.stringify(next) !== JSON.stringify(memory.current)) {
+    if (unsaved.current || !sameLayout(next, memory.current)) {
       unsaved.current = false;
       memory.current = next;
       remember(next);
@@ -1138,4 +1153,12 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
       </div>
     </div>
   );
+}
+
+/** Two layouts place every node in the same spot, whatever order their keys came in: a layout read back from the
+ *  plan file is in the file's order, and one laid out here is in the graph's, and neither difference is a move. */
+function sameLayout(a: LayoutMemory, b: LayoutMemory): boolean {
+  const keys = Object.keys(a);
+  if (keys.length !== Object.keys(b).length) return false;
+  return keys.every((key) => b[key] !== undefined && a[key]!.x === b[key]!.x && a[key]!.y === b[key]!.y);
 }

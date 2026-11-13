@@ -1,6 +1,6 @@
 import { defineConfig, type Plugin, type ViteDevServer } from "vite";
 import react from "@vitejs/plugin-react";
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
 import { existsSync } from "node:fs";
@@ -8,6 +8,7 @@ import { asPlan, displayPath, mergeLayout, parseLayout, resolveStorePaths, type 
 import { layoutPathFor } from "../src/serialise/paths";
 import type { Database } from "../src/db/client";
 import { summariseFromFiles } from "../src/serialise/measurements";
+import { createChangeFeed } from "../src/mcp/changes";
 
 // The viewer's Vite root is this folder, set explicitly rather than left to the invocation: `vite --config
 // roadmap/vite.config.ts` would otherwise leave the root at the repo root and never find index.html. It reads
@@ -26,12 +27,11 @@ const repoRoot = fileURLToPath(new URL("..", import.meta.url));
  * renders a personal project with nothing to configure.
  *
  * **Several stores serve as their union** (`IMP-17`), which is what the server holds, so a split plan renders
- * as one graph here too. Any of them changing reloads the page, because the viewer's job is to show what the
+ * as one graph here too. Any of them changing refreshes the page, because the viewer's job is to show what the
  * plan currently is and it cannot know which file a reader is watching.
  *
- * The watcher restores what the `?raw` import gave for free: an edit to the YAML - by the MCP server writing
- * through, or by hand - reloads the open page. Refreshing in place, without losing the manual layout to a
- * reload, is VIEW-7.
+ * An edit to the YAML - by the MCP server writing through, or by hand - is pushed down `/api/changes` to an open
+ * page, which refetches the plan in place (VIEW-7), keeping its selection, filters and layout.
  */
 function servePlan(): Plugin {
   const storePaths = resolveStorePaths();
@@ -64,11 +64,22 @@ function servePlan(): Plugin {
     configureServer(server: ViteDevServer) {
       dev = server;
       for (const path of storePaths) server.watcher.add(path);
+      // A changed plan file reaches an open page through `/api/changes` below (VIEW-7), rather than
+      // a full page reload over Vite's socket: that threw away the selection, the open pane and the filters, which
+      // is exactly what a live refresh has to keep.
       server.watcher.on("change", (file) => {
-        if (storePaths.includes(file)) {
-          forgetSearch(); // rebuilt from the changed files on the next search
-          server.ws.send({ type: "full-reload" });
-        }
+        if (storePaths.includes(file)) forgetSearch(); // rebuilt from the changed files on the next search
+      });
+      // Live refresh (VIEW-7), through the same change feed the MCP server's host uses. The token is the files'
+      // modification times: this server never writes, so anything that moves them is a change.
+      // The layout files as well: a `git stash` can move only the map, and the page must adopt that, not save over it.
+      const watched = storePaths.flatMap((path) => [path, layoutPathFor(path)]);
+      const changes = createChangeFeed(watched, async () =>
+        (await Promise.all(watched.map((path) => stat(path).then((info) => `${info.mtimeMs}:${info.size}`, () => "-")))).join("|"),
+      );
+      server.httpServer?.on("close", () => changes.close());
+      server.middlewares.use("/api/changes", (_request, response) => {
+        void changes.subscribe(response).catch(() => response.end());
       });
       // The search box (VIEW-25). This server has no database, and search is a Postgres query, so it builds one
       // from the plan files the first time someone searches - the same in-memory engine the MCP server runs, and

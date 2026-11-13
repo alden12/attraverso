@@ -411,6 +411,8 @@ export interface StoreFile {
    * recording one number expensive.
    */
   appendMeasurements(records: MeasurementRecord[]): Promise<void>;
+  /** How many times `refresh` has rebuilt the database from changed files since boot (`VIEW-7`). */
+  reloads(): number;
   /**
    * The file a project lives in, by key: the one that supplied it, or the primary for a project created since,
    * which is where a save puts it. Runtime knowledge rather than anything a file records about itself.
@@ -530,6 +532,7 @@ export function createStoreFile(where: string | string[]): StoreFile {
    * chain continues either way, and each caller still sees its own outcome.
    */
   let queue: Promise<unknown> = Promise.resolve();
+  let reloads = 0;
   function exclusive<T>(work: () => Promise<T>): Promise<T> {
     // `work` in both slots so a failure does not poison the chain: the next queued call runs either way,
     // and each caller still gets its own outcome from `run`.
@@ -549,6 +552,7 @@ export function createStoreFile(where: string | string[]): StoreFile {
   return {
     path: primary.path,
     paths: files.map((file) => file.path),
+    reloads: () => reloads,
     fileOf: (key) => (files.find((file) => file.keys.has(key)) ?? primary).path,
 
     // Not queued: this runs once at boot, before the server accepts a call, so there is nothing to race.
@@ -665,6 +669,7 @@ export function createStoreFile(where: string | string[]): StoreFile {
       // `clearAll` truncates every table, measurements included, so a reload has to bring them back or a
       // branch switch would silently empty a year of readings that no plan file ever held.
       await loadAllMeasurements(db);
+      reloads += 1;
       return true;
     }),
 
@@ -738,6 +743,11 @@ export function createStoreFile(where: string | string[]): StoreFile {
 export interface StoreAccess {
   persist(): Promise<void>;
   refresh(): Promise<boolean>;
+  /** How many times the files have been reloaded from disk since boot, for the viewer's version token (`VIEW-7`).
+   *  Optional: a store with no files to reload (database mode, a test's stub) has none. */
+  reloads?(): number;
+  /** The plan files, for the viewer to watch (`VIEW-7`). Optional for the same reason as `reloads`. */
+  paths?(): readonly string[];
   /** Append recorded measurements to their month files, without re-serialising the plan (`METRIC-2`). */
   appendMeasurements(records: MeasurementRecord[]): Promise<void>;
 }
@@ -745,5 +755,7 @@ export interface StoreAccess {
 export const accessTo = (store: StoreFile, db: Database): StoreAccess => ({
   persist: () => store.save(db),
   refresh: () => store.refresh(db),
+  reloads: () => store.reloads(),
+  paths: () => store.paths,
   appendMeasurements: (records) => store.appendMeasurements(records),
 });

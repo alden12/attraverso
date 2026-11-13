@@ -671,6 +671,111 @@ test.describe("searching the plan (VIEW-25)", () => {
   });
 });
 
+test.describe("live refresh (VIEW-7)", () => {
+  test("shows a change made elsewhere without a reload, and keeps the open item", async ({ page }) => {
+    // Faked, so the test controls when the plan "changes": the version moves once, and the plan with it.
+    let version = "v1";
+    const plan = (title: string) => ({
+      path: "/tmp/live.yaml",
+      store: {
+        projects: [
+          {
+            key: "apm",
+            name: "AI PM",
+            items: [
+              { ref: "MCP-1", area: "MCP", title, status: "to-do", body: "prose" },
+              { ref: "MCP-2", area: "MCP", title: "the tool boundary", status: "to-do" },
+            ],
+          },
+        ],
+      },
+    });
+    let current = plan("the stdio server");
+    await page.route("**/api/store", (route) => route.fulfill({ json: current }));
+    // The change stream, faked as one event per connection: each response ends, and EventSource reconnects after
+    // the `retry` it was given, hearing the current token again - the same as a real stream announcing it.
+    await page.route("**/api/changes", (route) =>
+      route.fulfill({ contentType: "text/event-stream", body: `retry: 100\nevent: version\ndata: ${version}\n\n` }),
+    );
+    await page.addInitScript(() => window.localStorage.clear());
+    await page.goto("/#apm/MCP-2");
+    await expect(page.locator(".react-flow__node-item", { hasText: "the stdio server" })).toBeVisible();
+    await expect(page.locator("aside.detail .detail__title")).toHaveText("the tool boundary");
+    // A marker on the window: a full page reload would wipe it, an in-place refresh does not.
+    await page.evaluate(() => ((window as unknown as { marker: number }).marker = 1));
+
+    current = plan("renamed by Claude");
+    version = "v2";
+    await expect(page.locator(".react-flow__node-item", { hasText: "renamed by Claude" })).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator("aside.detail .detail__title")).toHaveText("the tool boundary");
+    expect(await page.evaluate(() => (window as unknown as { marker?: number }).marker)).toBe(1);
+  });
+
+  test("adopts a layout changed on disk rather than saving its own back over it", async ({ page }) => {
+    // A `git stash` that moves only the map: before this, the page kept its own positions and saved them straight
+    // back, so the stash was undone a moment later and `git stash pop` conflicted.
+    let version = "v1";
+    let layout: Record<string, string> | undefined;
+    const saves: Record<string, { x: number; y: number }>[] = [];
+    const items = [
+      { ref: "MCP-1", area: "MCP", title: "the stdio server", status: "to-do" },
+      { ref: "MCP-2", area: "MCP", title: "the tool boundary", status: "to-do", deps: ["MCP-1"] },
+      { ref: "DATA-1", area: "DATA", title: "the schema", status: "to-do" },
+    ];
+    await page.route("**/api/store", (route) =>
+      route.fulfill({ json: { path: "/tmp/live.yaml", store: { projects: [{ key: "apm", name: "AI PM", items, ...(layout && { layout }) }] } } }),
+    );
+    await page.route("**/api/changes", (route) =>
+      route.fulfill({ contentType: "text/event-stream", body: `retry: 100\nevent: version\ndata: ${version}\n\n` }),
+    );
+    await page.route("**/api/layout*", (route) => {
+      saves.push((route.request().postDataJSON() as { layout: Record<string, { x: number; y: number }> }).layout);
+      return route.fulfill({ json: {} });
+    });
+    await page.addInitScript(() => window.localStorage.clear());
+    const toFile = (memory: Record<string, { x: number; y: number }>) => Object.fromEntries(Object.entries(memory).map(([id, at]) => [id, `${at.x},${at.y}`]));
+    const frame = page.locator('.react-flow__node[data-id="area:DATA"]');
+    const position = () => frame.evaluate((element) => (element as HTMLElement).style.transform);
+
+    // First, a layout as the page itself would save it with DATA above MCP: the arranger's own output, as a
+    // stashed layout file is, rather than one invented here, which the arranger would tidy and save.
+    layout = { "area:DATA": "0,0", "area:MCP": "0,400" };
+    await page.goto("/?t=token#apm"); // a write token, so the layout is the plan's to save, as on the MCP server's host
+    await expect(frame).toBeVisible();
+    await page.waitForTimeout(800);
+    const dataFirst = toFile(saves.at(-1)!);
+
+    // Then the page as it is opened today, laid out afresh with MCP first.
+    layout = undefined;
+    version = "v0";
+    await page.reload();
+    await expect(frame).toBeVisible();
+    await page.waitForTimeout(800);
+    const before = await position();
+    const savedBefore = saves.length;
+
+    // The file changes under it, as a `git stash` would change it.
+    layout = dataFirst;
+    version = "v1";
+    await expect.poll(position).not.toBe(before);
+    await page.waitForTimeout(800); // longer than the save's coalescing delay
+    expect(saves.length).toBe(savedBefore);
+  });
+
+  test("asks a host without the stream once, and never again", async ({ page }) => {
+    // An older local server, from before the stream: one failed request, then nothing.
+    let asked = 0;
+    await page.route("**/api/changes", (route) => {
+      asked++;
+      return route.fulfill({ status: 404, json: { error: "no such route" } });
+    });
+    await page.goto("/#demo");
+    await expect(page.locator(".item-node").first()).toBeVisible();
+    await page.waitForTimeout(1500);
+    expect(asked).toBe(1);
+  });
+});
+
 test.describe("an item's comments in the pane (VIEW-5, VIEW-29)", () => {
   test("loads the item when it is opened, and shows its comments last, Claude's folded", async ({ page }) => {
     await page.addInitScript(() => window.localStorage.clear());

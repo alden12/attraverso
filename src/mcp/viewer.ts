@@ -30,6 +30,9 @@ import { attachments } from "../db/schema";
 import { asPlan, exportStore, type StoreAccess } from "../serialise/store";
 import { storeFeed } from "./storeFeed";
 import { searchFeed } from "./searchFeed";
+import { versionFeed } from "./versionFeed";
+import { createChangeFeed } from "./changes";
+import { layoutPathFor } from "../serialise/paths";
 import { itemFeed } from "./itemFeed";
 import { addAttachment, removeAttachment } from "../domain/attachments";
 import { setStatus } from "../domain/items";
@@ -218,6 +221,17 @@ export function createViewerHost(db: Database, sources: ViewerSources, store: St
     if (!sameOrigin(request, bound)) return json(403, { error: "cross-origin writes are refused" });
     return null;
   };
+
+  // Live refresh (VIEW-7): the plan files' folders watched while a page listens, and the token pushed when it
+  // moves. Refreshed from disk first (IMP-10), so a `git pull` is in the token it announces. Database mode has no
+  // files, so nothing to watch, and an open page there simply never hears of a change.
+  // The layout files too, so a `git stash` that moved only the map reaches the page, which adopts it rather than
+  // saving its own positions back over it.
+  const watched = (store.paths?.() ?? []).flatMap((path) => [path, layoutPathFor(path)]);
+  const changes = createChangeFeed(watched, async () => {
+    await store.refresh();
+    return (await versionFeed(db, caller.ownerId, store.reloads?.() ?? 0)).version;
+  });
 
   const handler = async (request: IncomingMessage): Promise<Reply> => {
     const raw = request.url ?? "/";
@@ -424,6 +438,15 @@ export function createViewerHost(db: Database, sources: ViewerSources, store: St
         }
 
         const candidate = createServer((request, response) => {
+          // The change stream is held open rather than answered, so it goes around `handler` and its one-shot
+          // replies; a read, open like `/api/store`, but refused like everything else when not addressed to us.
+          if ((request.url ?? "").split("?")[0] === "/api/changes" && addressedToUs(request, bound)) {
+            void changes.subscribe(response).catch((error: unknown) => {
+              process.stderr.write(`viewer: change stream failed: ${String(error)}\n`);
+              response.end();
+            });
+            return;
+          }
           void handler(request)
             .then(({ status, type, body, cache }) => {
               // `no-store` is the default rather than the exception: the live store feed, the not-built
@@ -467,6 +490,7 @@ export function createViewerHost(db: Database, sources: ViewerSources, store: St
     },
 
     close(): Promise<void> {
+      changes.close();
       const running = server;
       server = null;
       started = null;

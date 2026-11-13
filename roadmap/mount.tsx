@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import "@xyflow/react/dist/style.css";
 import "./styles.css";
 import { App } from "./App";
-import { fetchPlan, parseHash, selectProject, STORE_ENDPOINT, type Plan } from "./store";
+import { fetchPlan, CHANGES_ENDPOINT, parseHash, selectProject, STORE_ENDPOINT, type Plan } from "./store";
 import { startSession, type Session } from "./session";
 import { ExtensionsContext, type ViewerExtensions } from "./extensions";
 
@@ -36,6 +36,12 @@ function Root({ extensions }: { extensions: ViewerExtensions }) {
   const load = useCallback(() => {
     fetchPlan().then(setPlan, (cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause)));
   }, []);
+  // A refresh nobody asked for keeps what is on screen if it fails: a blip mid-poll must not swap the graph for
+  // "could not load the plan", which is what `load` rightly does when the first load fails.
+  const refresh = useCallback(() => {
+    fetchPlan().then(setPlan, () => {});
+  }, []);
+  useLiveRefresh(plan !== null && extensions.liveRefresh !== false, refresh);
   // Deliberately after the session resolves. Fetching first would send a request with no token, get a 401, and
   // show "could not load the plan" to someone whose only problem is not having signed in yet.
   useEffect(() => {
@@ -78,6 +84,62 @@ function Root({ extensions }: { extensions: ViewerExtensions }) {
       <App key={selection.project?.key ?? "none"} plan={plan} selection={selection} focus={requested.item} reload={load} />
     </ExtensionsContext.Provider>
   );
+}
+
+/**
+ * Live refresh (`VIEW-7`): listen for the plan's version token and refetch the plan when it moves, so a change Claude
+ * just made - or a `git pull`, or a hand edit - shows up in an open viewer without a reload. The plan is replaced
+ * in place: `App` keeps its key, so the selection, the open pane, the filters and the layout all stay put.
+ *
+ * **Pushed by the local host** as server-sent events (see `src/mcp/changes.ts`), which watches the plan files, so
+ * nothing polls. The first token on each connection is compared with the last one seen, so a change made while
+ * the tab was hidden arrives when it comes back. A host without the stream switches it off (`liveRefresh` in
+ * `extensions.ts`), as the hosted viewer does (`OPS-18`), so it is never asked at all.
+ *
+ * **It never runs on forever.** The stream is closed while the tab is hidden and reopened when it is shown. A host
+ * without the route that did not say so (an older local one) fails it outright, and that ends
+ * it for good; so do `GIVE_UP_AFTER` failed reconnects in a row, a server that went away and did not come back.
+ */
+const GIVE_UP_AFTER = 5;
+function useLiveRefresh(active: boolean, refresh: () => void): void {
+  useEffect(() => {
+    if (!active || typeof EventSource === "undefined") return;
+    let known: string | undefined;
+    let source: EventSource | null = null;
+    let failures = 0;
+    let finished = false;
+    const close = () => {
+      source?.close();
+      source = null;
+    };
+    const open = () => {
+      if (finished || source !== null || document.visibilityState !== "visible") return;
+      const stream = new EventSource(CHANGES_ENDPOINT);
+      source = stream;
+      stream.addEventListener("open", () => (failures = 0));
+      stream.addEventListener("version", (event) => {
+        const token = (event as MessageEvent<string>).data;
+        if (known !== undefined && token !== known) refresh();
+        known = token;
+      });
+      stream.addEventListener("error", () => {
+        // CLOSED: the browser will not retry (a 404, or not an event stream). CONNECTING: it is retrying a
+        // dropped connection, which is fine for a server restart and pointless for one that is gone.
+        if (stream.readyState === EventSource.CLOSED || ++failures >= GIVE_UP_AFTER) {
+          finished = true;
+          close();
+        }
+      });
+    };
+    const onVisibility = () => (document.visibilityState === "visible" ? open() : close());
+    open();
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      finished = true;
+      close();
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [active, refresh]);
 }
 
 /**
