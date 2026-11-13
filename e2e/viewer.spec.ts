@@ -10,6 +10,7 @@ interface StoreItem {
   area: string;
   status: string;
   deps?: string[];
+  title: string;
   deleted_at?: string;
 }
 const project = (
@@ -85,6 +86,8 @@ test.describe("the served store", () => {
 
     const detail = page.locator(".detail");
     await expect(detail.locator(".detail__id")).toHaveText("DATA-1");
+    // In full, since the card clamps it and on a phone the pane covers the card (VIEW-44).
+    await expect(detail.locator(".detail__title")).toHaveText(items.find((item) => item.ref === "DATA-1")!.title);
     // The body is the ticket's stored prose, so this proves the detail pane shows the right ticket's description.
     await expect(detail.locator(".detail__doc")).toContainText("Drizzle ORM over");
     await expect(detail.locator(".detail__deps")).toContainText("PLAT-1");

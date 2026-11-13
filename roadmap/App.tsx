@@ -639,6 +639,9 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
                 ×
               </button>
             </div>
+            {/* The title in full (VIEW-44): the card on the graph clamps it, and on a narrow screen the pane covers
+                the card, so without it nothing here said which item you were reading. */}
+            <h2 className="detail__title">{selected.title}</h2>
             {(selected.start !== undefined || selected.due !== undefined) && (
               <div className="detail__deps">
                 {[selected.start && `starts ${fmtDay(selected.start)}`, selected.due && `due ${fmtDay(selected.due)}`].filter(Boolean).join(", ")}

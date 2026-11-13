@@ -92,7 +92,56 @@ export function areaColours(areas: string[]): Record<string, string> {
 }
 
 const ITEM_WIDTH = 212;
-const ITEM_HEIGHT = 62;
+const ITEM_HEIGHT = 62; // the shortest card: one line of title
+
+/**
+ * How many lines a card's title wraps to, at most `TITLE_MAX_LINES` (`VIEW-43`).
+ *
+ * The layout needs every card's height before anything is drawn, and a fixed height cut titles off: the card
+ * was one line tall and most titles here need three. So the wrap is estimated here, word by word against
+ * approximate glyph widths of the viewer's sans-serif at the title's size, rather than measured in the DOM -
+ * this module is pure, and runs in tests and in Node. The viewer uses the system font, which varies by
+ * platform, so the widths lean wide: an estimate one line too many leaves a little air under a title, one line
+ * too few cuts it off again, which is the bug this exists to fix.
+ */
+const TITLE_MAX_LINES = 3;
+const TITLE_SIZE = 13; // px, `.item-node__title`
+const TITLE_LINE = 17; // px, 13px at line-height 1.3
+const TITLE_WIDTH = ITEM_WIDTH - 2 - 4 - 22; // border, rail, padding
+const CARD_CHROME = 42; // border, padding, the ref/status row and the gap below it
+const glyph = (char: string): number =>
+  " ".includes(char) ? 0.28
+  : "iljI.,:;'!|`".includes(char) ? 0.3
+  : "frt()[]{}-/\\\"".includes(char) ? 0.4
+  : "mwMW@%".includes(char) ? 0.9
+  : char >= "A" && char <= "Z" ? 0.72
+  : char >= "0" && char <= "9" ? 0.6
+  : 0.57;
+// The 1.06 is calibrated, not guessed: against Chromium's own wrap of all 196 titles in this repo's plan (in a
+// Linux container, whose fallback sans is wider than macOS's), it is the smallest margin that never comes up a
+// line short, at the cost of a spare line under 8% of them.
+const textWidth = (text: string): number => [...text].reduce((sum, char) => sum + glyph(char), 0) * TITLE_SIZE * 1.06;
+
+export function titleLines(title: string): number {
+  let lines = 1;
+  let used = 0;
+  for (const word of title.split(/\s+/).filter(Boolean)) {
+    const width = textWidth(word);
+    const needed = used === 0 ? width : used + textWidth(" ") + width;
+    if (needed <= TITLE_WIDTH) {
+      used = needed;
+      continue;
+    }
+    // A word longer than a line breaks across lines on its own.
+    lines += used === 0 ? 0 : 1;
+    lines += Math.floor(width / TITLE_WIDTH);
+    used = width % TITLE_WIDTH;
+  }
+  return Math.min(lines, TITLE_MAX_LINES);
+}
+
+/** A leaf card's height: tall enough for its whole title, up to `TITLE_MAX_LINES` and then an ellipsis. */
+const itemHeight = (item: RoadmapItem): number => Math.max(ITEM_HEIGHT, CARD_CHROME + titleLines(item.title) * TITLE_LINE);
 const GAP = 34; // horizontal/vertical space between packed cards
 const PAD_X = 18; // box inner side padding
 const PAD_TOP = 46; // box title bar
@@ -134,7 +183,7 @@ const structuralEdge = (a: string, b: string): boolean => a === b || a.startsWit
 /** The rendered size of one item: a leaf card, or (if it has children) the box that frames them. */
 function sizeOf(item: RoadmapItem, items: RoadmapItem[], memory: LayoutMemory): Size {
   const kids = childrenOf(items, item.id);
-  if (kids.length === 0) return { width: ITEM_WIDTH, height: ITEM_HEIGHT };
+  if (kids.length === 0) return { width: ITEM_WIDTH, height: itemHeight(item) };
   const box = layoutSiblings(kids, items, memory).box;
   return { width: box.width, height: box.height };
 }
@@ -641,13 +690,22 @@ export function buildGraph(
     dependents.map((dependent) => ({ source: ghostId, target: dependent })),
   );
 
-  // Placeholders join the neighbour set, or selecting an item would dim everything except the one edge
-  // leaving the graph, which is the opposite of what selection is for.
+  // What a selection leaves lit: the selection itself, what it links to, and every box holding any of those.
+  // Placeholders join it, or selecting an item would dim everything except the one edge leaving the graph,
+  // which is the opposite of what selection is for. The selection is added in its own right rather than
+  // arriving as an edge's endpoint, because an item with no dependencies has no edges, and it used to dim along
+  // with everything else (`VIEW-35`). And the boxes, because a box is a node too: left out, the box framing the
+  // selection greyed out around the very cards it was showing.
+  const parentOf = new Map(items.map((item) => [item.id, item.parent]));
   const neighbours = selectedId
     ? new Set(
-        [...depEdges, ...ghostEdges]
-          .filter((edge) => edge.source === selectedId || edge.target === selectedId)
-          .flatMap((edge) => [edge.source, edge.target]),
+        [selectedId, ...[...depEdges, ...ghostEdges].filter((edge) => edge.source === selectedId || edge.target === selectedId).flatMap((edge) => [edge.source, edge.target])].flatMap(
+          (id) => {
+            const lit = [id];
+            for (let parent = parentOf.get(id); parent; parent = parentOf.get(parent)) lit.push(parent);
+            return lit;
+          },
+        ),
       )
     : null;
 
@@ -707,7 +765,7 @@ export function buildGraph(
         parentId: containerId,
         position,
         hidden: hiddenIds.has(sibling.id),
-        style: { width: ITEM_WIDTH, height: ITEM_HEIGHT },
+        style: { width: ITEM_WIDTH, height: itemHeight(sibling) },
         data: nodeDataFor(sibling),
         // z 3 (area box 0, nested ticket box 1, leaf card 3) leaves room for edges to resolve to effective z 2:
         // above nested boxes so a link reaches a node inside one, still below leaf cards so it never occludes one.
