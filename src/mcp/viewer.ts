@@ -29,6 +29,7 @@ import type { Database } from "../db/client";
 import { attachments } from "../db/schema";
 import { asPlan, exportStore, type StoreAccess } from "../serialise/store";
 import { storeFeed } from "./storeFeed";
+import { searchFeed } from "./searchFeed";
 import { addAttachment, removeAttachment } from "../domain/attachments";
 import { setStatus } from "../domain/items";
 import { setLayout } from "../domain/layout";
@@ -250,6 +251,12 @@ export function createViewerHost(db: Database, sources: ViewerSources, store: St
       // reason rather than a boolean: whatever the viewer shows in the drop zone's place should be the
       // store's own words (`OPS-11`).
       return json(200, await storeFeed(db, caller.ownerId, { store, path: storePath, uploadsDisabled: media.unavailable ?? null }));
+    }
+
+    // The search box (VIEW-25). A read, open like `/api/store`, through the one function every host shares.
+    if (path === "/api/search") {
+      const found = await searchFeed(db, caller.ownerId, params.get("project") ?? "", params.get("q") ?? "");
+      return found === null ? json(404, { error: `no project "${params.get("project") ?? ""}"` }) : json(200, found);
     }
 
     // Serve a blob. Open like the rest of the read surface, because `<img src>` cannot carry a header and

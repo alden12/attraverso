@@ -87,6 +87,30 @@ export async function saveLayout(projectKey: string, layout: Record<string, { x:
 
 /** Remove an attachment from its ticket. The blob stays on disk - another ticket may reference the same bytes
  *  - so this is "take it off this ticket", not "destroy it". */
+/** One search hit (`VIEW-25`), as `/api/search` returns it: the domain's `SearchHit`, minus what nothing here reads. */
+export interface SearchHit {
+  source: "item" | "comment" | "context";
+  /** The item's ref, for an item or a comment about one. Null for a context section. */
+  ref: string | null;
+  /** For a context section, its heading. */
+  id: string;
+  title: string | null;
+  /** The matching passage, with matched words between `**`. */
+  snippet: string;
+  audience: "user" | "agent" | null;
+}
+
+/**
+ * Search a project, as typed. Null when the host cannot (an older server without the route), so the box can say
+ * so rather than showing an empty list that reads as "nothing matched". Aborted by the next keystroke.
+ */
+export async function searchPlan(projectKey: string, query: string, signal: AbortSignal): Promise<{ hits: SearchHit[]; relaxed: boolean } | null> {
+  const params = new URLSearchParams({ project: projectKey, q: query });
+  const response = await fetch(`/api/search?${params}`, { headers: authHeaders(), signal });
+  if (!response.ok) return null;
+  return (await response.json()) as { hits: SearchHit[]; relaxed: boolean };
+}
+
 export async function deleteAttachment(projectKey: string, hash: string): Promise<void> {
   const response = await fetch(`/api/media/${hash}?project=${encodeURIComponent(projectKey)}`, {
     method: "DELETE",

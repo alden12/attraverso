@@ -572,3 +572,47 @@ test.describe("the project's context sections (VIEW-30)", () => {
     await expect(page.locator("aside.detail")).toHaveCount(1);
   });
 });
+
+test.describe("searching the plan (VIEW-25)", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => window.localStorage.clear());
+    await page.goto("/#demo");
+    await expect(page.locator(".react-flow__node").first()).toBeVisible();
+  });
+
+  const box = (page: Page) => page.locator(".search__input");
+  const hits = (page: Page) => page.locator(".search__hit");
+
+  test("finds an item as it is typed, and picking it selects it on the graph", async ({ page }) => {
+    await page.keyboard.press("/");
+    await box(page).fill("stdi"); // "stdio", still being typed
+    await expect(hits(page).first()).toContainText("Serve the tools over stdio");
+    await box(page).press("Enter");
+    await expect(page.locator(".search")).toHaveCount(0);
+    await expect(page.locator("aside.detail .detail__title")).toHaveText("Serve the tools over stdio");
+  });
+
+  test("goes straight to an item when a ref is typed", async ({ page }) => {
+    await page.locator('.toolbtn[aria-label="Search"]').click();
+    await box(page).fill("view-1.2");
+    await expect(hits(page).first()).toContainText("VIEW-1.2");
+  });
+
+  test("marks a hit the filters hide, and shows it when picked", async ({ page }) => {
+    // Finished work is hidden by default, and PLAT-1 is done.
+    await expect(page.locator('.react-flow__node[data-id="PLAT-1"]')).toHaveCount(0);
+    await page.keyboard.press("ControlOrMeta+k");
+    await box(page).fill("scaffold");
+    await expect(hits(page).first().locator(".search__hidden")).toHaveText("hidden");
+    await hits(page).first().click();
+    await expect(page.locator('.react-flow__node[data-id="PLAT-1"]')).toBeVisible();
+    await expect(page.locator("aside.detail .detail__title")).toHaveText("Scaffold the repo");
+  });
+
+  test("opens a context section from a hit in it", async ({ page }) => {
+    await page.keyboard.press("/");
+    await box(page).fill("demo pla");
+    await hits(page).filter({ hasText: "Goals" }).first().click();
+    await expect(page.locator('aside.detail[aria-label="Context"] .detail__title')).toHaveText("Goals");
+  });
+});

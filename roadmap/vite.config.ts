@@ -6,6 +6,7 @@ import { parse } from "yaml";
 import { existsSync } from "node:fs";
 import { asPlan, mergeLayout, parseLayout, resolveStorePaths, type Store } from "../src/serialise/store";
 import { layoutPathFor } from "../src/serialise/paths";
+import type { Database } from "../src/db/client";
 import { summariseFromFiles } from "../src/serialise/measurements";
 
 // The viewer's Vite root is this folder, set explicitly rather than left to the invocation: `vite --config
@@ -34,13 +35,56 @@ const repoRoot = fileURLToPath(new URL("..", import.meta.url));
  */
 function servePlan(): Plugin {
   const storePaths = resolveStorePaths();
+  let search: ReturnType<typeof buildSearch> | null = null;
+  let dev: ViteDevServer | null = null;
+  const searchable = () => (search ??= buildSearch(dev!));
+  const forgetSearch = () => {
+    const stale = search;
+    search = null;
+    void stale?.then(({ close }) => close()).catch(() => {});
+  };
+  // Loaded through Vite rather than imported at the top: the in-memory database bundles its migrations with
+  // `import.meta.glob`, which only exists in code Vite has transformed, and this config file is not.
+  const load = <T,>(server: ViteDevServer, path: string) => server.ssrLoadModule(fileURLToPath(new URL(path, import.meta.url))) as Promise<T>;
+  async function buildSearch(server: ViteDevServer) {
+    const { createInMemoryDb } = await load<typeof import("../src/db/memory")>(server, "../src/db/memory.ts");
+    const { importStore } = await load<typeof import("../src/serialise/store")>(server, "../src/serialise/store.ts");
+    const { ensureUser, LOCAL_IDENTITY } = await load<typeof import("../src/domain/users")>(server, "../src/domain/users.ts");
+    const { searchFeed } = await load<typeof import("../src/mcp/searchFeed")>(server, "../src/mcp/searchFeed.ts");
+    const { db, close } = await createInMemoryDb();
+    const stores = await Promise.all(storePaths.map(async (path) => parse(await readFile(path, "utf8")) as Store));
+    await importStore(db, { projects: stores.flatMap((store) => store.projects ?? []) });
+    const { id: ownerId } = await ensureUser(db, LOCAL_IDENTITY);
+    return { db: db as Database, ownerId, close, searchFeed };
+  }
   const described = storePaths.join(", ");
   return {
     name: "apm-serve-store",
     configureServer(server: ViteDevServer) {
+      dev = server;
       for (const path of storePaths) server.watcher.add(path);
       server.watcher.on("change", (file) => {
-        if (storePaths.includes(file)) server.ws.send({ type: "full-reload" });
+        if (storePaths.includes(file)) {
+          forgetSearch(); // rebuilt from the changed files on the next search
+          server.ws.send({ type: "full-reload" });
+        }
+      });
+      // The search box (VIEW-25). This server has no database, and search is a Postgres query, so it builds one
+      // from the plan files the first time someone searches - the same in-memory engine the MCP server runs, and
+      // the same `searchFeed`, so the dev server matches exactly as the real hosts do rather than imitating them.
+      // Lazily, because PGlite takes most of a second to start and most dev sessions never search.
+      server.middlewares.use("/api/search", async (request, response) => {
+        response.setHeader("Content-Type", "application/json");
+        try {
+          const { db, ownerId, searchFeed } = await searchable();
+          const params = new URL(request.url ?? "/", "http://localhost").searchParams;
+          const found = await searchFeed(db, ownerId, params.get("project") ?? "", params.get("q") ?? "");
+          if (found === null) response.statusCode = 404;
+          response.end(JSON.stringify(found ?? { error: `no project "${params.get("project") ?? ""}"` }));
+        } catch (error) {
+          response.statusCode = 500;
+          response.end(JSON.stringify({ error: `search failed: ${String(error)}` }));
+        }
       });
       server.middlewares.use("/api/store", async (_request, response) => {
         response.setHeader("Content-Type", "application/json");

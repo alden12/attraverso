@@ -241,3 +241,36 @@ describe("search (DATA-11)", () => {
     });
   });
 });
+
+describe("searching as you type (VIEW-25)", () => {
+  async function seeded() {
+    const fixture = await twoProjects();
+    await createItem(fixture.db, { projectId: fixture.mine.id, area: "VIEW", title: "Collapse an area into one box" }, ACTOR);
+    await createItem(fixture.db, { projectId: fixture.mine.id, area: "VIEW", title: "Find a ticket in the graph" }, ACTOR);
+    return fixture;
+  }
+
+  it("matches a word still being typed, only when asked to", async () => {
+    const { db, mine, close } = await seeded();
+    expect((await hitsOf(db, mine.id, "collap", undefined, { prefix: true })).map((h) => h.ref)).toEqual(["VIEW-1"]);
+    // The agent's search is unchanged: it writes finished words, and a prefix would only widen them.
+    expect(await hitsOf(db, mine.id, "collap")).toEqual([]);
+    await close();
+  });
+
+  it("keeps the words before it as they were, and stems the partial one", async () => {
+    const { db, mine, close } = await seeded();
+    expect((await hitsOf(db, mine.id, "area into on", undefined, { prefix: true })).map((h) => h.ref)).toEqual(["VIEW-1"]);
+    // "tickets" is a finished word, so it stems to match "ticket"; "gra" is the one being typed.
+    expect((await hitsOf(db, mine.id, "tickets gra", undefined, { prefix: true })).map((h) => h.ref)).toEqual(["VIEW-2"]);
+    await close();
+  });
+
+  it("treats a trailing space, quote or exclusion as a finished query", async () => {
+    const { db, mine, close } = await seeded();
+    expect(await hitsOf(db, mine.id, "collap ", undefined, { prefix: true })).toEqual([]);
+    expect((await hitsOf(db, mine.id, '"one box"', undefined, { prefix: true })).map((h) => h.ref)).toEqual(["VIEW-1"]);
+    expect((await hitsOf(db, mine.id, "area -collapse", undefined, { prefix: true })).map((h) => h.ref)).toEqual([]);
+    await close();
+  });
+});

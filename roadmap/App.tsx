@@ -13,6 +13,7 @@ import {
   type NodeChange,
   type XYPosition,
   type Edge,
+  type ReactFlowInstance,
 } from "@xyflow/react";
 import ReactMarkdown from "react-markdown";
 import { Attachments } from "./Attachments";
@@ -35,6 +36,8 @@ import type { RoadmapItem } from "../scripts/tickets";
 import { Calendar, type CalendarEntry } from "./Calendar";
 import { countDated } from "./calendarDates";
 import { Logo } from "./Logo";
+import { Search } from "./Search";
+import type { SearchHit } from "./store";
 
 const nodeTypes = { item: ItemNodeView, area: AreaGroupNode, ticket: TicketGroupNode, ghost: GhostNodeView };
 const STATUS_KEYS = Object.keys(STATUSES) as Status[];
@@ -60,6 +63,7 @@ const icon = (paths: React.ReactNode) => (
 );
 const CalendarIcon = () => icon(<><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 10h18M8 3v4M16 3v4" /></>);
 const GraphIcon = () => icon(<><circle cx="6" cy="6" r="2.5" /><circle cx="18" cy="8" r="2.5" /><circle cx="9" cy="18" r="2.5" /><path d="M8.3 7.2l7.4 0.6M7 8.4l1.6 7.2" /></>);
+const SearchIcon = () => icon(<><circle cx="11" cy="11" r="6.5" /><path d="M20 20l-4.2-4.2" /></>);
 const SlidersIcon = () => icon(<><path d="M4 7h10M18 7h2M4 17h4M12 17h8" /><circle cx="16" cy="7" r="2" /><circle cx="10" cy="17" r="2" /></>);
 const MapIcon = () => icon(<><path d="M9 4l-6 2v14l6-2 6 2 6-2V4l-6 2-6-2z" /><path d="M9 4v14M15 6v14" /></>);
 
@@ -112,6 +116,21 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
   const [hiddenStatuses, setHiddenStatuses] = useState<Set<Status>>(new Set<Status>(["done"]));
   const [colourMode, setColourMode] = useState<ColourMode>("area");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // The search box (VIEW-25). `/` or Cmd/Ctrl+K opens it from anywhere but a text field, which is where those
+  // keys are text.
+  const [searchOpen, setSearchOpen] = useState(false);
+  useEffect(() => {
+    const open = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const typing = target !== null && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
+      const shortcut = (event.key === "k" && (event.metaKey || event.ctrlKey)) || (event.key === "/" && !typing);
+      if (!shortcut || (typing && event.key === "/")) return;
+      event.preventDefault();
+      setSearchOpen(true);
+    };
+    window.addEventListener("keydown", open);
+    return () => window.removeEventListener("keydown", open);
+  }, []);
   useEffect(() => {
     if (!settingsOpen) return;
     const close = (event: KeyboardEvent) => event.key === "Escape" && setSettingsOpen(false);
@@ -287,6 +306,17 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
   // Explicit generics: an empty literal would otherwise infer `never[]` and every later setNodes/setEdges
   // call would be a type error against it.
   const [nodes, setNodes] = useNodesState<RoadmapNode>([]);
+  // React Flow's handle, for panning to a search hit, and the hit waiting to be panned to: picking one can first
+  // unhide or expand it, so the pan waits until its node has been drawn (the effect below).
+  const flow = useRef<ReactFlowInstance<RoadmapNode, Edge> | null>(null);
+  const [panTo, setPanTo] = useState<string | null>(null);
+  useEffect(() => {
+    if (panTo === null || flow.current === null) return;
+    const node = nodes.find((candidate) => candidate.id === panTo);
+    if (node === undefined || node.hidden === true) return;
+    void flow.current.fitView({ nodes: [{ id: panTo }], duration: 400, maxZoom: 1.1, padding: 0.6 });
+    setPanTo(null);
+  }, [panTo, nodes]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   // The layout's memory lives in the plan (`VIEW-23.1`), so the map is the same on every device: read from the
   // served plan and saved back through the write path. A host that cannot write (the dev server, a published
@@ -481,6 +511,25 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
     return next;
   };
 
+  /**
+   * A search hit, picked (VIEW-25). An item - or a comment, which picks the item it is about - is selected where
+   * it sits and panned to, so its dependencies and its box stay in view: the graph's value is the structure
+   * around a node. A hit the filters hide brings back its status and its area rather than doing nothing, since
+   * someone who picked it wants to see it. A context section opens in the pane.
+   */
+  const pickHit = (hit: SearchHit) => {
+    if (hit.source === "context") return openContext(hit.id);
+    const item = hit.ref === null ? undefined : items.find((candidate) => candidate.id === hit.ref);
+    if (item === undefined) return;
+    if (hiddenIds.has(item.id)) {
+      setHiddenStatuses((set) => (set.has(item.status) ? toggle(set, item.status) : set));
+      setHiddenAreas((set) => (set.has(item.area) ? toggle(set, item.area) : set));
+    }
+    setView("graph");
+    setSelectedId(item.id);
+    setPanTo(item.id);
+  };
+
   const onNodeClick: NodeMouseHandler = (_event, node) => {
     if (node.type === "item" || node.type === "ticket") {
       setSelectedId((node.data as { item: RoadmapItem }).item.id);
@@ -567,6 +616,15 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
               is what lets the toolbar fit a phone's width in one row. */}
           {/* One button that switches to the other view, rather than a two-way switch: there are only two, so the
               button can name where it goes, and it costs one slot instead of two. */}
+          {/* Search (VIEW-25), first because it is the one used most once a plan is too big to scan. */}
+          {project !== null && (
+            <button className="toolbtn" data-on={searchOpen} aria-label="Search" title="Search (/ or Cmd+K)" onClick={() => setSearchOpen(true)}>
+              <span className="toolbtn__main">
+                <SearchIcon />
+              </span>
+              <span className="toolbtn__sub">search</span>
+            </button>
+          )}
           <button
             className="toolbtn"
             aria-label={`Show the ${otherView}`}
@@ -596,6 +654,16 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
           {/* Whatever the host adds (`extensions.ts`): nothing, from this package's own two hosts. */}
           {ToolbarActions !== undefined && <ToolbarActions plan={plan} project={project} reload={reload} />}
         </div>
+        {searchOpen && project !== null && (
+          <Search
+            projectKey={project.key}
+            colours={colours}
+            hidden={hiddenIds}
+            titleOf={(ref) => items.find((item) => item.id === ref)?.title}
+            onPick={pickHit}
+            onClose={() => setSearchOpen(false)}
+          />
+        )}
         {settingsOpen && (
           <>
             <div className="settings__backdrop" onClick={() => setSettingsOpen(false)} />
@@ -802,6 +870,7 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
                 nodeTypes={nodeTypes}
                 onNodesChange={handleNodesChange}
                 onEdgesChange={onEdgesChange}
+                onInit={(instance) => (flow.current = instance)}
                 onNodeClick={onNodeClick}
                 onNodeDoubleClick={onNodeDoubleClick}
                 zoomOnDoubleClick={false}

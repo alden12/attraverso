@@ -95,6 +95,15 @@ const ITEM_BOOST = 1.5;
  */
 const HEADLINE_OPTIONS = "MaxFragments=2,MinWords=6,MaxWords=18,StartSel=**,StopSel=**,FragmentDelimiter= ... ";
 
+/**
+ * The same, marked with brackets no prose uses (`VIEW-25`). The viewer shows a snippet as text with the matches
+ * highlighted, and `**` there is ambiguous: a body's own bold (`**Edge aggregation.**`) arrives looking exactly
+ * like a match. The agent keeps `**`, since it reads the snippet as markdown and the ambiguity costs it nothing.
+ */
+export const MATCH_OPEN = "⟦";
+export const MATCH_CLOSE = "⟧";
+const BRACKETED_OPTIONS = `MaxFragments=2,MinWords=6,MaxWords=18,StartSel=${MATCH_OPEN},StopSel=${MATCH_CLOSE},FragmentDelimiter= ... `;
+
 interface HitRow {
   source: SearchSource;
   ref: string | null;
@@ -149,10 +158,33 @@ interface HitRow {
  */
 const relaxable = (tsquery: string): boolean => tsquery.includes(" & ") && !tsquery.includes("!");
 
+/**
+ * The word a person is still typing: the query's last run of letters and digits, when the query ends in one.
+ * Not when it ends in a space (the word is finished), a quote (a phrase is), or anything else.
+ */
+const PARTIAL = /(?:^|[^\p{L}\p{N}"-])([\p{L}\p{N}]+)$/u;
+
+/**
+ * The tsquery for a search. **As typed** (`prefix`, `VIEW-25`), the last word also matches any word it begins:
+ * "collap" finds "collapse", which a search box needs and `websearch_to_tsquery` cannot do, since it matches
+ * whole stemmed words. The rest of the query is parsed exactly as without it, and the partial word becomes
+ * `to_tsquery('collap:*')`, stemmed by the same configuration, ANDed on.
+ *
+ * **One matching rule, two modes**, rather than the viewer filtering on its own: the box and `search_plan` run
+ * this same query, so the human and the agent cannot get differently-ranked answers. The agent does not ask
+ * for the prefix, because it writes finished words and a prefix only widens what they match.
+ */
+function tsquery(query: string, prefix: boolean): SQL {
+  const partial = prefix ? PARTIAL.exec(query) : null;
+  if (partial === null) return sql`websearch_to_tsquery(${TEXT_SEARCH_CONFIG}, ${query})`;
+  const head = query.slice(0, partial.index + partial[0].length - partial[1]!.length);
+  const word = sql`to_tsquery(${TEXT_SEARCH_CONFIG}, ${`${partial[1]}:*`})`;
+  return head.trim() === "" ? word : sql`(websearch_to_tsquery(${TEXT_SEARCH_CONFIG}, ${head}) && ${word})`;
+}
+
 /** The strict query, and the same query with its top-level ANDs turned into ORs. */
-const AND_QUERY = (query: string) => sql`websearch_to_tsquery(${TEXT_SEARCH_CONFIG}, ${query})`;
-const OR_QUERY = (query: string) =>
-  sql`replace(websearch_to_tsquery(${TEXT_SEARCH_CONFIG}, ${query})::text, ' & ', ' | ')::tsquery`;
+const AND_QUERY = (query: string, prefix = false) => tsquery(query, prefix);
+const OR_QUERY = (query: string, prefix = false) => sql`replace((${tsquery(query, prefix)})::text, ' & ', ' | ')::tsquery`;
 
 /**
  * Search one project's items, comments and context sections in a single query.
@@ -173,17 +205,20 @@ export async function search(
   projectId: OwnedProjectId,
   query: string,
   limit: number = DEFAULT_LIMIT,
+  options: { prefix?: boolean; bracketed?: boolean } = {},
 ): Promise<SearchResult> {
+  const prefix = options.prefix === true;
+  const headline = options.bracketed === true ? BRACKETED_OPTIONS : HEADLINE_OPTIONS;
   // An empty query matches nothing, and `websearch_to_tsquery` would agree - but it would still cost a scan of
   // four tables to say so, and callers do send one (a cleared search box, an agent building a query from a
   // field that turned out to be blank).
   if (query.trim() === "") return { hits: [], relaxed: false };
 
-  const strict = await matching(db, projectId, AND_QUERY(query), sql`ts_rank`, limit);
+  const strict = await matching(db, projectId, AND_QUERY(query, prefix), sql`ts_rank`, limit, headline);
   if (strict.length > 0) return { hits: strict, relaxed: false };
 
   // One extra round trip, and only on a miss - which is already the cheap path.
-  const [built] = rowsOf<{ tsq: string }>(await db.execute(sql`SELECT ${AND_QUERY(query)}::text AS tsq`));
+  const [built] = rowsOf<{ tsq: string }>(await db.execute(sql`SELECT (${AND_QUERY(query, prefix)})::text AS tsq`));
   if (built === undefined || !relaxable(built.tsq)) return { hits: [], relaxed: false };
 
   // **`ts_rank`, not `ts_rank_cd`.** This was `ts_rank_cd` first, on the reasoning that once the query is a
@@ -199,7 +234,7 @@ export async function search(
   // densely the query covers the document, so ten hits of one term in a ten-word document scores perfectly -
   // the precise inversion of what a relaxed search needs. The real store hid this because both rankers happened
   // to agree on the query it was tested with.
-  const loose = await matching(db, projectId, OR_QUERY(query), sql`ts_rank`, limit);
+  const loose = await matching(db, projectId, OR_QUERY(query, prefix), sql`ts_rank`, limit, headline);
   return { hits: loose, relaxed: loose.length > 0 };
 }
 
@@ -210,6 +245,7 @@ async function matching(
   q: SQL,
   rank: SQL,
   limit: number,
+  headline: string,
 ): Promise<SearchHit[]> {
   const result = await db.execute(sql`
     WITH matches AS (
@@ -250,7 +286,7 @@ async function matching(
       SELECT * FROM matches ORDER BY rank DESC, at DESC, id ASC LIMIT ${limit}
     )
     SELECT source, ref, id, title, audience, at, rank,
-           ts_headline(${TEXT_SEARCH_CONFIG}, text, ${q}, ${HEADLINE_OPTIONS}) AS snippet
+           ts_headline(${TEXT_SEARCH_CONFIG}, text, ${q}, ${headline}) AS snippet
       FROM top
      ORDER BY rank DESC, at DESC, id ASC
   `);
