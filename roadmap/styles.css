@@ -120,7 +120,6 @@ body {
   list-style: none;
   margin: 0;
   padding: 4px;
-  overflow-y: auto;
 }
 .search__hit {
   display: flex;
@@ -577,6 +576,7 @@ body {
   flex: 1;
   display: flex;
   min-height: 0;
+  position: relative; /* the floating pane is placed against it */
 }
 .graph {
   flex: 1;
@@ -1067,17 +1067,43 @@ body {
   background: #263243;
 }
 
-.detail {
-  width: 420px;
-  /* Never wider than the screen: on a phone a fixed 420px pushed the close button out of reach. The phone's real
-     shape for the pane is a bottom sheet (VIEW-38.3). */
-  max-width: 100%;
-  flex: none;
-  border-left: 1px solid var(--line);
+/* The pane floats over the canvas's top right (VIEW-50), only as tall as what it holds, so a short one leaves the
+   graph below it in view; a long one stops short of the bottom and scrolls. Its width is dragged by the left edge
+   and set inline. Never wider than the screen: on a phone a fixed width pushed the close button out of reach. The
+   phone's real shape for it is a bottom sheet (VIEW-38.3). */
+.pane {
+  position: absolute;
+  z-index: 20;
+  top: 12px;
+  right: 12px;
+  max-height: calc(100% - 24px);
+  max-width: calc(100% - 24px);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 10px;
   background: var(--panel-2);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+.pane__resize {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 6px;
+  cursor: ew-resize;
+  touch-action: none;
+}
+.pane__resize:hover {
+  background: color-mix(in srgb, var(--text) 12%, transparent);
+}
+.detail {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  overflow-y: auto;
 }
 .detail__head {
   display: flex;
@@ -1085,6 +1111,11 @@ body {
   justify-content: space-between;
   padding: 12px 16px;
   border-bottom: 1px solid var(--line);
+  /* Stays put while a long pane scrolls under it, so its close button and back link are always in reach. */
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--panel-2);
 }
 .detail__title {
   margin: 0;
@@ -1164,8 +1195,10 @@ body {
 }
 .detail__doc {
   padding: 4px 16px 24px;
-  overflow: auto;
-  min-height: 0;
+  /* The whole pane scrolls now, so the prose does not need a scroller of its own; a wide table or code block
+     still scrolls sideways here. */
+  overflow-x: auto;
+  flex: none;
 }
 .detail__doc h1,
 .detail__doc h2,
@@ -1332,6 +1365,14 @@ body {
    pane's header. Hidden until the pane closes; VIEW-38.3's bottom sheet is what gives them room back. */
 @media (max-width: 700px) {
   .body[data-pane="open"] .fabs {
+    display: none;
+  }
+  /* A phone has no room to share: the pane takes the width, and there is nothing to drag. */
+  .pane {
+    width: auto !important;
+    left: 12px;
+  }
+  .pane__resize {
     display: none;
   }
 }

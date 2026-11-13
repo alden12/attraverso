@@ -209,6 +209,29 @@ test.describe("the served store", () => {
     await expect(page.locator("aside.detail .detail__id")).toHaveText(open[0]!.ref);
   });
 
+  test("floats the pane only as tall as it needs, and remembers a width dragged by its edge (VIEW-50)", async ({ page }) => {
+    await page.locator(".item-node", { hasText: "DATA-1" }).first().click();
+    await expect(page.locator(".detail__doc")).toContainText("Drizzle ORM over");
+    const pane = page.locator(".pane");
+    const canvas = (await page.locator(".graph").boundingBox())!;
+    expect((await pane.boundingBox())!.height).toBeLessThan(canvas.height - 100); // the graph below it stays in view
+
+    const handle = (await page.locator(".pane__resize").boundingBox())!;
+    const before = (await pane.boundingBox())!.width;
+    await page.mouse.move(handle.x + 3, handle.y + handle.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(handle.x - 120, handle.y + handle.height / 2, { steps: 4 });
+    await page.mouse.up();
+    await expect.poll(async () => Math.round((await pane.boundingBox())!.width)).toBe(Math.round(before + 123));
+
+    // Remembered in this browser, and kept when the pane closes and opens on something else.
+    expect(await page.evaluate(() => window.localStorage.getItem("attraverso.pane.width"))).toBe(String(Math.round(before + 123)));
+    await page.locator(".detail__close").click();
+    await expect(pane).toHaveCount(0);
+    await page.locator(".item-node", { hasText: "MCP-1" }).first().click();
+    await expect.poll(async () => Math.round((await pane.boundingBox())!.width)).toBe(Math.round(before + 123));
+  });
+
   test("captures the full graph for visual inspection", async ({ page }) => {
     // Give the dagre layout and the fitView transition time to settle before capturing.
     await page.waitForTimeout(1200);

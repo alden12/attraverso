@@ -274,6 +274,39 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
   // An empty next list has nothing to show, so asking for it shows nothing rather than an empty pane.
   const listPane = listShown === "next" && next.length === 0 ? null : listShown;
 
+  // The pane's width, dragged by its left edge and remembered in this browser: how much of the graph to give up
+  // is a matter of screen and taste, not of the plan, so it is not saved anywhere shared.
+  const [paneWidth, setPaneWidth] = useState(() => {
+    try {
+      const saved = Number(window.localStorage.getItem(PANE_WIDTH_KEY));
+      return saved >= PANE_MIN_WIDTH ? saved : PANE_DEFAULT_WIDTH;
+    } catch {
+      return PANE_DEFAULT_WIDTH;
+    }
+  });
+  const startResize = (event: React.PointerEvent) => {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = paneWidth;
+    let width = startWidth;
+    const move = (moved: PointerEvent) => {
+      // Dragged left widens it: the pane is pinned to the right edge.
+      width = Math.round(Math.min(Math.max(startWidth + startX - moved.clientX, PANE_MIN_WIDTH), window.innerWidth - 80));
+      setPaneWidth(width);
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      try {
+        window.localStorage.setItem(PANE_WIDTH_KEY, String(width));
+      } catch {
+        // A browser that will not store it keeps the width for this page only.
+      }
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
+
   // Ticket ids that touch a dependency path. Only these arm hover highlighting, so hovering a dependency-free
   // card (or an area box) never restyles the edges for nothing - a link surfaces from its own tickets or line.
   const linkedNodes = useMemo(() => {
@@ -541,6 +574,7 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
   );
 
   const selected = selectedId ? (items.find((item) => item.id === selectedId) ?? null) : null;
+  const paneOpen = selected !== null || contextView !== null || areaShown !== null || listPane !== null;
 
   /**
    * What the calendar places (`CAL-3`). For one project it is exactly what the graph shows - the filters apply
@@ -926,7 +960,7 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
         )}
       </header>
 
-      <div className="body" data-pane={selected !== null || contextView !== null || areaShown !== null || listPane !== null ? "open" : undefined}>
+      <div className="body" data-pane={paneOpen ? "open" : undefined}>
         <div className="graph">
           {/* Why the graph is empty, said out loud. Rendered over the (empty) canvas rather than instead of it,
               so the toolbar and its switcher stay put and the fix is one click away. */}
@@ -1052,6 +1086,11 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
           )}
         </div>
 
+        {/* The pane floats over the canvas's top right rather than taking a column of its own, and is only as tall
+            as what it holds, so a short one (the next list, an area) leaves the graph below it in view. */}
+        {paneOpen && (
+          <div className="pane" style={{ width: paneWidth }}>
+            <div className="pane__resize" onPointerDown={startResize} title="Drag to resize" aria-hidden="true" />
         {selected && (
           <aside className="detail">
             <div className="detail__head">
@@ -1237,10 +1276,16 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
             )}
           </aside>
         )}
+          </div>
+        )}
       </div>
     </div>
   );
 }
+
+const PANE_WIDTH_KEY = "attraverso.pane.width";
+const PANE_DEFAULT_WIDTH = 420;
+const PANE_MIN_WIDTH = 300;
 
 /** Two layouts place every node in the same spot, whatever order their keys came in: a layout read back from the
  *  plan file is in the file's order, and one laid out here is in the graph's, and neither difference is a move. */
