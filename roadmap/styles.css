@@ -1586,7 +1586,7 @@ body {
    column heads. A lane is `display: contents`, so it groups its cells in the DOM without boxing them. Starts below
    the floating buttons, and scrolls both ways with the heads pinned, so a long lane keeps its columns named. */
 .board {
-  --divider: #2b3442; /* grey rules between lanes, a step up from --line so they read as lanes, not cell edges */
+  --divider: #2b3442; /* grey rules between the status columns, a step up from --line so the columns read */
   position: absolute;
   inset: 56px 0 0 0;
   overflow: auto;
@@ -1618,6 +1618,7 @@ body {
   gap: 6px;
   padding: 8px 10px;
   border-bottom: 2px solid var(--area);
+  border-left: 1px solid var(--divider);
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -1645,7 +1646,7 @@ body {
   gap: 2px;
   padding: 10px 10px 10px 12px;
   border: 0;
-  border-top: 2px solid var(--divider);
+  border-top: 1px solid var(--line);
   border-left: 3px solid var(--area);
   background: var(--bg);
   color: inherit;
@@ -1660,10 +1661,6 @@ body {
   display: inline-block;
   width: 1em;
   color: var(--muted);
-}
-/* The Next lane is set apart from the areas below it by a heavier rule. */
-.board__lane[data-next="true"] > * {
-  border-bottom: 4px solid var(--divider);
 }
 /* A folded lane's cells: one row high, a count each, and the whole row opens it. */
 .board__lane[data-open="false"] .board__cell {
@@ -1700,7 +1697,8 @@ body {
   gap: 6px;
   min-width: 0;
   padding: 8px 6px;
-  border-top: 2px solid var(--divider);
+  border-top: 1px solid var(--line);
+  border-left: 1px solid var(--divider);
   background: color-mix(in srgb, var(--area) 4%, transparent);
 }
 .board__card {
