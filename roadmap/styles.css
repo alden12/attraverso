@@ -1647,6 +1647,7 @@ body {
   position: sticky;
   left: 0;
   z-index: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -1665,6 +1666,7 @@ body {
   text-decoration: underline;
 }
 .board__chevron {
+  flex: none;
   display: inline-block;
   width: 1em;
   color: var(--muted);
@@ -1686,13 +1688,28 @@ body {
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
+/* One line, cut short with an ellipsis (the whole name is the head's tooltip): the column is as narrow as it is so
+   the status columns get the width, and an area name runs to 20 characters. */
 .board__lane-name {
+  display: flex;
+  max-width: 100%;
+  min-width: 0;
   color: var(--area);
   font-size: 14px;
   font-weight: 700;
   line-height: 1.2;
 }
+.board__lane-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .board__lane-key {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--muted);
   font-size: 11px;
   font-weight: 700;
@@ -1788,7 +1805,6 @@ body {
   }
   .board__lane-name {
     font-size: 12px;
-    overflow-wrap: anywhere;
   }
 }
 /* The view tabs (VIEW-57): the three view buttons joined into one group, the showing one lit. */

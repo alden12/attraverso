@@ -120,12 +120,18 @@ export function Board({ items, areas, hiddenStatuses, next, colours, areaName, s
             data-next={isNext}
             style={{ "--area": isNext ? "var(--text)" : colours[lane.key] } as React.CSSProperties}
           >
-            <button className="board__lane-head" role="rowheader" aria-expanded={shown} onClick={() => toggleLane(lane.key)}>
+            <button
+              className="board__lane-head"
+              role="rowheader"
+              aria-expanded={shown}
+              title={name}
+              onClick={() => toggleLane(lane.key)}
+            >
               <span className="board__lane-name">
                 <span className="board__chevron" aria-hidden="true">
                   {shown ? "▾" : "▸"}
                 </span>
-                {name}
+                <span className="board__lane-text">{name}</span>
               </span>
               <span className="board__lane-key">
                 {!isNext && name !== lane.key ? `${lane.key} · ${lane.items.length}` : lane.items.length}
