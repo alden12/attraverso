@@ -13,6 +13,9 @@ import { useStore } from "@xyflow/react";
  * another. Set by eye on this repo's plan (2026-11-13), first with dev sliders and then refined by hand: one
  * crossfade from 0.35 to 0.1, which leaves the cards in place past the point their text is legible, since their
  * shapes and edges still say where things are after their words stop, and finishes before the floor at 0.05.
+ *
+ * **The cards never fade to nothing** (`VIEW-53`). Gone completely, the overview read as all there was to an area,
+ * with nothing to say that zooming in would show more, so they stop at `CARDS_FLOOR` behind its translucent veil.
  */
 export interface FadeBands {
   /** Zoom at which the cards start to fade, and at which they are gone. */
@@ -25,6 +28,9 @@ export interface FadeBands {
 
 export const FADE_BANDS: FadeBands = { cardsFrom: 0.35, cardsTo: 0.1, overviewFrom: 0.35, overviewTo: 0.1 };
 
+/** The cards' opacity when fully zoomed out: a hint that they are there, too faint to compete with the overview. */
+export const CARDS_FLOOR = 0.3;
+
 /** How far into a band `zoom` is, 0 above its start to 1 past its end (zooming out runs from high to low). */
 const ramp = (zoom: number, from: number, to: number): number =>
   from === to ? (zoom <= to ? 1 : 0) : Math.min(Math.max((from - zoom) / (from - to), 0), 1);
@@ -35,10 +41,11 @@ export function ZoomFade() {
 
   useEffect(() => {
     if (canvas === null) return;
-    const cards = 1 - ramp(zoom, FADE_BANDS.cardsFrom, FADE_BANDS.cardsTo);
+    const cards = 1 - (1 - CARDS_FLOOR) * ramp(zoom, FADE_BANDS.cardsFrom, FADE_BANDS.cardsTo);
     canvas.style.setProperty("--cards", cards.toFixed(3));
     canvas.style.setProperty("--overview", ramp(zoom, FADE_BANDS.overviewFrom, FADE_BANDS.overviewTo).toFixed(3));
-    canvas.dataset.far = String(cards < 0.5);
+    // Far once the cards are mostly faded, measured on the ramp now that they never reach 0.
+    canvas.dataset.far = String(ramp(zoom, FADE_BANDS.cardsFrom, FADE_BANDS.cardsTo) > 0.5);
   }, [zoom, canvas]);
 
   return null;

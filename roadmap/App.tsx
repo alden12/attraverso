@@ -67,6 +67,11 @@ const icon = (paths: React.ReactNode) => (
 const CalendarIcon = () => icon(<><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 10h18M8 3v4M16 3v4" /></>);
 const GraphIcon = () => icon(<><circle cx="6" cy="6" r="2.5" /><circle cx="18" cy="8" r="2.5" /><circle cx="9" cy="18" r="2.5" /><path d="M8.3 7.2l7.4 0.6M7 8.4l1.6 7.2" /></>);
 const SearchIcon = () => icon(<><circle cx="11" cy="11" r="6.5" /><path d="M20 20l-4.2-4.2" /></>);
+// Four arrows out from the middle: the usual sign for "move".
+const MoveIcon = () =>
+  icon(<><path d="M12 3v18M3 12h18" /><path d="M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3" /></>);
+// Three dots stacked: the usual "more" menu.
+const MoreIcon = () => icon(<><circle cx="12" cy="5" r="1.4" /><circle cx="12" cy="12" r="1.4" /><circle cx="12" cy="19" r="1.4" /></>);
 const SlidersIcon = () => icon(<><path d="M4 7h10M18 7h2M4 17h4M12 17h8" /><circle cx="16" cy="7" r="2" /><circle cx="10" cy="17" r="2" /></>);
 const MapIcon = () => icon(<><path d="M9 4l-6 2v14l6-2 6 2 6-2V4l-6 2-6-2z" /><path d="M9 4v14M15 6v14" /></>);
 
@@ -123,7 +128,11 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
   // question the graph answers is what is left. One click in the view settings brings it back.
   const [hiddenStatuses, setHiddenStatuses] = useState<Set<Status>>(new Set<Status>(["done"]));
   const [colourMode, setColourMode] = useState<ColourMode>("area");
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  // The toolbar's two dialogs (VIEW-37, VIEW-56), one open at a time: "view" filters what is shown, "more" holds
+  // what is set rarely - the colouring, a layout reset and whatever the host adds.
+  const [menu, setMenu] = useState<"view" | "more" | null>(null);
+  const settingsOpen = menu === "view";
+  const moreOpen = menu === "more";
   // The next list and the search box, in the right-hand pane with everything else you open over the graph, so the
   // canvas is left to the graph. The pane holds one thing at a time (VIEW-30): an item, an area, context, or one of
   // these. The next list starts open on a wide screen, as its floating panel did: it answers "what did we agree?",
@@ -150,15 +159,15 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
     return () => window.removeEventListener("keydown", open);
   }, []);
   useEffect(() => {
-    if (!settingsOpen) return;
-    const close = (event: KeyboardEvent) => event.key === "Escape" && setSettingsOpen(false);
+    if (menu === null) return;
+    const close = (event: KeyboardEvent) => event.key === "Escape" && setMenu(null);
     window.addEventListener("keydown", close);
     return () => window.removeEventListener("keydown", close);
-  }, [settingsOpen]);
-  // Locked by default (VIEW-41): only the selected card or box moves, so panning on a touch screen cannot drag a
-  // card by accident. "free" is the old behaviour, for a big rearrangement.
-  const [lockMode, setLockMode] = usePreference<"selected" | "free">("attraverso.lock", "selected", ["selected", "free"]);
-  const locked = lockMode === "selected";
+  }, [menu]);
+  // **Nothing moves outside move mode** (VIEW-54). VIEW-41 let the selected card or box move, but selecting an
+  // area to read it is exactly what made it draggable, so a group still moved by accident. A mode is one rule with
+  // a visible state. Off on every load rather than remembered: left on from last week, it is the accident again.
+  const [moving, setMoving] = useState(false);
   // Seeded from the URL (`#apm/CAL-1`), which is how the calendar opens another project's item: it switches
   // project, which remounts this, so the item has to arrive with the new mount.
   // A context section in the hash (`#apm/context:protocol`) opens that section instead (VIEW-30).
@@ -401,7 +410,7 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
   const zoomToArea = (area: string) => {
     setHiddenAreas((set) => (set.has(area) ? toggle(set, area) : set));
     setPanTo(`area:${area}`);
-    if (narrow) setSettingsOpen(false);
+    if (narrow) setMenu(null);
   };
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   // The layout's memory lives in the plan (`VIEW-23.1`), so the map is the same on every device: read from the
@@ -594,12 +603,12 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
     ghostedRef.current = ghosts;
   }, [hoveredId, previewReveal, hiddenIds, setNodes]);
 
-  // While locked, the one node that moves is the selected one: the open item, or whatever React Flow has
-  // selected (an area box, which opens nothing). A per-node `draggable` overrides `nodesDraggable`.
-  const flowNodes = useMemo(
-    () => (locked ? nodes.map((node) => (node.selected || node.id === selectedId ? { ...node, draggable: true } : node)) : nodes),
-    [nodes, locked, selectedId],
-  );
+  useEffect(() => {
+    if (!moving) return;
+    const leave = (event: KeyboardEvent) => event.key === "Escape" && setMoving(false);
+    window.addEventListener("keydown", leave);
+    return () => window.removeEventListener("keydown", leave);
+  }, [moving]);
 
   const selected = selectedId ? (items.find((item) => item.id === selectedId) ?? null) : null;
   const paneOpen = selected !== null || contextView !== null || areaShown !== null || listPane !== null;
@@ -836,7 +845,7 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
             aria-haspopup="dialog"
             aria-expanded={settingsOpen}
             aria-label="View settings"
-            onClick={() => setSettingsOpen((open) => !open)}
+            onClick={() => setMenu(settingsOpen ? null : "view")}
           >
             <span className="toolbtn__main">
               <SlidersIcon />
@@ -844,10 +853,22 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
             </span>
             <span className="toolbtn__sub">{hiddenCount > 0 ? `${hiddenCount} hidden` : "all shown"}</span>
           </button>
+          {/* What is set rarely (VIEW-56), behind the kebab at the end, so the bar keeps to what is used constantly. */}
+          <button
+            className="toolbtn toolbtn--icon"
+            data-on={moreOpen}
+            aria-haspopup="menu"
+            aria-expanded={moreOpen}
+            aria-label="More"
+            title="More"
+            onClick={() => setMenu(moreOpen ? null : "more")}
+          >
+            <MoreIcon />
+          </button>
         </div>
         {settingsOpen && (
           <>
-            <div className="settings__backdrop" onClick={() => setSettingsOpen(false)} />
+            <div className="settings__backdrop" onClick={() => setMenu(null)} />
             <div className="settings" role="dialog" aria-label="View settings">
               {/* Which plan this is, here rather than under the title, where it was a second line on every screen
                   for a question asked occasionally; the count beside it moved to the view button's caption. The
@@ -939,21 +960,6 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
                 ))}
               </div>
               <div className="settings__row">
-              {!(view === "calendar" && allProjects) && (
-                <div className="segmented" role="group" aria-label="Colour by">
-                  <span className="segmented__label">colour</span>
-                  {COLOUR_MODES.map((mode) => (
-                    <button
-                      key={mode}
-                      className="segmented__btn"
-                      data-on={colourMode === mode}
-                      onClick={() => setColourMode(mode)}
-                    >
-                      {mode}
-                    </button>
-                  ))}
-                </div>
-              )}
               {view === "calendar" && plan.projects.length > 1 && (
                 <button
                   className="chip"
@@ -967,16 +973,6 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
               </div>
               {view === "graph" && <div className="settings__label">Layout</div>}
               <div className="settings__row">
-              {view === "graph" && (
-                <button
-                  className="chip"
-                  data-on={locked}
-                  onClick={() => setLockMode(locked ? "free" : "selected")}
-                  title={locked ? "Only the selected item moves. Click to let everything move" : "Everything moves. Click to move only the selected item"}
-                >
-                  {locked ? "🔒 move selected only" : "🔓 move anything"}
-                </button>
-              )}
               {/* Both, rather than one toggle: with some areas folded, which way a toggle goes is a guess. */}
               {view === "graph" && (
                 <button
@@ -1001,14 +997,42 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
                   collapse all
                 </button>
               )}
+              </div>
+            </div>
+          </>
+        )}
+        {moreOpen && (
+          <>
+            <div className="settings__backdrop" onClick={() => setMenu(null)} />
+            <div className="settings settings--more" role="menu" aria-label="More">
+              {!(view === "calendar" && allProjects) && (
+                <div className="segmented" role="group" aria-label="Colour by">
+                  <span className="segmented__label">colour</span>
+                  {COLOUR_MODES.map((mode) => (
+                    <button
+                      key={mode}
+                      className="segmented__btn"
+                      data-on={colourMode === mode}
+                      onClick={() => setColourMode(mode)}
+                    >
+                      {mode}
+                    </button>
+                  ))}
+                </div>
+              )}
               {view === "graph" && (
-                <button className="chip" onClick={resetLayout} title="Lay the map out afresh, forgetting where everything was">
+                <button
+                  className="chip"
+                  onClick={() => {
+                    setMenu(null);
+                    resetLayout();
+                  }}
+                  title="Lay the map out afresh, forgetting where everything was"
+                >
                   reset layout
                 </button>
               )}
-              </div>
-              {/* Whatever the host adds (`extensions.ts`): nothing, from this package's own two hosts. Here rather than
-                  in the toolbar, which keeps to the title and the two view controls. */}
+              {/* Whatever the host adds (`extensions.ts`): nothing, from this package's own two hosts. */}
               {MenuActions !== undefined && (
                 <>
                   <div className="settings__label">Plan</div>
@@ -1073,6 +1097,17 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
               Context<span className="chip__count">{project.context.length}</span>
             </button>
           )}
+          {/* Move mode (VIEW-54): the only time cards and boxes drag or resize. */}
+          <button
+            className="next-fab"
+            data-on={moving}
+            aria-pressed={moving}
+            title={moving ? "Done moving (Esc)" : "Move and resize cards and areas"}
+            onClick={() => setMoving(!moving)}
+          >
+            <MoveIcon />
+            {moving ? "Done" : "Move"}
+          </button>
           {/* Search (VIEW-25), with the other things you open over the canvas rather than in the toolbar, which a
               phone has no room in. Icon-only: the magnifier is the most widely understood one there is. */}
           <button
@@ -1095,7 +1130,7 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
             />
           ) : (
               <ReactFlow
-                nodes={flowNodes}
+                nodes={nodes}
                 edges={edges}
                 nodeTypes={nodeTypes}
                 onNodesChange={handleNodesChange}
@@ -1109,7 +1144,9 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
                 onEdgeMouseEnter={onEdgeMouseEnter}
                 onEdgeMouseLeave={onEdgeMouseLeave}
                 onPaneClick={() => setSelectedId(null)}
-                nodesDraggable={!locked}
+                nodesDraggable={moving}
+                // Resize handles show only in move mode too (styles.css), since a resize is a move of one edge.
+                className={moving ? "is-moving" : undefined}
                 // Nothing here creates a dependency from a drag, so a handle that starts one only invites a
                 // gesture that goes nowhere, and on a touch screen catches pans meant for the canvas.
                 nodesConnectable={false}

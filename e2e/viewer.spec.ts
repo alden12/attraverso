@@ -198,7 +198,11 @@ test.describe("the served store", () => {
     await frame.click({ position: { x: 12, y: 12 } });
     const pane = page.locator('aside[aria-label="Area PLAT"]');
     await page.waitForTimeout(300);
+    // Selected, but no handles: resizing is move mode's (VIEW-54).
+    await expect(frame.locator(".react-flow__resize-control").first()).toBeHidden();
+    await page.getByRole("button", { name: "Move", exact: true }).click();
     await expect(frame.locator(".react-flow__resize-control").first()).toBeVisible();
+    await page.keyboard.press("Escape");
     await expect(pane.locator(".detail__title")).toHaveText("PLAT"); // no `areas` row in the fixture: the key stands in
     await expect(pane.locator(".area-pane__bar")).toHaveAttribute("aria-label", `${plat.length - open.length} of ${plat.length} done`);
     await expect(pane.locator(".next__item")).toHaveCount(open.length); // none of them is in the fixture's next list
@@ -252,7 +256,10 @@ test.describe("the served store", () => {
     while ((await far()) !== "true") await page.locator(".react-flow__controls-zoomout").click();
     expect(await opacity(overview)).toBeGreaterThan(0.5);
     await expect(overview).toContainText("DATA");
-    expect(await opacity(page.locator(".react-flow__node-item").first())).toBeLessThan(0.5);
+    // Faded but never gone, as a hint there is more to zoom into (VIEW-53).
+    const card = await opacity(page.locator(".react-flow__node-item").first());
+    expect(card).toBeLessThan(0.65);
+    expect(card).toBeGreaterThan(0);
 
     // The cards no longer take clicks, so one in the middle of the area lands on the area.
     await page.locator('.react-flow__node[data-id="area:DATA"]').click();
@@ -626,7 +633,7 @@ test.describe("the map follows the filters (VIEW-23.1)", () => {
   });
 });
 
-test.describe("moving cards (VIEW-41)", () => {
+test.describe("moving cards (VIEW-41, VIEW-54)", () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => window.localStorage.clear());
     await page.goto("/#demo");
@@ -644,17 +651,24 @@ test.describe("moving cards (VIEW-41)", () => {
     return { before, after: await node.evaluate((element) => (element as HTMLElement).style.transform) };
   };
 
-  test("leaves a card where it is until it is selected, so a pan cannot move it", async ({ page }) => {
+  test("leaves a card where it is outside move mode, even once it is selected", async ({ page }) => {
     const id = (await page.locator(".react-flow__node-item:visible").first().getAttribute("data-id"))!;
     const unselected = await drag(page, id);
     expect(unselected.after).toBe(unselected.before);
-  });
-
-  test("moves the selected card", async ({ page }) => {
-    const id = (await page.locator(".react-flow__node-item:visible").first().getAttribute("data-id"))!;
     await page.locator(`.react-flow__node[data-id="${id}"]`).click();
     const selected = await drag(page, id);
-    expect(selected.after).not.toBe(selected.before);
+    expect(selected.after).toBe(selected.before);
+  });
+
+  test("moves a card in move mode, and Escape leaves it", async ({ page }) => {
+    const id = (await page.locator(".react-flow__node-item:visible").first().getAttribute("data-id"))!;
+    await page.getByRole("button", { name: "Move", exact: true }).click();
+    const moved = await drag(page, id);
+    expect(moved.after).not.toBe(moved.before);
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("button", { name: "Move", exact: true })).toHaveAttribute("aria-pressed", "false");
+    const after = await drag(page, id);
+    expect(after.after).toBe(after.before);
   });
 
   test("hides and shows the minimap on request, and remembers it", async ({ page }) => {

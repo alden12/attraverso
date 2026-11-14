@@ -212,7 +212,15 @@ export function titleLines(title: string): number {
 
 /** A leaf card's height: tall enough for its whole title, up to `TITLE_MAX_LINES` and then an ellipsis. */
 const itemHeight = (item: RoadmapItem): number => Math.max(ITEM_HEIGHT, CARD_CHROME + titleLines(item.title) * TITLE_LINE);
-const GAP = 34; // horizontal/vertical space between packed cards
+/** Space between two boxes, per axis. */
+interface Gap {
+  x: number;
+  y: number;
+}
+// Between packed cards. Wider side to side than top to bottom (`VIEW-55`): a link leaves a card and enters the next
+// with a short straight run at each end, and at 34px those two runs met, so a link to a card beside its source
+// doubled back over itself. 64px clears both with room for the bend; vertically 34 was never the problem.
+const GAP: Gap = { x: 64, y: 34 };
 const PAD_X = 18; // box inner side padding
 const PAD_TOP = 46; // box title bar
 // An area frame's title bar, taller than a parent item's: its title is bigger (18px, so it reads as the place you
@@ -221,7 +229,7 @@ const AREA_PAD_TOP = 52;
 /** The title bar above a container's children: an area frame's (`area:KEY`) or a parent item's box. */
 const padTopOf = (containerId: string | undefined): number => (containerId?.startsWith("area:") ? AREA_PAD_TOP : PAD_TOP);
 const PAD_BOTTOM = 20;
-const AREA_GAP = 68; // between area boxes - a wide gutter so cross-area links have room to run
+const AREA_GAP: Gap = { x: 68, y: 68 }; // between area boxes - a wide gutter so cross-area links have room to run
 // A collapsed area's summary box (`VIEW-34`): one card wide, so it sits in the map at the scale of what it stands
 // for, and tall enough for the title bar and a row of status counts.
 const COLLAPSED_SIZE = { width: ITEM_WIDTH + 2 * PAD_X, height: 104 };
@@ -318,7 +326,7 @@ function flowLayout(
 function shelfPack(
   boxes: Boxed[],
   maxRowWidth: number,
-  gap: number,
+  gap: Gap,
 ): { placements: Map<string, Placement>; extent: Size } {
   const placements = new Map<string, Placement>();
   let x = 0;
@@ -327,13 +335,13 @@ function shelfPack(
   let width = 0;
   for (const box of boxes) {
     if (x > 0 && x + box.width > maxRowWidth) {
-      y += shelfHeight + gap;
+      y += shelfHeight + gap.y;
       x = 0;
       shelfHeight = 0;
     }
     placements.set(box.id, { x, y, width: box.width, height: box.height });
-    x += box.width + gap;
-    width = Math.max(width, x - gap);
+    x += box.width + gap.x;
+    width = Math.max(width, x - gap.x);
     shelfHeight = Math.max(shelfHeight, box.height);
   }
   return { placements, extent: { width, height: y + shelfHeight } };
@@ -349,7 +357,7 @@ function shelfPack(
 function packBoxes(
   boxes: Boxed[],
   maxWidth: number,
-  gap: number,
+  gap: Gap,
 ): { placements: Map<string, Placement>; extent: Size } {
   const width = Math.max(maxWidth, ...boxes.map((box) => box.width)); // never narrower than the widest box
   // The skyline is a left-to-right list of segments; `y` is the filled height across each segment's span.
@@ -373,7 +381,7 @@ function packBoxes(
     }
     const spot = best ?? { x: 0, y: 0 };
     placements.set(box.id, { x: spot.x, y: spot.y, width: box.width, height: box.height });
-    skyline = raiseSkyline(skyline, spot.x, box.width + gap, spot.y + box.height + gap);
+    skyline = raiseSkyline(skyline, spot.x, box.width + gap.x, spot.y + box.height + gap.y);
   }
 
   let extentWidth = 0;
@@ -418,8 +426,8 @@ function raiseSkyline(skyline: Segment[], x: number, width: number, y: number): 
  *  `spread` biases the budget wider: it is NOT the resulting aspect ratio but a slack factor for the vertical
  *  space shelf-packing wastes when box heights vary. ~2.8 empirically lands both the area boxes and the whole
  *  map near a 3:2 landscape; raise it for wider/shorter, lower it for taller/narrower. */
-function packWidth(boxes: Size[], gap: number, spread = 2.8): number {
-  const totalArea = boxes.reduce((sum, box) => sum + (box.width + gap) * (box.height + gap), 0);
+function packWidth(boxes: Size[], gap: Gap, spread = 2.8): number {
+  const totalArea = boxes.reduce((sum, box) => sum + (box.width + gap.x) * (box.height + gap.y), 0);
   const widest = Math.max(...boxes.map((box) => box.width));
   return Math.max(widest, Math.sqrt(totalArea * spread));
 }
@@ -456,7 +464,7 @@ function freshSiblings(siblings: RoadmapItem[], sizes: Map<string, Size>): Map<s
     const looseBoxes: Boxed[] = loose.map((sibling) => ({ id: sibling.id, ...sizes.get(sibling.id)! }));
     const rowWidth = Math.max(flow.extent.width, packWidth(looseBoxes, GAP));
     const packed = shelfPack(looseBoxes, rowWidth, GAP);
-    const offsetY = connected.length > 0 ? flow.extent.height + GAP : 0;
+    const offsetY = connected.length > 0 ? flow.extent.height + GAP.y : 0;
     for (const [id, placement] of packed.placements) {
       placements.set(id, { ...placement, y: placement.y + offsetY });
     }
@@ -506,8 +514,8 @@ const extentOf = (axis: Axis): "width" | "height" => (axis === "x" ? "width" : "
 const across = (axis: Axis): Axis => (axis === "x" ? "y" : "x");
 
 /** Closer than `gap` on this axis - which, on both axes at once, is an overlap. */
-const crowded = (a: Placed, b: Placed, axis: Axis, gap: number): boolean =>
-  a[axis] + a[extentOf(axis)] + gap > b[axis] && b[axis] + b[extentOf(axis)] + gap > a[axis];
+const crowded = (a: Placed, b: Placed, axis: Axis, gap: Gap): boolean =>
+  a[axis] + a[extentOf(axis)] + gap[axis] > b[axis] && b[axis] + b[extentOf(axis)] + gap[axis] > a[axis];
 
 /**
  * Lay a set of sibling boxes out with a memory (`VIEW-23.1`): remembered boxes start where they were, new ones
@@ -522,7 +530,7 @@ const crowded = (a: Placed, b: Placed, axis: Axis, gap: number): boolean =>
 function arrange(
   boxes: Arranged[],
   remembered: (id: string) => { x: number; y: number } | undefined,
-  gap: number,
+  gap: Gap,
   spread: number,
   fresh: () => Map<string, Placement>,
   newcomers: "after-previous" | "best-fit" = "after-previous",
@@ -554,16 +562,16 @@ function arrange(
 /** Where a box nobody has placed before goes: just right of its rightmost dependency, so a link points forward
  *  and stays short; otherwise just after the sibling listed before it (the end of the list, for a new ref); and
  *  when that row is already full, the start of a new row along the bottom. */
-function seed(box: Arranged, before: Arranged[], placed: Map<string, Placed>, gap: number, budget: number): { x: number; y: number } {
+function seed(box: Arranged, before: Arranged[], placed: Map<string, Placed>, gap: Gap, budget: number): { x: number; y: number } {
   const deps = box.deps.flatMap((dep) => placed.get(dep) ?? []);
   if (deps.length > 0) {
     const rightmost = deps.reduce((best, dep) => (dep.x + dep.width > best.x + best.width ? dep : best));
-    return { x: rightmost.x + rightmost.width + gap, y: rightmost.y };
+    return { x: rightmost.x + rightmost.width + gap.x, y: rightmost.y };
   }
   const previous = [...before].reverse().flatMap((sibling) => placed.get(sibling.id) ?? [])[0];
-  if (previous && previous.x + previous.width + gap + box.width <= budget) return { x: previous.x + previous.width + gap, y: previous.y };
-  const bottom = Math.max(-gap, ...[...placed.values()].map((other) => other.y + other.height));
-  return { x: 0, y: bottom + gap };
+  if (previous && previous.x + previous.width + gap.x + box.width <= budget) return { x: previous.x + previous.width + gap.x, y: previous.y };
+  const bottom = Math.max(-gap.y, ...[...placed.values()].map((other) => other.y + other.height));
+  return { x: 0, y: bottom + gap.y };
 }
 
 /**
@@ -573,13 +581,13 @@ function seed(box: Arranged, before: Arranged[], placed: Map<string, Placed>, ga
  * spots that fit, the one whose bounding box is smallest wins, with anything past `budget` wide penalised so
  * the map keeps its landscape shape; ties go to the highest, then leftmost.
  */
-function bestFit(box: Arranged, placed: Map<string, Placed>, gap: number, budget: number): { x: number; y: number } {
+function bestFit(box: Arranged, placed: Map<string, Placed>, gap: Gap, budget: number): { x: number; y: number } {
   const others = [...placed.values()];
   const right = Math.max(0, ...others.map((other) => other.x + other.width));
   const bottom = Math.max(0, ...others.map((other) => other.y + other.height));
   const candidates = [{ x: 0, y: 0 }, ...others.flatMap((other) => [
-    { x: other.x + other.width + gap, y: other.y },
-    { x: other.x, y: other.y + other.height + gap },
+    { x: other.x + other.width + gap.x, y: other.y },
+    { x: other.x, y: other.y + other.height + gap.y },
   ])];
   let best: { x: number; y: number; score: number } | null = null;
   for (const spot of candidates) {
@@ -592,7 +600,7 @@ function bestFit(box: Arranged, placed: Map<string, Placed>, gap: number, budget
       best = { ...spot, score };
     }
   }
-  return best ?? { x: 0, y: bottom + gap };
+  return best ?? { x: 0, y: bottom + gap.y };
 }
 
 /**
@@ -605,7 +613,7 @@ function bestFit(box: Arranged, placed: Map<string, Placed>, gap: number, budget
  * When the pair is level on that axis, the newcomer is the one that stays, so a new box claims the spot it was
  * seeded into and the existing ones make room - insertion, rather than the newcomer being shunted to the end.
  */
-function pushApart(boxes: Placed[], gap: number, fresher: Set<string>): void {
+function pushApart(boxes: Placed[], gap: Gap, fresher: Set<string>): void {
   for (let round = 0; round <= boxes.length * boxes.length; round++) {
     let pair: [Placed, Placed] | null = null;
     search: for (let a = 0; a < boxes.length; a++) {
@@ -621,15 +629,15 @@ function pushApart(boxes: Placed[], gap: number, fresher: Set<string>): void {
     const plan = (axis: Axis) => {
       const aFirst = a[axis] < b[axis] || (a[axis] === b[axis] && (fresher.has(a.id) || !fresher.has(b.id)));
       const [stays, moves] = aFirst ? [a, b] : [b, a];
-      return { axis, stays, moves, by: snapUp(stays[axis] + stays[extentOf(axis)] + gap - moves[axis]) };
+      return { axis, stays, moves, by: snapUp(stays[axis] + stays[extentOf(axis)] + gap[axis] - moves[axis]) };
     };
     // Push along the axis they overlap *less* on, as a share of their size: a pair overlapping slightly
     // side to side and almost entirely top to bottom is a pair sitting side by side, so it is pushed sideways.
     // The cheaper push is the wrong test: a box grown wider into its neighbour would drop below it instead
     // whenever it happened to sit a pixel lower, turning "beside" into "under".
     const share = (axis: Axis) =>
-      (Math.min(a[axis] + a[extentOf(axis)], b[axis] + b[extentOf(axis)]) + gap - Math.max(a[axis], b[axis])) /
-      (Math.min(a[extentOf(axis)], b[extentOf(axis)]) + gap);
+      (Math.min(a[axis] + a[extentOf(axis)], b[axis] + b[extentOf(axis)]) + gap[axis] - Math.max(a[axis], b[axis])) /
+      (Math.min(a[extentOf(axis)], b[extentOf(axis)]) + gap[axis]);
     const { axis, stays, moves, by } = share("x") <= share("y") ? plan("x") : plan("y");
     const line = moves[axis];
     for (const box of boxes) if (box !== stays && box[axis] >= line) box[axis] += by;
@@ -644,7 +652,7 @@ function pushApart(boxes: Placed[], gap: number, fresher: Set<string>): void {
  * nothing moves, which is what makes running the layout again on its own output a no-op: each pass only ever
  * lowers a coordinate, so it settles.
  */
-function compact(boxes: Placed[], gap: number): void {
+function compact(boxes: Placed[], gap: Gap): void {
   for (let pass = 0; pass < 32; pass++) {
     const before = boxes.map((box) => box.x + box.y * 1e6);
     compactAxis(boxes, "x", gap);
@@ -653,7 +661,7 @@ function compact(boxes: Placed[], gap: number): void {
   }
 }
 
-function compactAxis(boxes: Placed[], axis: Axis, gap: number): void {
+function compactAxis(boxes: Placed[], axis: Axis, gap: Gap): void {
   const other = across(axis);
   const order = [...boxes].sort((a, b) => a[axis] - b[axis]);
   const was = new Map(order.map((box) => [box, box[axis]]));
@@ -662,7 +670,7 @@ function compactAxis(boxes: Placed[], axis: Axis, gap: number): void {
     let at = 0;
     for (const earlier of done) {
       at = Math.max(at, earlier[axis] + (was.get(earlier)! < was.get(box)! ? GRID : 0));
-      if (crowded(box, earlier, other, gap)) at = Math.max(at, earlier[axis] + earlier[extentOf(axis)] + gap);
+      if (crowded(box, earlier, other, gap)) at = Math.max(at, earlier[axis] + earlier[extentOf(axis)] + gap[axis]);
     }
     box[axis] = snapUp(at);
     done.push(box);
