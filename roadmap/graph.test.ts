@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { RoadmapItem } from "../scripts/tickets";
-import { areaColours, buildGraph, titleLines } from "./graph";
+import { areaColours, buildGraph, filteredOut, memoryOf, titleLines, type LayoutMemory } from "./graph";
 
 const item = (id: string, deps: string[] = []): RoadmapItem => {
   const parent = id.includes(".") ? id.slice(0, id.lastIndexOf(".")) : null;
@@ -91,3 +91,55 @@ function findClash(): [string, string] {
     seen.set(colour, key);
   }
 }
+
+describe("what the filters hide (VIEW-65)", () => {
+  const done = (id: string): RoadmapItem => ({ ...item(id), status: "done" });
+  const hidingDone = (items: RoadmapItem[]) => filteredOut(items, new Set(), new Set(["done"]));
+
+  it("keeps an open parent whose children are all done", () => {
+    expect(hidingDone([item("VIEW-1"), done("VIEW-1.1"), done("VIEW-1.2")])).toEqual(new Set(["VIEW-1.1", "VIEW-1.2"]));
+  });
+
+  it("keeps a done parent while anything inside it is still showing", () => {
+    expect(hidingDone([done("VIEW-1"), item("VIEW-1.1"), done("VIEW-1.2")])).toEqual(new Set(["VIEW-1.2"]));
+  });
+
+  it("hides a done parent with everything inside it", () => {
+    expect(hidingDone([done("VIEW-1"), done("VIEW-1.1")])).toEqual(new Set(["VIEW-1", "VIEW-1.1"]));
+  });
+});
+
+describe("a filtered view closes up around far boxes", () => {
+  // A tall area on the left, a wide one under it with a small one to its right, and a fourth top right. With
+  // every pair kept in order, TOP must stay right of SIDE, which the wide row holds out past the tall area's
+  // edge; drawn as a filtered view, only boxes beside each other keep their order, so TOP closes up to TALL.
+  const items = [
+    ...["TALL-1", "TALL-2", "TALL-3", "TALL-4", "TALL-5", "TALL-6"].map((id) => item(id)),
+    ...["WIDE-1", "WIDE-2", "WIDE-3", "WIDE-4", "WIDE-5"].map((id) => item(id)),
+    item("SIDE-1"),
+    item("TOP-1"),
+  ];
+  const areas = ["TALL", "WIDE", "SIDE", "TOP"];
+  const memory: LayoutMemory = {
+    "area:TALL": { x: 0, y: 0 },
+    "area:WIDE": { x: 0, y: 2000 },
+    "area:SIDE": { x: 2000, y: 2000 },
+    "area:TOP": { x: 2100, y: 0 },
+    ...Object.fromEntries(["TALL-1", "TALL-2", "TALL-3", "TALL-4", "TALL-5", "TALL-6"].map((id, index) => [id, { x: 0, y: index * 200 }])),
+    ...Object.fromEntries(["WIDE-1", "WIDE-2", "WIDE-3", "WIDE-4", "WIDE-5"].map((id, index) => [id, { x: index * 300, y: 0 }])),
+  };
+  const xOf = (order: "every-pair" | "neighbours") => {
+    const at = memoryOf(buildGraph(items, areas, {}, "area", null, new Set(), memory, new Set(), order));
+    return { tall: at["area:TALL"]!.x, side: at["area:SIDE"]!.x, top: at["area:TOP"]!.x };
+  };
+
+  it("keeps every pair in order in the remembered layout, so TOP stays right of SIDE", () => {
+    const { side, top } = xOf("every-pair");
+    expect(top).toBeGreaterThan(side);
+  });
+
+  it("lets TOP pass SIDE in a filtered view, which it is nowhere near", () => {
+    const { side, top } = xOf("neighbours");
+    expect(top).toBeLessThan(side);
+  });
+});

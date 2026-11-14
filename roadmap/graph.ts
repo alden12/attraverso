@@ -262,16 +262,39 @@ interface Segment {
 const childrenOf = (items: RoadmapItem[], parentId: string | null): RoadmapItem[] =>
   items.filter((item) => item.parent === parentId);
 
+/**
+ * Which items the toolbar's filters hide. A leaf hides on its own area or status. A parent hides only when it is
+ * hidden itself *and* everything inside it is: the second half so filtering never orphans a visible child, the
+ * first because a parent is an item too (`VIEW-65`) - an open parent whose children are all done is still work
+ * to do, and used to vanish with them, drawn only once done items were shown.
+ */
+export function filteredOut(items: RoadmapItem[], hiddenAreas: ReadonlySet<string>, hiddenStatuses: ReadonlySet<Status>): Set<string> {
+  const childrenByParent = new Map<string, RoadmapItem[]>();
+  for (const item of items) {
+    if (item.parent) childrenByParent.set(item.parent, [...(childrenByParent.get(item.parent) ?? []), item]);
+  }
+  const memo = new Map<string, boolean>();
+  const isHidden = (item: RoadmapItem): boolean => {
+    const cached = memo.get(item.id);
+    if (cached !== undefined) return cached;
+    const children = childrenByParent.get(item.id) ?? [];
+    const hidden = (hiddenAreas.has(item.area) || hiddenStatuses.has(item.status)) && children.every(isHidden);
+    memo.set(item.id, hidden);
+    return hidden;
+  };
+  return new Set(items.filter(isHidden).map((item) => item.id));
+}
+
 /** True when one id is an ancestor of the other (dotted nesting, e.g. `AGENT-10` and `AGENT-10.1`). A declared
  *  dependency between a ticket and its own ancestor is already expressed by the nesting, so we don't draw it -
  *  it would render as a box linked to a card sitting inside itself. */
 const structuralEdge = (a: string, b: string): boolean => a === b || a.startsWith(`${b}.`) || b.startsWith(`${a}.`);
 
 /** The rendered size of one item: a leaf card, or (if it has children) the box that frames them. */
-function sizeOf(item: RoadmapItem, items: RoadmapItem[], memory: LayoutMemory): Size {
+function sizeOf(item: RoadmapItem, items: RoadmapItem[], memory: LayoutMemory, order: Order): Size {
   const kids = childrenOf(items, item.id);
   if (kids.length === 0) return { width: ITEM_WIDTH, height: itemHeight(item) };
-  const box = layoutSiblings(kids, items, memory).box;
+  const box = layoutSiblings(kids, items, memory, order).box;
   return { width: box.width, height: box.height };
 }
 
@@ -483,8 +506,9 @@ function layoutSiblings(
   siblings: RoadmapItem[],
   items: RoadmapItem[],
   memory: LayoutMemory,
+  order: Order,
 ): { placements: Map<string, Placement>; box: Size } {
-  const sizes = new Map(siblings.map((sibling) => [sibling.id, sizeOf(sibling, items, memory)]));
+  const sizes = new Map(siblings.map((sibling) => [sibling.id, sizeOf(sibling, items, memory, order)]));
   const siblingIds = new Set(siblings.map((sibling) => sibling.id));
   const placements = arrange(
     siblings.map((sibling) => ({ id: sibling.id, ...sizes.get(sibling.id)!, deps: sibling.deps.filter((dep) => siblingIds.has(dep)) })),
@@ -492,6 +516,8 @@ function layoutSiblings(
     GAP,
     2.8,
     () => freshSiblings(siblings, sizes),
+    "after-previous",
+    order,
   );
   return { placements, box: boxOf(placements) };
 }
@@ -510,6 +536,17 @@ interface Placed extends Placement {
 }
 
 type Axis = "x" | "y";
+
+/**
+ * Which pairs compaction keeps in order. **`every-pair`** is `VIEW-23.1`'s rule, for the layout that is remembered:
+ * no two boxes ever swap sides, however far apart, which is what keeps the map recognisable as the plan grows.
+ * **`neighbours`** only keeps boxes from passing ones they sit beside, for a view drawn from that memory and never
+ * saved (a filter, a collapsed area). Every pair there would hold a column out past a box that is no longer
+ * beside it: with done items hidden, a wide row at the bottom kept the whole column above it away from the
+ * area to its left, leaving a gap the width of what was hidden. Nothing drawn this way is remembered, so
+ * switching the filter off still restores the full map exactly.
+ */
+export type Order = "every-pair" | "neighbours";
 const extentOf = (axis: Axis): "width" | "height" => (axis === "x" ? "width" : "height");
 const across = (axis: Axis): Axis => (axis === "x" ? "y" : "x");
 
@@ -534,6 +571,7 @@ function arrange(
   spread: number,
   fresh: () => Map<string, Placement>,
   newcomers: "after-previous" | "best-fit" = "after-previous",
+  order: Order = "every-pair",
 ): Map<string, Placement> {
   const known = boxes.some((box) => remembered(box.id) !== undefined);
   const start = known ? null : fresh();
@@ -555,7 +593,7 @@ function arrange(
 
   const all = [...placed.values()];
   pushApart(all, gap, fresher);
-  compact(all, gap);
+  compact(all, gap, order);
   return new Map(all.map(({ id, ...placement }) => [id, placement]));
 }
 
@@ -646,30 +684,30 @@ function pushApart(boxes: Placed[], gap: Gap, fresher: Set<string>): void {
 
 /**
  * Slide everything toward the origin, one axis at a time, as far as two rules allow: a box keeps `gap` from any
- * box beside it on the other axis, and it never passes a box that was before it on this axis (and stays strictly
+ * box beside it on the other axis, and (`every-pair`, see `Order`) it never passes a box that was before it on this axis (and stays strictly
  * after one it was strictly after - by a grid step - so a pair cannot reverse over two runs by way of a tie). Every
  * position lands on the grid, rounding up so a gap is never short. Repeated until
  * nothing moves, which is what makes running the layout again on its own output a no-op: each pass only ever
  * lowers a coordinate, so it settles.
  */
-function compact(boxes: Placed[], gap: Gap): void {
+function compact(boxes: Placed[], gap: Gap, order: Order): void {
   for (let pass = 0; pass < 32; pass++) {
     const before = boxes.map((box) => box.x + box.y * 1e6);
-    compactAxis(boxes, "x", gap);
-    compactAxis(boxes, "y", gap);
+    compactAxis(boxes, "x", gap, order);
+    compactAxis(boxes, "y", gap, order);
     if (boxes.every((box, index) => box.x + box.y * 1e6 === before[index])) return;
   }
 }
 
-function compactAxis(boxes: Placed[], axis: Axis, gap: Gap): void {
+function compactAxis(boxes: Placed[], axis: Axis, gap: Gap, order: Order): void {
   const other = across(axis);
-  const order = [...boxes].sort((a, b) => a[axis] - b[axis]);
-  const was = new Map(order.map((box) => [box, box[axis]]));
+  const sorted = [...boxes].sort((a, b) => a[axis] - b[axis]);
+  const was = new Map(sorted.map((box) => [box, box[axis]]));
   const done: Placed[] = [];
-  for (const box of order) {
+  for (const box of sorted) {
     let at = 0;
     for (const earlier of done) {
-      at = Math.max(at, earlier[axis] + (was.get(earlier)! < was.get(box)! ? GRID : 0));
+      if (order === "every-pair") at = Math.max(at, earlier[axis] + (was.get(earlier)! < was.get(box)! ? GRID : 0));
       if (crowded(box, earlier, other, gap)) at = Math.max(at, earlier[axis] + earlier[extentOf(axis)] + gap[axis]);
     }
     box[axis] = snapUp(at);
@@ -760,6 +798,7 @@ export function buildGraph(
   hiddenIds: Set<string>,
   memory: LayoutMemory = {},
   collapsed: Set<string> = new Set(),
+  order: Order = "every-pair",
 ): RoadmapNode[] {
   const visibleIds = new Set(items.map((item) => item.id));
   const depEdges = items.flatMap((item) =>
@@ -828,7 +867,7 @@ export function buildGraph(
   // that has children of its own becomes a nested ticket-box and recurses. `parentId` (without `extent`)
   // keeps children moving with their box when it is dragged, but doesn't clamp the auto-layout into overlap.
   const buildContainer = (containerId: string, siblings: RoadmapItem[]): { nodes: RoadmapNode[]; box: Size } => {
-    const { placements, box } = layoutSiblings(siblings, items, memory);
+    const { placements, box } = layoutSiblings(siblings, items, memory, order);
     const nodes = siblings.flatMap((sibling): RoadmapNode[] => {
       const placement = placements.get(sibling.id)!;
       const position = { x: PAD_X + placement.x, y: padTopOf(containerId) + placement.y };
@@ -922,6 +961,7 @@ export function buildGraph(
       1.6,
       () => packBoxes(areaBoxes, packWidth(areaBoxes, AREA_GAP, 1.6), AREA_GAP).placements,
       "best-fit",
+      order,
     ),
   };
 

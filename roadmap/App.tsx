@@ -25,7 +25,7 @@ import remarkGfm from "remark-gfm";
 import { canWrite, saveLayout, SECTION_PREFIX, sectionInFocus, setInNext, type Plan, type Selection } from "./store";
 import { useExtensions } from "./extensions";
 import { areasOf, STATUSES, type Status, splitScope } from "../scripts/tickets";
-import { areaColours, buildGraph, buildEdges, memoryOf, remembered, type ColourMode, type LayoutMemory, type RoadmapNode } from "./graph";
+import { areaColours, buildGraph, buildEdges, filteredOut, memoryOf, remembered, type ColourMode, type LayoutMemory, type RoadmapNode } from "./graph";
 import { ItemNodeView } from "./ItemNode";
 import { AreaGroupNode, AreaOverviewNode } from "./AreaGroupNode";
 import { TicketGroupNode } from "./TicketGroupNode";
@@ -349,30 +349,7 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
     [items, hiddenAreas, hiddenStatuses],
   );
 
-  // Which node ids the filters hide. A leaf hides on its own area/status; a container (parent ticket or
-  // area box) hides only when everything inside it is hidden, so filtering never orphans a visible child.
-  const hiddenIds = useMemo(() => {
-    const childrenByParent = new Map<string, RoadmapItem[]>();
-    for (const item of items) {
-      if (!item.parent) continue;
-      const siblings = childrenByParent.get(item.parent);
-      if (siblings) siblings.push(item);
-      else childrenByParent.set(item.parent, [item]);
-    }
-    const directlyHidden = (item: RoadmapItem) => hiddenAreas.has(item.area) || hiddenStatuses.has(item.status);
-    const memo = new Map<string, boolean>();
-    const isHidden = (item: RoadmapItem): boolean => {
-      const cached = memo.get(item.id);
-      if (cached !== undefined) return cached;
-      const children = childrenByParent.get(item.id);
-      const hidden = children ? children.every(isHidden) : directlyHidden(item);
-      memo.set(item.id, hidden);
-      return hidden;
-    };
-    const hidden = new Set<string>();
-    for (const item of items) if (isHidden(item)) hidden.add(item.id);
-    return hidden;
-  }, [items, hiddenAreas, hiddenStatuses]);
+  const hiddenIds = useMemo(() => filteredOut(items, hiddenAreas, hiddenStatuses), [items, hiddenAreas, hiddenStatuses]);
 
   // For each visible ticket, the filtered-out tickets it links to. Hovering it previews those as translucent
   // ghosts (the ghost effect below), so you can inspect a connection the current filters would otherwise hide.
@@ -570,7 +547,7 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
     // it and opens back out exactly when it is opened.
     if (shown.length < items.length || collapsedAreas.size > 0) {
       const full = new Map(nodes.map((node) => [node.id, node]));
-      const compact = buildGraph(shown, areasOf(shown), colours, colourMode, selectedId, new Set(), next, collapsedAreas);
+      const compact = buildGraph(shown, areasOf(shown), colours, colourMode, selectedId, new Set(), next, collapsedAreas, "neighbours");
       const compactIds = new Set(compact.map((node) => node.id));
       // An overview's area is in its id (`overview:KEY`); a card's is its ref's prefix.
       const inCollapsed = (node: RoadmapNode) =>
