@@ -9,7 +9,7 @@ Needs Node 22 or newer. In your repo, with [Claude Code](https://claude.com/clau
 
 ```bash
 npm install --save-dev attraverso && claude mcp add --scope project attraverso -- npx attraverso
-# installs attraverso (pinning its version for everyone on the repo) and adds its server to the repo's .mcp.json
+# installs attraverso and adds its server to the repo's .mcp.json
 ```
 
 With yarn, `yarn add --dev attraverso` in place of the `npm install`. Start a new Claude Code session and ask it to
