@@ -1851,11 +1851,12 @@ body {
     padding-inline: 7px;
   }
 }
-/* On the board the pane docks to the right (VIEW-46) rather than floating: the board scrolls both ways, and a pane
+/* On the board and the calendar the pane docks to the right (VIEW-46) rather than floating: the board scrolls both ways, and a pane
    over it hid whatever scrolled underneath, with no way to see past it. Docked, the board narrows beside it. A phone
    keeps the floating pane, which has no room to share either way. */
 @media (min-width: 701px) {
-  .body[data-view="board"] .pane {
+  .body[data-view="board"] .pane,
+  .body[data-view="calendar"] .pane {
     position: relative;
     top: auto;
     right: auto;
@@ -1933,11 +1934,55 @@ body {
   background-color: var(--fc-button-active-bg-color);
   border-color: var(--fc-button-active-border-color);
 }
+/* The Next button beside "today", lit while its pane is open. */
+.cal[data-next-open="true"] .fc .fc-nextList-button {
+  background-color: var(--fc-button-active-bg-color);
+  border-color: var(--fc-button-active-border-color);
+}
+/* Narrow, the toolbar's groups wrap: a gap between the rows they wrap onto, and no indent on a group that starts one. */
 @media (max-width: 640px) {
   .cal .fc .fc-toolbar {
     flex-wrap: wrap;
-    gap: 6px;
+    gap: 8px;
   }
+  .cal .fc .fc-toolbar-chunk {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+  .cal .fc .fc-toolbar-chunk > * {
+    margin: 0 !important;
+  }
+}
+/* The status glyph in its colour on a dark disc, legible on whichever area colour the item is drawn in. */
+.cal__icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  align-self: center;
+  border-radius: 50%;
+  background: rgba(11, 15, 20, 0.78);
+  font-size: 10px;
+  line-height: 1;
+}
+/* The day view: each item a full card, its whole title wrapping under its ref. */
+.cal .fc-dayGridDay-view .cal__event {
+  flex-wrap: wrap;
+  row-gap: 2px;
+  padding: 6px 10px;
+  font-size: 13px;
+  white-space: normal;
+}
+.cal .fc-dayGridDay-view .cal__title {
+  flex-basis: 100%;
+  overflow: visible;
+}
+.cal .fc-dayGridDay-view .fc-daygrid-event-harness {
+  margin-bottom: 4px;
 }
 /* A menu row's sign where the others have an icon, the same width so the labels line up. */
 .item-menu__glyph {
@@ -1946,4 +1991,10 @@ body {
   font-size: 15px;
   font-weight: 700;
   line-height: 1;
+}
+/* A day's number links to the day view: underlined on hover, so it reads as a link only when it is pointed at. */
+.cal .fc a.fc-daygrid-day-number:hover,
+.cal .fc a.fc-col-header-cell-cushion:hover {
+  color: var(--text);
+  text-decoration: underline;
 }

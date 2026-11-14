@@ -1155,8 +1155,15 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
             view === "calendar" &&
             datedCount === 0 && (
               <div className="graph__notice">
-                Nothing here has a date yet. Give an item a <code>due</code> (or a <code>start</code>) with{" "}
-                <code>edit_item</code> and it appears on the calendar.
+                {calendarDates === "planned" ? (
+                  <>
+                    Nothing here has a date yet. Give an item a <code>due</code> (or a <code>start</code>) with{" "}
+                    <code>edit_item</code> and it appears on the calendar.
+                  </>
+                ) : (
+                  // Only a source whose items carry no timestamps.
+                  <>Nothing here records when it was {calendarDates === "created" ? "filed" : "last changed"}.</>
+                )}
               </div>
             )
           )}
@@ -1221,6 +1228,11 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
               focus={calendarFocus}
               dates={calendarDates}
               onDates={setCalendarDates}
+              nextList={
+                next.length === 0
+                  ? undefined
+                  : { count: next.length, open: listPane === "next", toggle: () => (listPane === "next" ? setListShown(null) : openList("next")) }
+              }
               selected={project && selectedId ? { project: project.key, ref: selectedId } : null}
               onSelect={selectFromCalendar}
             />

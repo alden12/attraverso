@@ -32,6 +32,9 @@ interface Props {
   /** Which dates place the items: planned (the default), or the day each was filed or last changed. */
   dates?: CalendarDates;
   onDates?: (dates: CalendarDates) => void;
+  /** The agreed order's button beside "today": its count, whether its pane is open, and what a click does. Absent
+   *  when there is no order to show. The calendar has no floating buttons, so this is its way to the list. */
+  nextList?: { count: number; open: boolean; toggle: () => void };
 }
 
 const DATE_CHOICES: { key: CalendarDates; text: string; hint: string }[] = [
@@ -40,7 +43,7 @@ const DATE_CHOICES: { key: CalendarDates; text: string; hint: string }[] = [
   { key: "updated", text: "modified", hint: "Place items on the day they last changed" },
 ];
 
-export function Calendar({ entries, multiProject, selected, onSelect, focus = null, dates = "planned", onDates }: Props) {
+export function Calendar({ entries, multiProject, selected, onSelect, focus = null, dates = "planned", onDates, nextList }: Props) {
   const calendar = useRef<FullCalendar>(null);
   useEffect(() => {
     if (focus !== null) calendar.current?.getApi().gotoDate(focus.date);
@@ -72,7 +75,10 @@ export function Calendar({ entries, multiProject, selected, onSelect, focus = nu
     const status = STATUSES[item.status];
     return (
       <div className="cal__event" data-strike={status.strike} data-on={isSelected(project, item.id)} title={`${item.id} [${status.label}] ${item.title}`}>
-        <span className="cal__icon">{status.icon}</span>
+        {/* The glyph in its status colour, on a dark disc so it reads on any area's colour behind it. */}
+        <span className="cal__icon" style={{ color: status.colour }}>
+          {status.icon}
+        </span>
         <span className="cal__ref">{multiProject ? `${project}:${item.id}` : item.id}</span>
         <span className="cal__title">{item.title}</span>
       </div>
@@ -88,21 +94,31 @@ export function Calendar({ entries, multiProject, selected, onSelect, focus = nu
   return (
     // `data-dates` lights the chosen button by CSS: the calendar redraws its own toolbar as you page through months,
     // so a class set on the button from here would not survive the next one.
-    <div className="cal" data-dates={dates}>
+    <div className="cal" data-dates={dates} data-next-open={nextList?.open === true}>
       <FullCalendar
         ref={calendar}
         initialDate={focus?.date}
         plugins={[dayGridPlugin]}
         initialView="dayGridMonth"
         headerToolbar={{
-          left: "prev,next today",
+          left: nextList === undefined ? "prev,next today" : "prev,next today nextList",
           center: "title",
-          right: onDates === undefined ? "dayGridMonth,dayGridWeek" : "planned,created,updated dayGridMonth,dayGridWeek",
+          right: onDates === undefined ? "dayGridMonth,dayGridWeek,dayGridDay" : "planned,created,updated dayGridMonth,dayGridWeek,dayGridDay",
         }}
-        customButtons={Object.fromEntries(
-          DATE_CHOICES.map(({ key, text, hint }) => [key, { text, hint, click: () => onDates?.(key) }]),
-        )}
-        buttonText={{ today: "today", month: "month", week: "week" }}
+        customButtons={{
+          ...Object.fromEntries(DATE_CHOICES.map(({ key, text, hint }) => [key, { text, hint, click: () => onDates?.(key) }])),
+          ...(nextList === undefined
+            ? {}
+            : { nextList: { text: `Next ${nextList.count}`, hint: "The order agreed with set_next", click: nextList.toggle } }),
+        }}
+        // A day on its own (the "day" button, or a day's "+3 more"): every item at full height with its whole title,
+        // for the days too full to read in a week.
+        views={{ dayGridDay: { dayMaxEvents: false } }}
+        moreLinkClick="dayGridDay"
+        // A day's number (and a week's column head) is a link to that day on its own.
+        navLinks
+        navLinkDayClick="dayGridDay"
+        buttonText={{ today: "today", month: "month", week: "week", day: "day" }}
         // A day is a day (`CAL-1`): in local time, an all-day span starting at UTC midnight can begin on the
         // previous evening's cell for anyone west of Greenwich.
         timeZone="UTC"

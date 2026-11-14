@@ -576,6 +576,21 @@ test.describe("the calendar", () => {
     await page.screenshot({ path: "test-results/calendar-all.png", fullPage: false });
   });
 
+  test("opens a day on its own from its number, with each item's whole title", async ({ page }) => {
+    const today = page.locator(".fc-day-today .fc-daygrid-day-number");
+    await today.click();
+    await expect(page.locator(".fc-dayGridDay-button")).toHaveClass(/fc-button-active/);
+    await expect(page.locator(".fc-dayGridDay-view .cal__event", { hasText: "The calendar view" })).toBeVisible();
+  });
+
+  test("places items by the day they were filed, on request", async ({ page }) => {
+    // Nothing in this fixture carries a created_at, so asking for it empties the calendar and says why.
+    await page.locator(".fc-created-button").click();
+    await expect(page.locator(".cal__event")).toHaveCount(0);
+    await page.locator(".fc-planned-button").click();
+    await expect(page.locator(".cal__event", { hasText: "apm:CAL-3" }).first()).toBeVisible();
+  });
+
   test("puts finished work on the day it closed", async ({ page }) => {
     await settings(page, "done");
     await expect(page.locator(".cal__event", { hasText: "apm:CAL-2" })).toBeVisible();
