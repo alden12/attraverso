@@ -1159,6 +1159,15 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
                   <>
                     Nothing here has a date yet. Give an item a <code>due</code> (or a <code>start</code>) with{" "}
                     <code>edit_item</code> and it appears on the calendar.
+                    {/* Every item has the other two, so they are a way to see the plan here meanwhile. */}
+                    <div className="graph__notice-actions">
+                      <button className="chip" onClick={() => setCalendarDates("created")}>
+                        show when items were filed
+                      </button>
+                      <button className="chip" onClick={() => setCalendarDates("updated")}>
+                        show when they last changed
+                      </button>
+                    </div>
                   </>
                 ) : (
                   // Only a source whose items carry no timestamps.
@@ -1468,16 +1477,6 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
           <aside className="detail" aria-label="Next">
             <div className="detail__head">
               <span className="detail__id">Next</span>
-              {/* The same order laid out by status and area (VIEW-46), one click from the list it sorts by. */}
-              <button
-                className="chip next__board"
-                data-on={view === "board"}
-                onClick={() => setView(view === "board" ? "graph" : "board")}
-                title={view === "board" ? "Back to the graph" : "See every item by status and area, in this order"}
-              >
-                <BoardIcon />
-                {view === "board" ? "graph" : "board"}
-              </button>
               <button className="detail__close" onClick={() => setListShown(null)} aria-label="Close">
                 ×
               </button>

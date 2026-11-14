@@ -396,7 +396,7 @@ test.describe("several projects in one store", () => {
     );
     await page.goto("/");
     await expect(page.locator(".react-flow__node").first()).toBeVisible();
-    await page.locator('aside.detail[aria-label="Next"]').locator(".next__board").click();
+    await page.getByRole("tab", { name: "board" }).click();
 
     const board = page.getByRole("grid", { name: "Board" });
     await expect(board.getByRole("columnheader")).toHaveText([/^$/, /planning/i, /to-do/i, /in-progress/i, /review/i]);
@@ -581,6 +581,23 @@ test.describe("the calendar", () => {
     await today.click();
     await expect(page.locator(".fc-dayGridDay-button")).toHaveClass(/fc-button-active/);
     await expect(page.locator(".fc-dayGridDay-view .cal__event", { hasText: "The calendar view" })).toBeVisible();
+  });
+
+  test("offers the days items were filed or changed when nothing has a planned date", async ({ page }) => {
+    const filed = new Date().toISOString();
+    await page.route("**/api/store", (route) =>
+      route.fulfill({
+        json: {
+          path: "/tmp/undated.apm.yaml",
+          store: { projects: [{ key: "apm", name: "AI PM", items: [{ ref: "MCP-1", area: "MCP", title: "undated", status: "to-do", created_at: filed, updated_at: filed }] }] },
+        },
+      }),
+    );
+    await page.reload(); // which clears the remembered view, so the calendar is asked for again
+    await page.getByRole("tab", { name: "calendar" }).click();
+    await page.getByRole("button", { name: "show when items were filed" }).click();
+    await expect(page.locator(".cal__event", { hasText: "MCP-1" })).toBeVisible();
+    await expect(page.locator(".fc-created-button")).toBeVisible();
   });
 
   test("places items by the day they were filed, on request", async ({ page }) => {

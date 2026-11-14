@@ -1800,17 +1800,6 @@ body {
   text-decoration: line-through;
   color: var(--muted);
 }
-/* The Next pane's way to the board, in its head beside the close button. */
-.next__board {
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
-.next__board svg {
-  width: 13px;
-  height: 13px;
-}
 /* On a phone the lane names narrow and each column is most of a screen, so one column reads at a time and the
    next is a sideways swipe. */
 @media (max-width: 640px) {
@@ -1997,4 +1986,12 @@ body {
 .cal .fc a.fc-col-header-cell-cushion:hover {
   color: var(--text);
   text-decoration: underline;
+}
+/* Buttons under an empty view's notice, for the way out of it. */
+.graph__notice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 12px;
 }
