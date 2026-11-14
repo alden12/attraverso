@@ -608,6 +608,16 @@ test.describe("the calendar", () => {
     await expect(page.locator(".cal__event", { hasText: "apm:CAL-3" }).first()).toBeVisible();
   });
 
+  test("keys each project by colour under the calendar, and hides one from its chip", async ({ page }) => {
+    const key = page.getByRole("group", { name: "Projects" });
+    await expect(key.getByRole("button")).toHaveText(["AI PM", "Spanish"]);
+    await key.getByRole("button", { name: "Spanish" }).click();
+    await expect(page.locator(".cal__event", { hasText: "GRAM-1" })).toHaveCount(0);
+    await expect(page.locator(".cal__event", { hasText: "apm:CAL-3" }).first()).toBeVisible();
+    // Coloured by area, as everywhere else, with the project as a stripe down the edge.
+    await expect(page.locator(".cal__event", { hasText: "apm:CAL-3" }).first()).toHaveAttribute("data-project", "true");
+  });
+
   test("puts finished work on the day it closed", async ({ page }) => {
     await settings(page, "done");
     await expect(page.locator(".cal__event", { hasText: "apm:CAL-2" })).toBeVisible();

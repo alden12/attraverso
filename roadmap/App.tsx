@@ -672,19 +672,29 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
    * one vocabulary everywhere. Colour is then by project, which is the question a combined view raises first.
    */
   const projectColours = useMemo(() => areaColours(plan.projects.map((p) => p.key)), [plan.projects]);
+  // Projects switched off in the calendar's key, when it shows them all: per page, like the other filters.
+  const [hiddenProjects, setHiddenProjects] = useState<Set<string>>(new Set());
+  /**
+   * Every item coloured as the graph and the board colour it (by area, or by status), so an item is the same colour
+   * in every view. Across projects, each project's areas are coloured as that project's own graph colours them, and
+   * the project is a stripe down the item's left edge (`projectColour`), matched by the key under the calendar.
+   */
   const calendarEntries = useMemo((): CalendarEntry[] => {
+    const tint = (item: RoadmapItem, areaColour: Record<string, string>) =>
+      colourMode === "status" ? STATUSES[item.status].colour : areaColour[item.area]!;
     if (allProjects) {
-      return plan.projects.flatMap((p) =>
-        p.items.filter((item) => !hiddenStatuses.has(item.status)).map((item) => ({ project: p.key, item, colour: projectColours[p.key]! })),
-      );
+      return plan.projects
+        .filter((p) => !hiddenProjects.has(p.key))
+        .flatMap((p) => {
+          const own = p.key === project?.key ? colours : areaColours(areasOf(p.items), p.areaOrder);
+          return p.items
+            .filter((item) => !hiddenStatuses.has(item.status))
+            .map((item) => ({ project: p.key, item, colour: tint(item, own), projectColour: projectColours[p.key]! }));
+        });
     }
     if (!project) return [];
-    return visibleItems.map((item) => ({
-      project: project.key,
-      item,
-      colour: colourMode === "status" ? STATUSES[item.status].colour : colours[item.area]!,
-    }));
-  }, [allProjects, plan.projects, hiddenStatuses, projectColours, project, visibleItems, colourMode, colours]);
+    return visibleItems.map((item) => ({ project: project.key, item, colour: tint(item, colours) }));
+  }, [allProjects, plan.projects, hiddenProjects, hiddenStatuses, projectColours, project, visibleItems, colourMode, colours]);
   const datedCount = useMemo(
     () => calendarEntries.filter((entry) => spanBy(entry.item, calendarDates) !== null).length,
     [calendarEntries, calendarDates],
@@ -1086,21 +1096,14 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
           <>
             <div className="settings__backdrop" onClick={() => setMenu(null)} />
             <div className="settings settings--more" role="menu" aria-label="More">
-              {!(view === "calendar" && allProjects) && <div className="settings__label">Colour cards by</div>}
-              {!(view === "calendar" && allProjects) && (
-                <div className="segmented" role="group" aria-label="Colour by">
-                  {COLOUR_MODES.map((mode) => (
-                    <button
-                      key={mode}
-                      className="segmented__btn"
-                      data-on={colourMode === mode}
-                      onClick={() => setColourMode(mode)}
-                    >
-                      {mode}
-                    </button>
-                  ))}
-                </div>
-              )}
+              <div className="settings__label">Colour cards by</div>
+              <div className="segmented" role="group" aria-label="Colour by">
+                {COLOUR_MODES.map((mode) => (
+                  <button key={mode} className="segmented__btn" data-on={colourMode === mode} onClick={() => setColourMode(mode)}>
+                    {mode}
+                  </button>
+                ))}
+              </div>
               {/* What the board's lanes are (VIEW-46): its areas, or when things were filed or last touched. */}
               {view === "board" && <div className="settings__label">Group board by</div>}
               {view === "board" && (
@@ -1235,6 +1238,17 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
               entries={calendarEntries}
               multiProject={allProjects}
               focus={calendarFocus}
+              projects={
+                allProjects
+                  ? plan.projects.map((p) => ({
+                      key: p.key,
+                      name: p.name,
+                      colour: projectColours[p.key]!,
+                      hidden: hiddenProjects.has(p.key),
+                      toggle: () => setHiddenProjects((set) => toggle(set, p.key)),
+                    }))
+                  : undefined
+              }
               dates={calendarDates}
               onDates={setCalendarDates}
               nextList={

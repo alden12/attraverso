@@ -19,6 +19,17 @@ export interface CalendarEntry {
   project: string;
   item: RoadmapItem;
   colour: string;
+  /** Across projects, the project's own colour, drawn as a stripe down the item's left edge. */
+  projectColour?: string;
+}
+
+/** One project in the key under a calendar showing several, which also shows and hides it. */
+export interface CalendarProject {
+  key: string;
+  name: string;
+  colour: string;
+  hidden: boolean;
+  toggle: () => void;
 }
 
 interface Props {
@@ -35,6 +46,8 @@ interface Props {
   /** The agreed order's button beside "today": its count, whether its pane is open, and what a click does. Absent
    *  when there is no order to show. The calendar has no floating buttons, so this is its way to the list. */
   nextList?: { count: number; open: boolean; toggle: () => void };
+  /** The key of projects, when the calendar shows more than one. */
+  projects?: CalendarProject[];
 }
 
 const DATE_CHOICES: { key: CalendarDates; text: string; hint: string }[] = [
@@ -43,12 +56,12 @@ const DATE_CHOICES: { key: CalendarDates; text: string; hint: string }[] = [
   { key: "updated", text: "modified", hint: "Place items on the day they last changed" },
 ];
 
-export function Calendar({ entries, multiProject, selected, onSelect, focus = null, dates = "planned", onDates, nextList }: Props) {
+export function Calendar({ entries, multiProject, selected, onSelect, focus = null, dates = "planned", onDates, nextList, projects }: Props) {
   const calendar = useRef<FullCalendar>(null);
   useEffect(() => {
     if (focus !== null) calendar.current?.getApi().gotoDate(focus.date);
   }, [focus]);
-  const events: EventInput[] = entries.flatMap(({ project, item, colour }) => {
+  const events: EventInput[] = entries.flatMap(({ project, item, colour, projectColour }) => {
     const span = spanBy(item, dates);
     if (span === null) return [];
     return [
@@ -61,7 +74,7 @@ export function Calendar({ entries, multiProject, selected, onSelect, focus = nu
         allDay: true,
         backgroundColor: colour,
         borderColor: colour,
-        extendedProps: { project, item },
+        extendedProps: { project, item, projectColour },
       },
     ];
   });
@@ -71,10 +84,13 @@ export function Calendar({ entries, multiProject, selected, onSelect, focus = nu
   // Drawn by hand rather than as FullCalendar's default text: the status glyph and the ref are how an item is
   // recognised everywhere else in the viewer, and a done item is struck through here as it is on the graph.
   const renderEvent = ({ event }: EventContentArg) => {
-    const { project, item } = event.extendedProps as { project: string; item: RoadmapItem };
+    const { project, item, projectColour } = event.extendedProps as { project: string; item: RoadmapItem; projectColour?: string };
     const status = STATUSES[item.status];
     return (
-      <div className="cal__event" data-strike={status.strike} data-on={isSelected(project, item.id)} title={`${item.id} [${status.label}] ${item.title}`}>
+      <div
+        className="cal__event"
+        data-project={projectColour !== undefined}
+        style={projectColour === undefined ? undefined : ({ "--project": projectColour } as React.CSSProperties)} data-strike={status.strike} data-on={isSelected(project, item.id)} title={`${item.id} [${status.label}] ${item.title}`}>
         {/* The glyph in its status colour, on a dark disc so it reads on any area's colour behind it. */}
         <span className="cal__icon" style={{ color: status.colour }}>
           {status.icon}
@@ -95,6 +111,7 @@ export function Calendar({ entries, multiProject, selected, onSelect, focus = nu
     // `data-dates` lights the chosen button by CSS: the calendar redraws its own toolbar as you page through months,
     // so a class set on the button from here would not survive the next one.
     <div className="cal" data-dates={dates} data-next-open={nextList?.open === true}>
+      <div className="cal__grid">
       <FullCalendar
         ref={calendar}
         initialDate={focus?.date}
@@ -129,6 +146,26 @@ export function Calendar({ entries, multiProject, selected, onSelect, focus = nu
         eventClick={onEventClick}
         dayMaxEvents
       />
+      </div>
+      {/* Which colour is which project, and a click shows or hides it: the stripe down each item's left edge. */}
+      {projects !== undefined && (
+        <div className="cal__key" role="group" aria-label="Projects">
+          {projects.map((p) => (
+            <button
+              key={p.key}
+              className="chip"
+              data-off={p.hidden}
+              aria-pressed={!p.hidden}
+              title={p.hidden ? `Show ${p.name}` : `Hide ${p.name}`}
+              style={{ "--area": p.colour } as React.CSSProperties}
+              onClick={p.toggle}
+            >
+              <span className="chip__dot" />
+              {p.name}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
