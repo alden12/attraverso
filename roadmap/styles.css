@@ -2002,14 +2002,51 @@ body {
   flex: 1;
   min-height: 0;
 }
+/* Two rows at most, then it scrolls: a plan with many projects keeps its key from eating the month. */
 .cal__key {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  padding-top: 10px;
+  margin-top: 10px;
+  max-height: 62px;
+  overflow-y: auto;
 }
 /* Across projects: the project's colour as a stripe down the item's left edge, its area's colour behind the rest. */
 .cal__event[data-project="true"] {
   box-shadow: inset 4px 0 0 var(--project);
   padding-left: 8px;
+}
+/* On a phone the view tabs leave the header for a bar along the bottom (VIEW-58), where a thumb reaches them and the
+   header gets its width back for the project's name. The same buttons, moved by CSS, so there is one set of tabs
+   and one place that decides which view is showing. The app stops short of the bar, so nothing sits under it, and
+   the bar clears the home indicator on a phone that has one. */
+@media (max-width: 640px) {
+  .app {
+    padding-bottom: calc(60px + env(safe-area-inset-bottom));
+  }
+  .view-tabs {
+    position: fixed;
+    z-index: 35;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    gap: 6px;
+    padding: 6px 10px calc(6px + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--line);
+    background: var(--panel);
+  }
+  .view-tabs .toolbtn,
+  .view-tabs .toolbtn:first-child,
+  .view-tabs .toolbtn:last-child {
+    flex: 1;
+    margin-left: 0;
+    padding: 5px 0 4px;
+    border-color: transparent;
+    border-radius: 10px;
+    background: none;
+  }
+  .view-tabs .toolbtn[data-on="true"] {
+    background: #263243;
+    border-color: #3a4a60;
+  }
 }

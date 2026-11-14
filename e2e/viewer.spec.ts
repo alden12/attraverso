@@ -737,6 +737,21 @@ test.describe("the map follows the filters (VIEW-23.1)", () => {
   });
 });
 
+test.describe("on a phone (VIEW-58)", () => {
+  test.use({ viewport: { width: 390, height: 800 } });
+
+  test("puts the view tabs in a bar along the bottom, and they still switch", async ({ page }) => {
+    await page.addInitScript(() => window.localStorage.clear());
+    await page.goto("/#demo");
+    const tabs = page.getByRole("tablist", { name: "View" });
+    const bar = (await tabs.boundingBox())!;
+    expect(bar.y + bar.height).toBeGreaterThan(780); // at the foot of the screen, not in the header
+    expect(bar.width).toBeGreaterThan(380);
+    await tabs.getByRole("tab", { name: "board" }).click();
+    await expect(page.getByRole("grid", { name: "Board" })).toBeVisible();
+  });
+});
+
 test.describe("moving cards (VIEW-41, VIEW-54)", () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => window.localStorage.clear());
