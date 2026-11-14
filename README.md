@@ -41,6 +41,13 @@ themselves, and `get_project` returns the project's protocol - its operating man
 Ask the agent to open the viewer (the `open_viewer` tool). It serves the plan as a dependency graph on a
 `127.0.0.1` address, so it only opens on the machine running the server.
 
+| | |
+| :-: | :-: |
+| <img src="docs/screenshots/desktop-graph.jpg" alt="The graph: each area a coloured box of its items, summarised when zoomed out" width="420"> | <img src="docs/screenshots/desktop-board.jpg" alt="The board: status columns, area lanes, the agreed order first" width="420"> |
+| **Graph**: items by dependency, grouped by area | **Board**: status columns, the agreed order first |
+| <img src="docs/screenshots/desktop-calendar.jpg" alt="The calendar: items on their planned days, or when they were filed or last changed" width="420"> | <img src="docs/screenshots/mobile-graph.jpg" alt="The graph on a phone, with the views in a bar along the bottom" width="200"> |
+| **Calendar**: planned dates, or when items were filed or changed | **Phone**: the same views, tabs along the bottom |
+
 Or open it yourself from a terminal, in the project:
 
 ```bash
