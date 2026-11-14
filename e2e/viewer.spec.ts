@@ -553,7 +553,7 @@ test.describe("the calendar", () => {
         : route.fulfill({ json: { ref: item.ref, body: item.body ?? "", comments: [], attachments: [] } });
     });
     await page.goto("/#apm");
-    await page.getByLabel("Show the calendar").click();
+    await page.getByRole("tab", { name: "calendar" }).click();
   });
 
   test("shows every project by default, and leaves undated items off", async ({ page }) => {

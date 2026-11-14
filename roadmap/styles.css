@@ -1784,3 +1784,29 @@ body {
     overflow-wrap: anywhere;
   }
 }
+/* The view tabs (VIEW-57): the three view buttons joined into one group, the showing one lit. */
+.view-tabs {
+  display: inline-flex;
+}
+.view-tabs .toolbtn {
+  border-radius: 0;
+  margin-left: -1px;
+}
+.view-tabs .toolbtn:first-child {
+  border-radius: 10px 0 0 10px;
+  margin-left: 0;
+}
+.view-tabs .toolbtn:last-child {
+  border-radius: 0 10px 10px 0;
+}
+.view-tabs .toolbtn[data-on="true"] {
+  position: relative; /* its lit border over its neighbours' */
+  cursor: default;
+}
+/* Narrow, the tabs give up their spare width to the project's name, until VIEW-58 moves them to the bottom. */
+@media (max-width: 640px) {
+  .view-tabs .toolbtn {
+    min-width: 0;
+    padding-inline: 7px;
+  }
+}

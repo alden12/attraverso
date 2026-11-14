@@ -256,7 +256,6 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
     else openContext(heading);
   }, [focus, openContext]);
   const [view, setView] = usePreference<View>("attraverso.view", "graph", VIEWS);
-  const otherViews = VIEWS.filter((candidate) => candidate !== view);
   // The minimap is a help on a big screen and a quarter of a small one, so it starts hidden on a narrow one, and
   // the choice is remembered - **separately for each**. One shared choice meant hiding it on a phone-sized
   // window hid it on the desktop too, since every tab of the viewer shares one browser's storage.
@@ -835,14 +834,24 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
         <div className="filters">
           {/* Toolbar buttons carry their detail underneath rather than inline (a caption below the icon), which
               is what lets the toolbar fit a phone's width in one row. */}
-          {/* A button for each view but the one showing, so each names where it goes. Tabs for all three are
-              VIEW-57's, which this stands in for until then. */}
-          {otherViews.map((other) => (
-            <button key={other} className="toolbtn" aria-label={`Show the ${other}`} title={`Show the ${other}`} onClick={() => setView(other)}>
-              <span className="toolbtn__main">{VIEW_ICONS[other]()}</span>
-              <span className="toolbtn__sub">{other}</span>
-            </button>
-          ))}
+          {/* The three views as tabs (VIEW-57), always all there, with the one showing highlighted: a switch that
+              only offers the others leaves you working out where you are from what is missing. */}
+          <div className="view-tabs" role="tablist" aria-label="View">
+            {VIEWS.map((candidate) => (
+              <button
+                key={candidate}
+                className="toolbtn"
+                role="tab"
+                aria-selected={candidate === view}
+                data-on={candidate === view}
+                title={`Show the ${candidate}`}
+                onClick={() => setView(candidate)}
+              >
+                <span className="toolbtn__main">{VIEW_ICONS[candidate]()}</span>
+                <span className="toolbtn__sub">{candidate}</span>
+              </button>
+            ))}
+          </div>
           {/* Everything set occasionally lives in one dialog (VIEW-37): on a phone the toolbar was most of the screen.
               The button says how much is filtered out, because a filter set last week and tucked behind a menu
               otherwise reads as items gone missing. */}
