@@ -30,6 +30,9 @@ interface Props {
   selectedId: string | null;
   /** An item to scroll to, opening its lane if need be; a new object each time it is asked. */
   reveal: { ref: string; nonce: number } | null;
+  /** Told once a reveal has been taken, so the owner can drop it: the board mounts afresh on every switch to it,
+   *  and a reveal still standing would scroll back to that item each time (with nothing selected, by then). */
+  onRevealed?: () => void;
   onSelect: (ref: string) => void;
   /** What sits in the grid's top-left corner, above the lane names and beside the column heads. */
   corner?: ReactNode;
@@ -98,7 +101,7 @@ export function orderCell(cell: RoadmapItem[], next: string[], plan: RoadmapItem
 /** The Next lane's key: lowercase, so it can never be an area's, which are uppercase. */
 const NEXT_LANE = "next";
 
-export function Board({ items, areas, hiddenStatuses, next, colours, areaName, selectedId, reveal, onSelect, corner, group = "area" }: Props) {
+export function Board({ items, areas, hiddenStatuses, next, colours, areaName, selectedId, reveal, onRevealed, onSelect, corner, group = "area" }: Props) {
   const columns = BOARD_COLUMNS.filter((status) => !hiddenStatuses.has(status));
   const position = new Map(next.map((ref, index) => [ref, index + 1]));
   const listed = next.flatMap((ref) => items.find((item) => item.id === ref) ?? []);
@@ -140,6 +143,7 @@ export function Board({ items, areas, hiddenStatuses, next, colours, areaName, s
     const lane = position.has(item.id) && open.has(NEXT_LANE) ? NEXT_LANE : laneOf(item);
     if (!open.has(lane)) setOpen((set) => new Set(set).add(lane));
     pending.current = { lane, ref: item.id };
+    onRevealed?.();
     // `position` and `open` are read as they are when the reveal arrives, deliberately: toggling a lane later is
     // not a reason to scroll again.
   }, [reveal, items]);

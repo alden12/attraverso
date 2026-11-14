@@ -1212,6 +1212,7 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
               areaName={areaName}
               selectedId={selectedId}
               reveal={reveal}
+              onRevealed={() => setReveal(null)}
               onSelect={(ref) => {
                 setSelectedId(ref);
                 setCameFrom(null);

@@ -433,6 +433,32 @@ test.describe("several projects in one store", () => {
     await expect(page.locator(".detail__id")).toHaveText("DATA-1");
   });
 
+  test("scrolls the board to an item once, not again each time the board is opened", async ({ page }) => {
+    // Thirty lanes, so the last one is well below the fold.
+    const areas = Array.from({ length: 30 }, (_, index) => `A${String(index + 1).padStart(2, "0")}`);
+    await page.route("**/api/store", (route) =>
+      route.fulfill({
+        json: {
+          path: "/tmp/one.apm.yaml",
+          store: { projects: [{ key: "apm", name: "AI PM", items: areas.map((area) => ({ ref: `${area}-1`, area, title: `in ${area}`, status: "to-do" })) }] },
+        },
+      }),
+    );
+    await page.goto("/#apm/A30-1");
+    await page.getByRole("button", { name: "Show this item in" }).click();
+    await page.getByRole("menuitem", { name: "Show on the board" }).click();
+    const board = page.getByRole("grid", { name: "Board" });
+    await expect(board.locator('.board__card[data-ref="A30-1"]')).toBeInViewport();
+
+    // Closed, and the board left and opened again: it starts at the top, rather than going back to that item.
+    await page.locator("aside.detail .detail__close").click();
+    await page.getByRole("tab", { name: "graph" }).click();
+    await page.getByRole("tab", { name: "board" }).click();
+    await expect(board.getByRole("rowheader").first()).toBeVisible();
+    await page.waitForTimeout(500);
+    expect(await board.evaluate((element) => element.scrollTop)).toBe(0);
+  });
+
   test("shows an item's measurements under its prose, summarised (METRIC-4)", async ({ page }) => {
     // A fixture for the same reason the order panel uses one: the committed store's measurements are live
     // data that will grow and change, so a test reading them asserts less every time it runs.
