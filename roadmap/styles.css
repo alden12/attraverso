@@ -1939,21 +1939,21 @@ body {
   background-color: var(--fc-button-active-bg-color);
   border-color: var(--fc-button-active-border-color);
 }
-/* Narrow, the toolbar's groups wrap: a gap between the rows they wrap onto, and no indent on a group that starts one. */
-@media (max-width: 640px) {
-  .cal .fc .fc-toolbar {
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-  .cal .fc .fc-toolbar-chunk {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px;
-  }
-  .cal .fc .fc-toolbar-chunk > * {
-    margin: 0 !important;
-  }
+/* Wherever the toolbar's groups wrap (a phone, or a window narrowed by the docked pane): a gap between the rows they
+   wrap onto, and no indent on a group that starts one. FullCalendar spaces groups with a left margin, which only
+   works while they share a row, so the spacing is a gap instead. */
+.cal .fc .fc-toolbar {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.cal .fc .fc-toolbar-chunk {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.cal .fc .fc-toolbar-chunk > * {
+  margin: 0 !important;
 }
 /* The status glyph in its colour on a dark disc, legible on whichever area colour the item is drawn in. */
 .cal__icon {
