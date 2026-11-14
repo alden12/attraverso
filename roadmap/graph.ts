@@ -540,11 +540,12 @@ type Axis = "x" | "y";
 /**
  * Which pairs compaction keeps in order. **`every-pair`** is `VIEW-23.1`'s rule, for the layout that is remembered:
  * no two boxes ever swap sides, however far apart, which is what keeps the map recognisable as the plan grows.
- * **`neighbours`** only keeps boxes from passing ones they sit beside, for a view drawn from that memory and never
- * saved (a filter, a collapsed area). Every pair there would hold a column out past a box that is no longer
- * beside it: with done items hidden, a wide row at the bottom kept the whole column above it away from the
- * area to its left, leaving a gap the width of what was hidden. Nothing drawn this way is remembered, so
- * switching the filter off still restores the full map exactly.
+ * **`neighbours`** keeps order only between boxes that shared a row or a column in the remembered layout, for a
+ * view drawn from that memory and never saved (a filter, a collapsed area). Every pair there would hold a column
+ * out past a box it was never beside: with done items hidden, a wide row at the bottom kept the whole column
+ * above it away from the area to its left, leaving a gap the width of what was hidden. Boxes that were beside
+ * each other still never swap, so the arrangement reads as the full map's, closed up. Nothing drawn this way is
+ * remembered, so switching the filter off still restores the full map exactly.
  */
 export type Order = "every-pair" | "neighbours";
 const extentOf = (axis: Axis): "width" | "height" => (axis === "x" ? "width" : "height");
@@ -691,15 +692,18 @@ function pushApart(boxes: Placed[], gap: Gap, fresher: Set<string>): void {
  * lowers a coordinate, so it settles.
  */
 function compact(boxes: Placed[], gap: Gap, order: Order): void {
+  // Where each box started, which is the remembered layout: `neighbours` reads its rows and columns from this,
+  // not from where the passes have moved things, so the pairs it keeps in order do not change as it goes.
+  const origin = new Map(boxes.map((box) => [box, { ...box }]));
   for (let pass = 0; pass < 32; pass++) {
     const before = boxes.map((box) => box.x + box.y * 1e6);
-    compactAxis(boxes, "x", gap, order);
-    compactAxis(boxes, "y", gap, order);
+    compactAxis(boxes, "x", gap, order, origin);
+    compactAxis(boxes, "y", gap, order, origin);
     if (boxes.every((box, index) => box.x + box.y * 1e6 === before[index])) return;
   }
 }
 
-function compactAxis(boxes: Placed[], axis: Axis, gap: Gap, order: Order): void {
+function compactAxis(boxes: Placed[], axis: Axis, gap: Gap, order: Order, origin: Map<Placed, Placed>): void {
   const other = across(axis);
   const sorted = [...boxes].sort((a, b) => a[axis] - b[axis]);
   const was = new Map(sorted.map((box) => [box, box[axis]]));
@@ -707,7 +711,8 @@ function compactAxis(boxes: Placed[], axis: Axis, gap: Gap, order: Order): void 
   for (const box of sorted) {
     let at = 0;
     for (const earlier of done) {
-      if (order === "every-pair") at = Math.max(at, earlier[axis] + (was.get(earlier)! < was.get(box)! ? GRID : 0));
+      const keepsOrder = order === "every-pair" || crowded(origin.get(box)!, origin.get(earlier)!, other, gap);
+      if (keepsOrder) at = Math.max(at, earlier[axis] + (was.get(earlier)! < was.get(box)! ? GRID : 0));
       if (crowded(box, earlier, other, gap)) at = Math.max(at, earlier[axis] + earlier[extentOf(axis)] + gap[axis]);
     }
     box[axis] = snapUp(at);
