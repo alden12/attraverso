@@ -1316,7 +1316,8 @@ body {
   font-size: 12px;
   margin-left: 8px;
 }
-.detail__close {
+.detail__close,
+.detail__icon {
   background: none;
   border: none;
   color: var(--muted);
@@ -1325,8 +1326,13 @@ body {
   cursor: pointer;
   padding: 0 4px;
 }
-.detail__close:hover {
+.detail__close:hover,
+.detail__icon:hover {
   color: var(--text);
+}
+.detail__icon {
+  display: inline-flex;
+  align-items: center;
 }
 /* The way back, the close button's mirror at the head's other end: an arrow and nothing else, its destination in
    the tooltip. */
@@ -1871,4 +1877,51 @@ body {
   .toolbtn[aria-label="Search"] .toolbtn__sub {
     display: none;
   }
+}
+/* The open item's menu (where else to see it), under its button at the pane head's right. */
+.detail__tools {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.detail__tools svg {
+  width: 15px;
+  height: 15px;
+}
+.item-menu {
+  position: absolute;
+  z-index: 41;
+  top: calc(100% + 6px);
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  min-width: 190px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+}
+.item-menu__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.item-menu__row:hover:not(:disabled) {
+  background: #1d2632;
+}
+.item-menu__row:disabled {
+  color: var(--muted);
+  cursor: default;
+  opacity: 0.6;
 }

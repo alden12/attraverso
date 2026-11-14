@@ -423,6 +423,14 @@ test.describe("several projects in one store", () => {
     await board.locator(".board__card", { hasText: "DATA-1" }).click();
     await expect(page.locator(".detail__id")).toHaveText("DATA-1");
     await expect(board).toBeVisible();
+
+    // Its menu shows it elsewhere: not on the calendar, having no date, and on the graph with it still open.
+    await page.getByRole("button", { name: "Show this item in" }).click();
+    await expect(page.getByRole("menuitem", { name: "Show on the calendar" })).toBeDisabled();
+    await page.getByRole("menuitem", { name: "Show in the graph" }).click();
+    await expect(page.getByRole("tab", { name: "graph" })).toHaveAttribute("aria-selected", "true");
+    await expect(page.locator('.react-flow__node[data-id="DATA-1"]')).toBeInViewport();
+    await expect(page.locator(".detail__id")).toHaveText("DATA-1");
   });
 
   test("shows an item's measurements under its prose, summarised (METRIC-4)", async ({ page }) => {

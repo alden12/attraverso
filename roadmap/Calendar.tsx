@@ -7,6 +7,7 @@
  * like is decided here. Version 6, deliberately - 7 had just shipped, on a Temporal polyfill, when this was
  * written, and a month grid is not a reason to be an early adopter.
  */
+import { useEffect, useRef } from "react";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import type { EventClickArg, EventContentArg, EventInput } from "@fullcalendar/core";
@@ -26,9 +27,15 @@ interface Props {
   multiProject: boolean;
   selected: { project: string; ref: string } | null;
   onSelect: (project: string, ref: string) => void;
+  /** A day to go to, when an item is shown here from its menu; a new object each time it is asked. */
+  focus?: { date: string; nonce: number } | null;
 }
 
-export function Calendar({ entries, multiProject, selected, onSelect }: Props) {
+export function Calendar({ entries, multiProject, selected, onSelect, focus = null }: Props) {
+  const calendar = useRef<FullCalendar>(null);
+  useEffect(() => {
+    if (focus !== null) calendar.current?.getApi().gotoDate(focus.date);
+  }, [focus]);
   const events: EventInput[] = entries.flatMap(({ project, item, colour }) => {
     const span = spanOf(item);
     if (span === null) return [];
@@ -72,6 +79,8 @@ export function Calendar({ entries, multiProject, selected, onSelect }: Props) {
   return (
     <div className="cal">
       <FullCalendar
+        ref={calendar}
+        initialDate={focus?.date}
         plugins={[dayGridPlugin]}
         initialView="dayGridMonth"
         headerToolbar={{ left: "prev,next today", center: "title", right: "dayGridMonth,dayGridWeek" }}

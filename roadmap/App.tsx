@@ -34,7 +34,7 @@ import { loadMemory, saveMemory, loadSizes, saveSizes, clearLayout, type BoxSize
 import { StatusPicker } from "./StatusPicker";
 import type { RoadmapItem } from "../scripts/tickets";
 import { Calendar, type CalendarEntry } from "./Calendar";
-import { countDated } from "./calendarDates";
+import { countDated, spanOf } from "./calendarDates";
 import { Logo } from "./Logo";
 import { Search } from "./Search";
 import { fetchItem, type ItemDetail, type SearchHit } from "./store";
@@ -401,15 +401,31 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
   // unhide or expand it, so the pan waits until its node has been drawn (the effect below).
   const flow = useRef<ReactFlowInstance<RoadmapNode, Edge> | null>(null);
   const [panTo, setPanTo] = useState<string | null>(null);
+  // The open item's own menu: where else to see it (graph, calendar, board).
+  const [itemMenu, setItemMenu] = useState(false);
+  // The day the calendar should open on, when an item is shown there from its menu.
+  const [calendarFocus, setCalendarFocus] = useState<{ date: string; nonce: number } | null>(null);
+  useEffect(() => setItemMenu(false), [selectedId]);
+  // Whether the graph on screen has started: the instance in `flow` outlives an unmount, so arriving from the
+  // calendar or the board, a pan aimed at it went to a graph no longer drawn and was then dropped as done.
+  const [flowReady, setFlowReady] = useState(false);
   useEffect(() => {
-    if (panTo === null || flow.current === null) return;
+    if (view !== "graph") setFlowReady(false);
+  }, [view]);
+  useEffect(() => {
+    if (panTo === null || flow.current === null || !flowReady) return;
     const node = nodes.find((candidate) => candidate.id === panTo);
     if (node === undefined || node.hidden === true) return;
     // An area's frame fills the canvas (VIEW-36); a card keeps some of its neighbourhood around it.
     const frame = panTo.startsWith("area:");
-    void flow.current.fitView({ nodes: [{ id: panTo }], duration: 400, maxZoom: frame ? 1.2 : 1.1, padding: frame ? 0.08 : 0.6 });
+    const instance = flow.current;
+    // A frame later, so a graph that has only just started has measured its nodes and done its own first fit.
+    // Not cancelled on cleanup: clearing `panTo` below re-runs this effect, which would cancel its own pan.
+    requestAnimationFrame(() =>
+      void instance.fitView({ nodes: [{ id: panTo }], duration: 400, maxZoom: frame ? 1.2 : 1.1, padding: frame ? 0.08 : 0.6 }),
+    );
     setPanTo(null);
-  }, [panTo, nodes]);
+  }, [panTo, nodes, flowReady]);
   // Zoom to an area's frame from the view menu: the whole frame, open or folded, rather than one card, so a big
   // plan is a menu of places to go. Asking to go to a hidden area shows it first, since that is plainly what was
   // meant, and the pan waits for its frame to be drawn. A narrow screen closes the menu on the way, since it covers
@@ -715,6 +731,20 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
   };
   /** Select an item and pan to it, bringing it back first if the filters hide it. A search hit and a row in the
    *  area pane both land here. */
+  /** Show an item in a given view, from its pane's menu: panned to on the graph, its month on the calendar, its
+   *  card on the board. Brought back first if the filters hide it, as a search hit is. */
+  const showIn = (item: RoadmapItem, target: View) => {
+    setItemMenu(false);
+    if (hiddenIds.has(item.id)) {
+      setHiddenStatuses((set) => (set.has(item.status) ? toggle(set, item.status) : set));
+      setHiddenAreas((set) => (set.has(item.area) ? toggle(set, item.area) : set));
+    }
+    setView(target);
+    if (target === "graph") setPanTo(item.id);
+    if (target === "board") setReveal({ ref: item.id, nonce: Date.now() });
+    const span = spanOf(item);
+    if (target === "calendar" && span !== null) setCalendarFocus({ date: span.start, nonce: Date.now() });
+  };
   const goToItem = (item: RoadmapItem) => {
     if (hiddenIds.has(item.id)) {
       setHiddenStatuses((set) => (set.has(item.status) ? toggle(set, item.status) : set));
@@ -1168,6 +1198,7 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
             <Calendar
               entries={calendarEntries}
               multiProject={allProjects}
+              focus={calendarFocus}
               selected={project && selectedId ? { project: project.key, ref: selectedId } : null}
               onSelect={selectFromCalendar}
             />
@@ -1178,7 +1209,10 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
                 nodeTypes={nodeTypes}
                 onNodesChange={handleNodesChange}
                 onEdgesChange={onEdgesChange}
-                onInit={(instance) => (flow.current = instance)}
+                onInit={(instance) => {
+                  flow.current = instance;
+                  setFlowReady(true);
+                }}
                 onNodeClick={onNodeClick}
                 onNodeDoubleClick={onNodeDoubleClick}
                 zoomOnDoubleClick={false}
@@ -1254,9 +1288,45 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
                 </span>
                 {project && <StatusPicker projectKey={project.key} ref_={selected.id} status={selected.status} reload={reload} />}
               </div>
-              <button className="detail__close" onClick={() => setSelectedId(null)} aria-label="Close">
-                ×
-              </button>
+              <div className="detail__tools">
+                <button
+                  className="detail__icon"
+                  aria-label="Show this item in"
+                  aria-haspopup="menu"
+                  aria-expanded={itemMenu}
+                  title="Show it in the graph, calendar or board"
+                  onClick={() => setItemMenu((open) => !open)}
+                >
+                  <MoreIcon />
+                </button>
+                <button className="detail__close" onClick={() => setSelectedId(null)} aria-label="Close">
+                  ×
+                </button>
+                {itemMenu && (
+                  <>
+                    <div className="settings__backdrop" onClick={() => setItemMenu(false)} />
+                    <div className="item-menu" role="menu" aria-label="Show this item in">
+                      {VIEWS.map((target) => {
+                        // Only a dated item (or a finished one, which dates itself) has a day to land on.
+                        const undated = target === "calendar" && spanOf(selected) === null;
+                        return (
+                          <button
+                            key={target}
+                            role="menuitem"
+                            className="item-menu__row"
+                            disabled={undated}
+                            title={undated ? "It has no date, so it is not on the calendar" : undefined}
+                            onClick={() => showIn(selected, target)}
+                          >
+                            {VIEW_ICONS[target]()}
+                            {target === "graph" ? "Show in the graph" : `Show on the ${target}`}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
             {/* The title in full (VIEW-44): the card on the graph clamps it, and on a narrow screen the pane covers
                 the card, so without it nothing here said which item you were reading. */}
