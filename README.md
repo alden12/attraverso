@@ -3,6 +3,16 @@
 Durable, structured project memory for AI coding agents, over [MCP](https://modelcontextprotocol.io): the plan,
 the reasoning behind it and what was decided, kept in your repo and shown as a graph, a board and a calendar.
 
+## Why
+
+An agent is good at working on a project and bad at remembering it three weeks later. The usual workaround is
+a `CLAUDE.md` file that grows unmaintainably, cannot be queried, and rots. Attraverso moves that state into a
+real store: the plan, the reasoning behind it, and the record of what was decided - retrieved as a
+budget-bounded slice rather than dumped into context wholesale.
+
+The plan lives as version-controlled YAML committed alongside your code, so it is reviewable in a pull request
+like any other file, and is rebuilt into an in-memory Postgres ([PGlite](https://pglite.dev)) on load.
+
 ## Quick start
 
 Needs Node 22 or newer. In your repo, with [Claude Code](https://claude.com/claude-code):
@@ -12,8 +22,14 @@ npm install --save-dev attraverso && claude mcp add --scope project attraverso -
 # installs attraverso and adds its server to the repo's .mcp.json
 ```
 
-With yarn, `yarn add --dev attraverso` in place of the `npm install`. Start a new Claude Code session and ask it to
-create a project and start planning. Then see the plan:
+With yarn, `yarn add --dev attraverso` in place of the `npm install`.
+
+Claude Code loads its servers when a session starts, so start a new one (or restart one already open) and approve
+the attraverso server when it asks. Then tell the agent something like:
+
+> Create an attraverso project for this repo, and add items for what we're working on.
+
+And see the plan:
 
 ```bash
 npx attraverso viewer --open
@@ -25,16 +41,6 @@ npx attraverso viewer --open
 | **Graph**: items by dependency, grouped by area | **Board**: status columns, the agreed order first |
 | <img src="docs/screenshots/desktop-calendar.jpg" alt="The calendar: items on their planned days, or when they were filed or last changed" width="420"> | <img src="docs/screenshots/mobile-graph.jpg" alt="The graph on a phone, with the views in a bar along the bottom" width="200"> |
 | **Calendar**: planned dates, or when items were filed or changed | **Phone**: the same views, tabs along the bottom |
-
-## Why
-
-An agent is good at working on a project and bad at remembering it three weeks later. The usual workaround is
-a `CLAUDE.md` file that grows unmaintainably, cannot be queried, and rots. Attraverso moves that state into a
-real store: the plan, the reasoning behind it, and the record of what was decided - retrieved as a
-budget-bounded slice rather than dumped into context wholesale.
-
-The plan lives as version-controlled YAML committed alongside your code, so it is reviewable in a pull request
-like any other file, and is rebuilt into an in-memory Postgres ([PGlite](https://pglite.dev)) on load.
 
 ## Using it
 
