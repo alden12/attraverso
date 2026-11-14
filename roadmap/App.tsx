@@ -293,7 +293,8 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
     [project, items],
   );
   // An empty next list has nothing to show, so asking for it shows nothing rather than an empty pane.
-  const listPane = listShown === "next" && next.length === 0 ? null : listShown;
+  // The board shows the agreed order as its first lane, so the pane would only repeat it there.
+  const listPane = listShown === "next" && (next.length === 0 || view === "board") ? null : listShown;
 
   // The pane's width, dragged by its left edge and remembered in this browser: how much of the graph to give up
   // is a matter of screen and taste, not of the plan, so it is not saved anywhere shared.
@@ -770,6 +771,19 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
   }, [items]);
   const hiddenCount = items.length - visibleItems.length;
 
+  // The project's context sections (VIEW-30): floating over the graph's top left, and in the board's corner, where
+  // the row it would float in is the board's own column heads.
+  const contextFab = project !== null && project.context.length > 0 && (
+    <button
+      className="next-fab"
+      data-on={contextView !== null}
+      onClick={() => (contextView === null ? openContext(null) : setContextView(null))}
+      title="The project's context sections: what it is, and how it is worked on"
+    >
+      Context<span className="chip__count">{project.context.length}</span>
+    </button>
+  );
+
   return (
     <div className="app">
       <header className="topbar">
@@ -852,6 +866,20 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
               </button>
             ))}
           </div>
+          {/* Search (VIEW-25) in the toolbar (VIEW-57), the same in every view, rather than floating over the canvas
+              where the board had no room for it. */}
+          <button
+            className="toolbtn"
+            data-on={listPane === "search"}
+            aria-label="Search"
+            title="Search (/ or Cmd+K)"
+            onClick={() => (listPane === "search" ? setListShown(null) : openList("search"))}
+          >
+            <span className="toolbtn__main">
+              <SearchIcon />
+            </span>
+            <span className="toolbtn__sub">search</span>
+          </button>
           {/* Everything set occasionally lives in one dialog (VIEW-37): on a phone the toolbar was most of the screen.
               The button says how much is filtered out, because a filter set last week and tucked behind a menu
               otherwise reads as items gone missing. */}
@@ -1062,7 +1090,7 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
         )}
       </header>
 
-      <div className="body" data-pane={paneOpen ? "open" : undefined}>
+      <div className="body" data-pane={paneOpen ? "open" : undefined} data-view={view}>
         <div className="graph">
           {/* Why the graph is empty, said out loud. Rendered over the (empty) canvas rather than instead of it,
               so the toolbar and its switcher stay put and the fix is one click away. */}
@@ -1091,7 +1119,8 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
           {/* The floating controls at the canvas's top left, in one row: the agreed order, and beside it the
               project's context sections (VIEW-30), which open in the right-hand pane rather than here, since a
               section is too long to read in a panel this size. */}
-          {view !== "calendar" && project !== null && (
+          {/* Not on the board, which has the agreed order as a lane of its own and these two in its corner. */}
+          {view === "graph" && project !== null && (
           <div className="fabs">
           {next.length > 0 && (
             <button
@@ -1103,16 +1132,7 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
               Next<span className="chip__count">{next.length}</span>
             </button>
           )}
-          {project !== null && project.context.length > 0 && (
-            <button
-              className="next-fab"
-              data-on={contextView !== null}
-              onClick={() => (contextView === null ? openContext(null) : setContextView(null))}
-              title="The project's context sections: what it is, and how it is worked on"
-            >
-              Context<span className="chip__count">{project.context.length}</span>
-            </button>
-          )}
+          {contextFab}
           {/* Move mode (VIEW-54): the only time cards and boxes drag or resize. */}
           {view === "graph" && (
           <button
@@ -1126,21 +1146,11 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
             {moving ? "Done" : "Move"}
           </button>
           )}
-          {/* Search (VIEW-25), with the other things you open over the canvas rather than in the toolbar, which a
-              phone has no room in. Icon-only: the magnifier is the most widely understood one there is. */}
-          <button
-            className="next-fab next-fab--icon"
-            data-on={listPane === "search"}
-            aria-label="Search"
-            title="Search (/ or Cmd+K)"
-            onClick={() => (listPane === "search" ? setListShown(null) : openList("search"))}
-          >
-            <SearchIcon />
-          </button>
           </div>
           )}
           {view === "board" && project !== null ? (
             <Board
+              corner={contextFab}
               items={visibleItems}
               areas={areas}
               hiddenStatuses={hiddenStatuses}

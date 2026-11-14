@@ -1595,7 +1595,7 @@ body {
 .board {
   --divider: #2b3442; /* grey rules between the status columns, a step up from --line so the columns read */
   position: absolute;
-  inset: 56px 0 0 0;
+  inset: 0;
   overflow: auto;
   display: grid;
   grid-template-columns: minmax(120px, 170px) repeat(var(--columns), minmax(220px, 1fr));
@@ -1615,9 +1615,18 @@ body {
   z-index: 2;
   background: var(--bg);
 }
+/* The corner holds the context and search buttons, so the board needs no row above its heads for them. */
 .board__corner {
   left: 0;
   z-index: 3;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 6px 8px 0;
+}
+.board__corner .next-fab {
+  box-shadow: none;
 }
 .board__column {
   display: flex;
@@ -1759,15 +1768,17 @@ body {
   color: var(--area);
   letter-spacing: 0.03em;
 }
-/* Its place in the agreed order: a small numbered badge, since that order is what sorts the column. */
+/* Its place in the agreed order, written as a position ("#2") in an outline rather than a filled pill, which is what
+   a folded lane's counts are: a filled "2" read as two of something inside the card. */
 .board__next {
   margin-left: auto;
-  min-width: 18px;
-  padding: 0 5px;
+  padding: 0 6px;
+  border: 1px solid #4a5a70;
   border-radius: 999px;
-  background: #263243;
-  color: var(--text);
-  text-align: center;
+  color: #b9c6d6;
+  font-size: 10px;
+  line-height: 15px;
+  letter-spacing: 0.02em;
   font-variant-numeric: tabular-nums;
 }
 .board__title {
@@ -1831,5 +1842,33 @@ body {
   .view-tabs .toolbtn {
     min-width: 0;
     padding-inline: 7px;
+  }
+}
+/* On the board the pane docks to the right (VIEW-46) rather than floating: the board scrolls both ways, and a pane
+   over it hid whatever scrolled underneath, with no way to see past it. Docked, the board narrows beside it. A phone
+   keeps the floating pane, which has no room to share either way. */
+@media (min-width: 701px) {
+  .body[data-view="board"] .pane {
+    position: relative;
+    top: auto;
+    right: auto;
+    flex: none;
+    align-self: stretch;
+    max-height: none;
+    max-width: 60%;
+    border-width: 0 0 0 1px;
+    border-radius: 0;
+    box-shadow: none;
+  }
+}
+/* Narrow, the search button keeps its icon and drops its caption, for the project's name. */
+@media (max-width: 640px) {
+  .toolbtn[aria-label="Search"] {
+    min-width: 0;
+    justify-content: center;
+    padding-inline: 8px;
+  }
+  .toolbtn[aria-label="Search"] .toolbtn__sub {
+    display: none;
   }
 }

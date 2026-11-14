@@ -10,7 +10,7 @@
  * It takes whatever the view settings left visible, as the calendar does: a hidden status is a missing column, a
  * hidden area a missing lane, and an area with nothing left showing has no lane at all.
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { STATUSES, type RoadmapItem, type Status } from "../scripts/tickets";
 
 /** Left to right in the order work moves through them: the reverse of `STATUSES`, which leads with what shipped. */
@@ -31,6 +31,8 @@ interface Props {
   /** An item to scroll to, opening its lane if need be; a new object each time it is asked. */
   reveal: { ref: string; nonce: number } | null;
   onSelect: (ref: string) => void;
+  /** What sits in the grid's top-left corner, above the lane names and beside the column heads. */
+  corner?: ReactNode;
 }
 
 /**
@@ -52,7 +54,7 @@ export function orderCell(cell: RoadmapItem[], next: string[], plan: RoadmapItem
 /** The Next lane's key: lowercase, so it can never be an area's, which are uppercase. */
 const NEXT_LANE = "next";
 
-export function Board({ items, areas, hiddenStatuses, next, colours, areaName, selectedId, reveal, onSelect }: Props) {
+export function Board({ items, areas, hiddenStatuses, next, colours, areaName, selectedId, reveal, onSelect, corner }: Props) {
   const columns = BOARD_COLUMNS.filter((status) => !hiddenStatuses.has(status));
   const position = new Map(next.map((ref, index) => [ref, index + 1]));
   const listed = next.flatMap((ref) => items.find((item) => item.id === ref) ?? []);
@@ -98,7 +100,9 @@ export function Board({ items, areas, hiddenStatuses, next, colours, areaName, s
 
   return (
     <div ref={board} className="board" role="grid" aria-label="Board" style={{ "--columns": columns.length } as React.CSSProperties}>
-      <div className="board__corner" role="columnheader" />
+      <div className="board__corner" role="columnheader">
+        {corner}
+      </div>
       {columns.map((status) => (
         <div key={status} className="board__column" role="columnheader" style={{ "--area": STATUSES[status].colour } as React.CSSProperties}>
           <span className="board__column-icon">{STATUSES[status].icon}</span>
@@ -168,8 +172,8 @@ export function Board({ items, areas, hiddenStatuses, next, colours, areaName, s
                             {STATUSES[item.status].icon}
                           </span>
                           {position.has(item.id) && (
-                            <span className="board__next" title="Its place in the next list">
-                              {position.get(item.id)}
+                            <span className="board__next" title={`Number ${position.get(item.id)} in the next list`}>
+                              #{position.get(item.id)}
                             </span>
                           )}
                         </span>

@@ -400,6 +400,9 @@ test.describe("several projects in one store", () => {
 
     const board = page.getByRole("grid", { name: "Board" });
     await expect(board.getByRole("columnheader")).toHaveText([/^$/, /planning/i, /to-do/i, /in-progress/i, /review/i]);
+    // The board has the agreed order as a lane, so neither the pane nor its button repeats it there.
+    await expect(page.locator('aside.detail[aria-label="Next"]')).toHaveCount(0);
+    await expect(page.locator(".next-fab", { hasText: "Next" })).toHaveCount(0);
     // The agreed order's own lane first, then the areas in the plan's order, as the graph has them.
     const heads = board.getByRole("rowheader");
     await expect(heads.locator(".board__lane-name")).toHaveText([/Next/, /MCP/, /DATA/]);
@@ -412,7 +415,7 @@ test.describe("several projects in one store", () => {
     // The agreed order first and numbered, then the rest as the plan lists them.
     const todo = todoCell.locator(".board__card");
     await expect(todo.locator(".board__ref")).toHaveText(["MCP-3", "MCP-2", "MCP-1"]);
-    await expect(todo.first().locator(".board__next")).toHaveText("1");
+    await expect(todo.first().locator(".board__next")).toHaveText("#1");
     await expect(todo.last().locator(".board__next")).toHaveCount(0);
 
     // A card opens in the pane like any other, and the board stays.
@@ -816,7 +819,7 @@ test.describe("searching the plan (VIEW-25)", () => {
   });
 
   test("goes straight to an item when a ref is typed", async ({ page }) => {
-    await page.locator('.next-fab[aria-label="Search"]').click();
+    await page.locator('.toolbtn[aria-label="Search"]').click();
     await box(page).fill("view-1.2");
     await expect(hits(page).first()).toContainText("VIEW-1.2");
   });
