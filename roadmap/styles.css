@@ -337,8 +337,8 @@ body {
 }
 .picker__logo {
   flex: none;
-  width: 30px;
-  height: 30px;
+  width: 38px;
+  height: 38px;
   color: var(--text);
   /* A round badge: the disc gives the clip an edge to see, since the drawing itself only touches the circle
      where the bridge runs off it. */
@@ -2109,5 +2109,12 @@ body {
     font-weight: 700;
     line-height: 16px;
     text-align: center;
+  }
+}
+/* A phone's header is short of width, so the badge keeps its smaller size there. */
+@media (max-width: 640px) {
+  .picker__logo {
+    width: 30px;
+    height: 30px;
   }
 }
