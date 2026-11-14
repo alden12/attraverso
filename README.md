@@ -8,17 +8,12 @@ the reasoning behind it and what was decided, kept in your repo and shown as a g
 Needs Node 22 or newer. In your repo, with [Claude Code](https://claude.com/claude-code):
 
 ```bash
-claude mcp add --scope project attraverso -- npx -y attraverso
+npm install --save-dev attraverso && claude mcp add --scope project attraverso -- npx attraverso
+# installs attraverso (pinning its version for everyone on the repo) and adds its server to the repo's .mcp.json
 ```
 
-That writes the server into the repo's `.mcp.json`, so everyone who opens the repo gets it, and `npx` fetches the
-package on first run. To pin the version for everyone on the repo, install it as well (`npx` then runs that copy):
-
-```bash
-npm install --save-dev attraverso   # or: yarn add --dev attraverso
-```
-
-Start a new Claude Code session and ask it to create a project and start planning. Then see the plan:
+With yarn, `yarn add --dev attraverso` in place of the `npm install`. Start a new Claude Code session and ask it to
+create a project and start planning. Then see the plan:
 
 ```bash
 npx attraverso viewer --open
@@ -45,18 +40,22 @@ like any other file, and is rebuilt into an in-memory Postgres ([PGlite](https:/
 
 ### In Claude Code
 
-The quick start's command writes this to the `.mcp.json` at the root of your repo, which you can also add by hand:
+The quick start's `claude mcp add` writes this to the `.mcp.json` at the root of your repo, which you can also
+add by hand:
 
 ```json
 {
   "mcpServers": {
     "attraverso": {
       "command": "npx",
-      "args": ["-y", "attraverso"]
+      "args": ["attraverso"]
     }
   }
 }
 ```
+
+To try it without installing, make the args `["-y", "attraverso"]`: `npx` then fetches the latest release on first
+run instead of using the repo's pinned copy.
 
 The plan, `attraverso.yaml`, is created at the root of the repo on first run. Commit it: it is the source of
 truth, and its diffs are the history of the plan. Readings, attachments and the graph's layout go in an
