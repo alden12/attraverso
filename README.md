@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="roadmap/favicon.svg" alt="The attraverso logo: a robot crossing a hanging rope bridge" width="120">
+</p>
+
 # attraverso
 
 Durable, structured project memory for AI coding agents, over [MCP](https://modelcontextprotocol.io): the plan,
@@ -12,6 +16,13 @@ budget-bounded slice rather than dumped into context wholesale.
 
 The plan lives as version-controlled YAML committed alongside your code, so it is reviewable in a pull request
 like any other file, and is rebuilt into an in-memory Postgres ([PGlite](https://pglite.dev)) on load.
+
+And you can see it. The viewer draws the plan as a map, every item grouped by area and linked by what it depends
+on, so it is both the way to explore your project and a window into what the agent remembers about it.
+
+<p align="center">
+  <img src="docs/screenshots/desktop-graph.jpg" alt="The graph: each area a coloured box of its items, summarised when zoomed out" width="760">
+</p>
 
 ## Quick start
 
@@ -35,12 +46,10 @@ And see the plan:
 npx attraverso viewer --open
 ```
 
-| | |
-| :-: | :-: |
-| <img src="docs/screenshots/desktop-graph.jpg" alt="The graph: each area a coloured box of its items, summarised when zoomed out" width="420"> | <img src="docs/screenshots/desktop-board.jpg" alt="The board: status columns, area lanes, the agreed order first" width="420"> |
-| **Graph**: items by dependency, grouped by area | **Board**: status columns, the agreed order first |
-| <img src="docs/screenshots/desktop-calendar.jpg" alt="The calendar: items on their planned days, or when they were filed or last changed" width="420"> | <img src="docs/screenshots/mobile-graph.jpg" alt="The graph on a phone, with the views in a bar along the bottom" width="200"> |
-| **Calendar**: planned dates, or when items were filed or changed | **Phone**: the same views, tabs along the bottom |
+| | | |
+| :-: | :-: | :-: |
+| <img src="docs/screenshots/desktop-board.jpg" alt="The board: status columns, area lanes, the agreed order first" width="340"> | <img src="docs/screenshots/desktop-calendar.jpg" alt="The calendar: items on their planned days, or when they were filed or last changed" width="340"> | <img src="docs/screenshots/mobile-graph.jpg" alt="The graph on a phone, with the views in a bar along the bottom" width="150"> |
+| **Board**: status columns, the agreed order first | **Calendar**: planned dates, or when items were filed or changed | **Phone**: the same views, tabs along the bottom |
 
 ## Using it
 

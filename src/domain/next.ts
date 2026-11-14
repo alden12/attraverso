@@ -8,8 +8,10 @@
  * `priority` is a global integer that cannot be maintained across 157 items, and `status` says "committed or
  * not" without saying in what order.
  *
- * **Short by construction is the feature.** Five to ten refs forces "does this beat what is already at
- * position three?", and that forced comparison is what produces an ordering at all.
+ * **The ranking is the feature, not the length.** It was "five to ten refs" until `PROJ-13` (2026-11-14): the
+ * shortness was meant to force "does this beat what is already third?". The board (`VIEW-46`) made a longer
+ * list readable, so the length advice went; what still forces the comparison is that the list is one ordered
+ * list per project, replaced whole, most important first.
  *
  * Two rules here are worth stating because neither is obvious:
  *

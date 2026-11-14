@@ -700,10 +700,9 @@ export function registerTools(server: McpServer, db: Database, store: StoreAcces
     {
       annotations: WRITE,
       description:
-        "Record the order to work in: a short list of item refs, most important first. Replaces the whole " +
-        "list (pass [] to clear it), because a list you can only append to is one nobody re-examines. " +
-        "Keep it to five or ten - the shortness is what forces \"does this beat what is already third?\", " +
-        "which is what produces an ordering at all. This is a stated intention, not a constraint: it does " +
+        "Record the order to work in: item refs, most important first. Replaces the whole list (pass [] to " +
+        "clear it), because a list you can only append to is one nobody re-examines. Rank it rather than " +
+        "collect into it: each ref's place should say what it beats. This is a stated intention, not a constraint: it does " +
         "not gate anything, and an item whose dependencies are unmet is flagged rather than refused. " +
         "get_project reads it back, so this is how an agreed order survives the conversation that produced it.",
       inputSchema: {
