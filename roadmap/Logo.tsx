@@ -2,17 +2,40 @@
 // filled with currentColor so the mark takes the toolbar's text colour rather than the drawing's black, which
 // would vanish on the dark topbar. The viewBox is cropped to the drawn shape (the file's own has margins).
 
-// Two crops of one drawing. "full" is the whole mark. "icon" is a square around the robot with the bridge running
-// off both edges, as the favicon is: the mark is ~1.75x wider than tall, so fitting all of it into a small square
-// leaves the robot a few pixels high. The icon's square is a little wider than the drawing is tall, with the spare room
-// mostly below, so the sag of the bridge's deck clears the bottom of the disc: the gap is what reads as hanging.
-const VIEW_BOXES = { full: "55.9 59.4 271 154.5", icon: "93.4 46.7 196 196" };
+// Two marks. "full" is the original drawing, the whole of it. "icon" is the round badge and the favicon: the
+// robot standing on a hanging rope bridge, drawn for small sizes, since the original's bridge (a solid band with
+// square windows) read as a film strip or a cable car at 30px. What says "rope bridge" is a sagging handrail,
+// hangers down to a deck of separate planks, and air beneath it; the robot stands on short legs so its head clears
+// the near rail, which passes in front of it with an outline in the disc's colour. The far rail shows faintly
+// behind. Drawn in a 100-unit square, zoomed 1.3x about the robot, and clipped round by the badge's CSS.
+const FULL_VIEW_BOX = "55.9 59.4 271 154.5";
 
-export function Logo({ className, crop = "full" }: { className?: string; crop?: keyof typeof VIEW_BOXES }) {
+export function Logo({ className, crop = "full" }: { className?: string; crop?: "full" | "icon" }) {
+  if (crop === "icon") {
+    return (
+      <svg className={className} viewBox="0 0 100 100" aria-hidden="true" focusable="false">
+        <g transform="translate(50 48) scale(1.3) translate(-50 -48)">
+          <path d="M -5 36 Q 50 64 105 36" fill="none" stroke="currentColor" strokeOpacity="0.45" strokeWidth="2.6"/>
+          <path d="M -5 56 Q 50 82 105 56" fill="none" stroke="currentColor" strokeWidth="6" strokeDasharray="5 2"/>
+          <path d="M -5 59.5 Q 50 85.5 105 59.5" fill="none" stroke="currentColor" strokeWidth="1.82"/>
+          <line x1="45.24" y1="50.5" x2="45.24" y2="67.5" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round"/>
+          <line x1="54.76" y1="50.5" x2="54.76" y2="67.5" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round"/>
+          <g transform="translate(33 18.5) scale(0.45) translate(-153.9 -58.7)"><g transform="matrix(0.1, 0, 0, -0.1, 62.431001, 269.861486)" fill="currentColor"><path d="M 1191.17 2095.39 C 1155.17 2079.39 1133.17 2038.39 1142.17 2001.39 C 1150.17 1970.39 1184.17 1929.39 1202.17 1929.39 C 1211.17 1929.39 1236.17 1881.39 1236.17 1863.39 C 1236.17 1861.39 1206.17 1859.39 1169.17 1859.39 C 1053.17 1858.39 976.178 1816.39 936.178 1733.39 C 917.178 1692.39 915.178 1672.39 918.178 1588.39 C 921.178 1498.39 923.178 1488.39 952.178 1447.39 C 975.178 1416.39 999.178 1398.39 1037.17 1382.39 C 1086.17 1362.39 1108.17 1360.39 1273.17 1359.39 C 1486.17 1359.39 1543.17 1369.39 1593.17 1412.39 C 1647.17 1459.39 1666.17 1509.39 1666.17 1606.39 C 1666.17 1719.39 1638.17 1778.39 1562.17 1827.39 C 1526.17 1850.39 1509.17 1854.39 1415.17 1857.39 L 1309.17 1861.39 L 1297.17 1900.39 C 1287.17 1933.39 1288.17 1943.39 1301.17 1961.39 C 1323.17 1994.39 1320.17 2044.39 1294.17 2073.39 C 1265.17 2105.39 1230.17 2112.39 1191.17 2095.39 Z M 1359.17 1799.39 C 1419.17 1798.39 1469.17 1779.39 1452.17 1762.39 C 1448.17 1757.39 1386.17 1753.39 1315.17 1752.39 C 1243.17 1750.39 1176.17 1744.39 1165.17 1739.39 C 1123.17 1716.39 1111.17 1681.39 1110.17 1572.39 C 1110.17 1516.39 1106.17 1466.39 1102.17 1462.39 C 1098.17 1457.39 1086.17 1465.39 1075.17 1478.39 C 1060.17 1496.39 1056.17 1517.39 1056.17 1580.39 C 1056.17 1655.39 1055.17 1660.39 1031.17 1671.39 C 1017.18 1677.39 1006.18 1690.39 1006.18 1699.39 C 1006.18 1726.39 1062.17 1771.39 1108.17 1781.39 C 1167.17 1794.39 1268.17 1807.39 1284.17 1802.39 C 1292.17 1801.39 1325.17 1799.39 1359.17 1799.39 Z M 1314.17 1657.39 C 1321.17 1650.39 1326.17 1624.39 1326.17 1599.39 C 1326.17 1549.39 1313.17 1529.39 1282.17 1529.39 C 1249.17 1529.39 1236.17 1543.39 1230.17 1580.39 C 1221.17 1632.39 1240.17 1669.39 1274.17 1669.39 C 1289.17 1669.39 1307.17 1664.39 1314.17 1657.39 Z M 1545.17 1655.39 C 1552.17 1647.39 1556.17 1620.39 1554.17 1593.39 C 1551.17 1539.39 1528.17 1516.39 1499.17 1535.39 C 1476.17 1549.39 1468.17 1648.39 1488.17 1660.39 C 1508.17 1673.39 1532.17 1671.39 1545.17 1655.39 Z"/></g></g>
+          <line x1="4" y1="48.21" x2="4" y2="59.91" stroke="currentColor" strokeWidth="1.56"/>
+          <line x1="16" y1="52.65" x2="16" y2="64.03" stroke="currentColor" strokeWidth="1.56"/>
+          <line x1="28" y1="55.76" x2="28" y2="66.92" stroke="currentColor" strokeWidth="1.56"/>
+          <line x1="76" y1="54.87" x2="76" y2="66.09" stroke="currentColor" strokeWidth="1.56"/>
+          <line x1="88" y1="51.32" x2="88" y2="62.79" stroke="currentColor" strokeWidth="1.56"/>
+          <path d="M -5 44 Q 50 72 105 44" fill="none" stroke="var(--logo-disc, #33435a)" strokeWidth="5"/>
+          <path d="M -5 44 Q 50 72 105 44" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round"/>
+        </g>
+      </svg>
+    );
+  }
   return (
     <svg
       className={className}
-      viewBox={VIEW_BOXES[crop]}
+      viewBox={FULL_VIEW_BOX}
       aria-hidden="true"
       focusable="false"
     >
