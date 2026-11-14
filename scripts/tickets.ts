@@ -39,6 +39,10 @@ export interface RoadmapItem {
   /** When it was marked done, as an ISO timestamp, absent while it is open. An instant, unlike the two above:
    *  it records when something happened rather than which day was planned. */
   closed?: string;
+  /** When it was filed and last changed, as ISO timestamps, for the board's and calendar's date views. Absent
+   *  where a source does not carry them. */
+  created?: string;
+  updated?: string;
 }
 
 /**

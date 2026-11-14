@@ -1926,3 +1926,16 @@ body {
   cursor: default;
   opacity: 0.6;
 }
+/* The calendar's date choice: the one in use lit as FullCalendar lights the month/week choice. */
+.cal[data-dates="planned"] .fc .fc-planned-button,
+.cal[data-dates="created"] .fc .fc-created-button,
+.cal[data-dates="updated"] .fc .fc-updated-button {
+  background-color: var(--fc-button-active-bg-color);
+  border-color: var(--fc-button-active-border-color);
+}
+@media (max-width: 640px) {
+  .cal .fc .fc-toolbar {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+}

@@ -34,7 +34,8 @@ import { loadMemory, saveMemory, loadSizes, saveSizes, clearLayout, type BoxSize
 import { StatusPicker } from "./StatusPicker";
 import type { RoadmapItem } from "../scripts/tickets";
 import { Calendar, type CalendarEntry } from "./Calendar";
-import { countDated, spanOf } from "./calendarDates";
+import { spanBy, type CalendarDates } from "./calendarDates";
+import type { BoardGroup } from "./Board";
 import { Logo } from "./Logo";
 import { Search } from "./Search";
 import { fetchItem, type ItemDetail, type SearchHit } from "./store";
@@ -256,6 +257,10 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
     else openContext(heading);
   }, [focus, openContext]);
   const [view, setView] = usePreference<View>("attraverso.view", "graph", VIEWS);
+  // Which dates the calendar places items by, and what the board's lanes are (areas, or when items were filed or
+  // last changed): both remembered in this browser, like the view itself.
+  const [calendarDates, setCalendarDates] = usePreference<CalendarDates>("attraverso.calendar.dates", "planned", ["planned", "created", "updated"]);
+  const [boardGroup, setBoardGroup] = usePreference<BoardGroup>("attraverso.board.group", "area", ["area", "created", "updated"]);
   // The minimap is a help on a big screen and a quarter of a small one, so it starts hidden on a narrow one, and
   // the choice is remembered - **separately for each**. One shared choice meant hiding it on a phone-sized
   // window hid it on the desktop too, since every tab of the viewer shares one browser's storage.
@@ -680,7 +685,10 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
       colour: colourMode === "status" ? STATUSES[item.status].colour : colours[item.area]!,
     }));
   }, [allProjects, plan.projects, hiddenStatuses, projectColours, project, visibleItems, colourMode, colours]);
-  const datedCount = useMemo(() => countDated(calendarEntries.map((entry) => entry.item)), [calendarEntries]);
+  const datedCount = useMemo(
+    () => calendarEntries.filter((entry) => spanBy(entry.item, calendarDates) !== null).length,
+    [calendarEntries, calendarDates],
+  );
 
   // Another project's item switches project through the URL, which remounts with that item open.
   const selectFromCalendar = (key: string, ref: string) => {
@@ -742,7 +750,7 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
     setView(target);
     if (target === "graph") setPanTo(item.id);
     if (target === "board") setReveal({ ref: item.id, nonce: Date.now() });
-    const span = spanOf(item);
+    const span = spanBy(item, calendarDates);
     if (target === "calendar" && span !== null) setCalendarFocus({ date: span.start, nonce: Date.now() });
   };
   const goToItem = (item: RoadmapItem) => {
@@ -1093,6 +1101,17 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
                   ))}
                 </div>
               )}
+              {/* What the board's lanes are (VIEW-46): its areas, or when things were filed or last touched. */}
+              {view === "board" && <div className="settings__label">Group board by</div>}
+              {view === "board" && (
+                <div className="segmented" role="group" aria-label="Group board by">
+                  {(["area", "created", "updated"] as const).map((group) => (
+                    <button key={group} className="segmented__btn" data-on={boardGroup === group} onClick={() => setBoardGroup(group)}>
+                      {group === "updated" ? "modified" : group}
+                    </button>
+                  ))}
+                </div>
+              )}
               {view === "graph" && <div className="settings__label">Layout</div>}
               {view === "graph" && (
                 <button
@@ -1181,6 +1200,7 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
           {view === "board" && project !== null ? (
             <Board
               corner={contextFab}
+              group={boardGroup}
               items={visibleItems}
               areas={areas}
               hiddenStatuses={hiddenStatuses}
@@ -1199,6 +1219,8 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
               entries={calendarEntries}
               multiProject={allProjects}
               focus={calendarFocus}
+              dates={calendarDates}
+              onDates={setCalendarDates}
               selected={project && selectedId ? { project: project.key, ref: selectedId } : null}
               onSelect={selectFromCalendar}
             />
@@ -1308,7 +1330,7 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
                     <div className="item-menu" role="menu" aria-label="Show this item in">
                       {VIEWS.map((target) => {
                         // Only a dated item (or a finished one, which dates itself) has a day to land on.
-                        const undated = target === "calendar" && spanOf(selected) === null;
+                        const undated = target === "calendar" && spanBy(selected, calendarDates) === null;
                         return (
                           <button
                             key={target}

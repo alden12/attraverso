@@ -12,7 +12,7 @@ import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import type { EventClickArg, EventContentArg, EventInput } from "@fullcalendar/core";
 import { STATUSES, type RoadmapItem } from "../scripts/tickets";
-import { spanOf } from "./calendarDates";
+import { spanBy, type CalendarDates } from "./calendarDates";
 
 /** One item to place, with the project it came from, since the calendar can show several at once. */
 export interface CalendarEntry {
@@ -29,15 +29,24 @@ interface Props {
   onSelect: (project: string, ref: string) => void;
   /** A day to go to, when an item is shown here from its menu; a new object each time it is asked. */
   focus?: { date: string; nonce: number } | null;
+  /** Which dates place the items: planned (the default), or the day each was filed or last changed. */
+  dates?: CalendarDates;
+  onDates?: (dates: CalendarDates) => void;
 }
 
-export function Calendar({ entries, multiProject, selected, onSelect, focus = null }: Props) {
+const DATE_CHOICES: { key: CalendarDates; text: string; hint: string }[] = [
+  { key: "planned", text: "planned", hint: "Place items on their start and due dates" },
+  { key: "created", text: "created", hint: "Place items on the day they were filed" },
+  { key: "updated", text: "modified", hint: "Place items on the day they last changed" },
+];
+
+export function Calendar({ entries, multiProject, selected, onSelect, focus = null, dates = "planned", onDates }: Props) {
   const calendar = useRef<FullCalendar>(null);
   useEffect(() => {
     if (focus !== null) calendar.current?.getApi().gotoDate(focus.date);
   }, [focus]);
   const events: EventInput[] = entries.flatMap(({ project, item, colour }) => {
-    const span = spanOf(item);
+    const span = spanBy(item, dates);
     if (span === null) return [];
     return [
       {
@@ -77,13 +86,22 @@ export function Calendar({ entries, multiProject, selected, onSelect, focus = nu
   };
 
   return (
-    <div className="cal">
+    // `data-dates` lights the chosen button by CSS: the calendar redraws its own toolbar as you page through months,
+    // so a class set on the button from here would not survive the next one.
+    <div className="cal" data-dates={dates}>
       <FullCalendar
         ref={calendar}
         initialDate={focus?.date}
         plugins={[dayGridPlugin]}
         initialView="dayGridMonth"
-        headerToolbar={{ left: "prev,next today", center: "title", right: "dayGridMonth,dayGridWeek" }}
+        headerToolbar={{
+          left: "prev,next today",
+          center: "title",
+          right: onDates === undefined ? "dayGridMonth,dayGridWeek" : "planned,created,updated dayGridMonth,dayGridWeek",
+        }}
+        customButtons={Object.fromEntries(
+          DATE_CHOICES.map(({ key, text, hint }) => [key, { text, hint, click: () => onDates?.(key) }]),
+        )}
         buttonText={{ today: "today", month: "month", week: "week" }}
         // A day is a day (`CAL-1`): in local time, an all-day span starting at UTC midnight can begin on the
         // previous evening's cell for anyone west of Greenwich.

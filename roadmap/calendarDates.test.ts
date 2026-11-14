@@ -3,7 +3,7 @@
  * arithmetic that a time zone would otherwise get wrong: month and year ends, and a leap day.
  */
 import { describe, expect, it } from "vitest";
-import { countDated, nextDay, spanOf } from "./calendarDates";
+import { countDated, nextDay, spanBy, spanOf } from "./calendarDates";
 
 describe("spanOf", () => {
   it("leaves an undated item off the calendar, which is the normal case", () => {
@@ -36,5 +36,14 @@ describe("nextDay", () => {
     expect(nextDay("2026-12-31")).toBe("2027-01-01");
     expect(nextDay("2028-02-28")).toBe("2028-02-29");
     expect(nextDay("2027-02-28")).toBe("2027-03-01");
+  });
+});
+
+describe("spanBy (by created or modified)", () => {
+  const item = { start: "2026-12-01", due: "2026-12-03", created: "2026-11-02T12:00:00Z", updated: "2026-11-10T12:00:00Z" };
+  it("places by planned days, or on the one day it was filed or last changed", () => {
+    expect(spanBy(item, "planned")).toEqual({ start: "2026-12-01", end: "2026-12-04" });
+    expect(spanBy(item, "created")?.end).toBe(nextDay(spanBy(item, "created")!.start));
+    expect(spanBy({}, "updated")).toBeNull();
   });
 });

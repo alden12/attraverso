@@ -33,6 +33,50 @@ interface Props {
   onSelect: (ref: string) => void;
   /** What sits in the grid's top-left corner, above the lane names and beside the column heads. */
   corner?: ReactNode;
+  /** What the lanes are: areas, or when the items were filed or last changed. */
+  group?: BoardGroup;
+}
+
+/** What the board's lanes are: areas, or time, by when items were filed (`created`) or last changed (`updated`). */
+export type BoardGroup = "area" | "created" | "updated";
+
+/** One lane of the board: what it is called, the colour its head is ruled in, and its items in order. */
+interface Lane {
+  key: string;
+  name: string;
+  /** A caption under the name: an area's key, where the name is not it. */
+  caption?: string;
+  colour: string;
+  items: RoadmapItem[];
+}
+
+/**
+ * Lanes by time (`group` other than area): the last day, week and month, then each month before, newest first,
+ * and anything without the timestamp last. Buckets are by local day, since "today" means the reader's today. A
+ * lane's items run newest first, which is the point of asking for them by date.
+ */
+export function dateLanes(items: RoadmapItem[], by: "created" | "updated", now: Date = new Date()): Lane[] {
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const DAY = 86_400_000;
+  const bucket = (instant: string | undefined): { key: string; name: string; rank: number } => {
+    if (instant === undefined) return { key: "d:none", name: "No date", rank: -Infinity };
+    const at = new Date(instant);
+    if (at.getTime() >= startOfToday) return { key: "d:today", name: "Today", rank: Infinity };
+    if (at.getTime() >= startOfToday - 6 * DAY) return { key: "d:week", name: "This week", rank: Infinity - 1 };
+    if (at.getTime() >= startOfToday - 29 * DAY) return { key: "d:month", name: "Last 30 days", rank: Infinity - 2 };
+    const month = `${at.getFullYear()}-${String(at.getMonth() + 1).padStart(2, "0")}`;
+    const name = at.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+    return { key: `d:${month}`, name, rank: at.getFullYear() * 12 + at.getMonth() };
+  };
+  const when = (item: RoadmapItem) => (by === "created" ? item.created : item.updated);
+  const lanes = new Map<string, Lane & { rank: number }>();
+  for (const item of [...items].sort((a, b) => (when(b) ?? "").localeCompare(when(a) ?? ""))) {
+    const { key, name, rank } = bucket(when(item));
+    const lane = lanes.get(key) ?? { key, name, colour: "var(--text)", items: [], rank };
+    lane.items.push(item);
+    lanes.set(key, lane);
+  }
+  return [...lanes.values()].sort((a, b) => b.rank - a.rank).map(({ rank: _rank, ...lane }) => lane);
 }
 
 /**
@@ -54,18 +98,30 @@ export function orderCell(cell: RoadmapItem[], next: string[], plan: RoadmapItem
 /** The Next lane's key: lowercase, so it can never be an area's, which are uppercase. */
 const NEXT_LANE = "next";
 
-export function Board({ items, areas, hiddenStatuses, next, colours, areaName, selectedId, reveal, onSelect, corner }: Props) {
+export function Board({ items, areas, hiddenStatuses, next, colours, areaName, selectedId, reveal, onSelect, corner, group = "area" }: Props) {
   const columns = BOARD_COLUMNS.filter((status) => !hiddenStatuses.has(status));
   const position = new Map(next.map((ref, index) => [ref, index + 1]));
   const listed = next.flatMap((ref) => items.find((item) => item.id === ref) ?? []);
-  const lanes = [
-    ...(listed.length > 0 ? [{ key: NEXT_LANE, items: listed }] : []),
-    ...areas.map((area) => ({ key: area, items: items.filter((item) => item.area === area) })).filter((lane) => lane.items.length > 0),
-  ];
+  const grouped: Lane[] =
+    group === "area"
+      ? areas
+          .map((area) => ({
+            key: area,
+            name: areaName(area) ?? area,
+            caption: areaName(area) === null ? undefined : area,
+            colour: colours[area]!,
+            items: items.filter((item) => item.area === area),
+          }))
+          .filter((lane) => lane.items.length > 0)
+      : dateLanes(items, group);
+  const lanes: Lane[] = [...(listed.length > 0 ? [{ key: NEXT_LANE, name: "Next", colour: "var(--text)", items: listed }] : []), ...grouped];
+  const laneOf = (item: RoadmapItem): string => (group === "area" ? item.area : (grouped.find((lane) => lane.items.includes(item))?.key ?? ""));
 
-  // **Only the Next lane starts open**: it is what the board is opened to see, and forty open lanes is a wall.
-  // A lane opened here stays open while the board is up, and is not remembered past it.
-  const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set([NEXT_LANE]));
+  // **Only the Next lane starts open**, and by date the newest lane too: it is what the board is opened to see, and
+  // forty open lanes is a wall. A lane opened here stays open while the board is up, and is not remembered past it.
+  const firstOpen = (): ReadonlySet<string> => new Set([NEXT_LANE, ...(group !== "area" && grouped[0] ? [grouped[0].key] : [])]);
+  const [open, setOpen] = useState<ReadonlySet<string>>(firstOpen);
+  useEffect(() => setOpen(firstOpen()), [group]);
   const toggleLane = (key: string) =>
     setOpen((set) => {
       const copy = new Set(set);
@@ -81,7 +137,7 @@ export function Board({ items, areas, hiddenStatuses, next, colours, areaName, s
     if (reveal === null) return;
     const item = items.find((candidate) => candidate.id === reveal.ref);
     if (item === undefined) return;
-    const lane = position.has(item.id) && open.has(NEXT_LANE) ? NEXT_LANE : item.area;
+    const lane = position.has(item.id) && open.has(NEXT_LANE) ? NEXT_LANE : laneOf(item);
     if (!open.has(lane)) setOpen((set) => new Set(set).add(lane));
     pending.current = { lane, ref: item.id };
     // `position` and `open` are read as they are when the reveal arrives, deliberately: toggling a lane later is
@@ -112,7 +168,7 @@ export function Board({ items, areas, hiddenStatuses, next, colours, areaName, s
       ))}
       {lanes.map((lane) => {
         const isNext = lane.key === NEXT_LANE;
-        const name = isNext ? "Next" : (areaName(lane.key) ?? lane.key);
+        const name = lane.name;
         const shown = open.has(lane.key);
         return (
           <div
@@ -122,7 +178,7 @@ export function Board({ items, areas, hiddenStatuses, next, colours, areaName, s
             data-lane={lane.key}
             data-open={shown}
             data-next={isNext}
-            style={{ "--area": isNext ? "var(--text)" : colours[lane.key] } as React.CSSProperties}
+            style={{ "--area": lane.colour } as React.CSSProperties}
           >
             <button
               className="board__lane-head"
@@ -138,7 +194,7 @@ export function Board({ items, areas, hiddenStatuses, next, colours, areaName, s
                 <span className="board__lane-text">{name}</span>
               </span>
               <span className="board__lane-key">
-                {!isNext && name !== lane.key ? `${lane.key} · ${lane.items.length}` : lane.items.length}
+                {lane.caption !== undefined ? `${lane.caption} · ${lane.items.length}` : lane.items.length}
               </span>
             </button>
             {columns.map((status) => {
@@ -155,7 +211,8 @@ export function Board({ items, areas, hiddenStatuses, next, colours, areaName, s
                     // Folded, a cell says how many it holds, and a click anywhere on the lane opens it.
                     cell.length > 0 && <span className="board__folded">{cell.length}</span>
                   ) : (
-                    (isNext ? cell : orderCell(cell, next, items)).map((item) => (
+                    // The Next lane keeps the agreed order and a date lane its newest first; an area's cell sorts.
+                    (isNext || group !== "area" ? cell : orderCell(cell, next, items)).map((item) => (
                       <button
                         key={item.id}
                         data-ref={item.id}

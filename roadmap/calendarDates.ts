@@ -51,5 +51,18 @@ export function spanOf(item: Pick<RoadmapItem, "start" | "due" | "closed">): Spa
   return { start: day, end: nextDay(day) };
 }
 
+/** Which of an item's dates the calendar places it by: its planned days, or the day it was filed or last changed. */
+export type CalendarDates = "planned" | "created" | "updated";
+
+/** An item's span under a choice of dates: `spanOf` for planned, otherwise the one local day it was filed or
+ *  last changed (an instant, so a local day, as `closed` is). */
+export function spanBy(item: Pick<RoadmapItem, "start" | "due" | "closed" | "created" | "updated">, by: CalendarDates): Span | null {
+  if (by === "planned") return spanOf(item);
+  const at = by === "created" ? item.created : item.updated;
+  if (at === undefined) return null;
+  const day = localDay(at);
+  return { start: day, end: nextDay(day) };
+}
+
 /** How many of a project's items have a date, for the notice that explains an empty calendar. */
 export const countDated = (items: Pick<RoadmapItem, "start" | "due" | "closed">[]): number => items.filter((item) => spanOf(item) !== null).length;
