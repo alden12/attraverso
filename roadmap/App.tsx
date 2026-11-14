@@ -41,6 +41,7 @@ import { fetchItem, type ItemDetail, type SearchHit } from "./store";
 import { Comments } from "./Comments";
 import { AreaPane } from "./AreaPane";
 import { ZoomFade } from "./ZoomFade";
+import { Board } from "./Board";
 
 const nodeTypes = { item: ItemNodeView, area: AreaGroupNode, ticket: TicketGroupNode, ghost: GhostNodeView, overview: AreaOverviewNode };
 const STATUS_KEYS = Object.keys(STATUSES) as Status[];
@@ -55,8 +56,8 @@ const EMPTY: never[] = [];
 const NO_ITEMS: RoadmapItem[] = [];
 const NO_REFS: string[] = [];
 
-type View = "graph" | "calendar";
-const VIEWS: View[] = ["graph", "calendar"];
+type View = "graph" | "calendar" | "board";
+const VIEWS: View[] = ["graph", "calendar", "board"];
 
 /** Toolbar icons, drawn inline in `currentColor` so they follow the theme and need no asset or icon library. */
 const icon = (paths: React.ReactNode) => (
@@ -65,6 +66,9 @@ const icon = (paths: React.ReactNode) => (
   </svg>
 );
 const CalendarIcon = () => icon(<><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 10h18M8 3v4M16 3v4" /></>);
+// Three columns of cards, the shape of the board.
+const BoardIcon = () => icon(<><rect x="3" y="4" width="5" height="16" rx="1.5" /><rect x="10" y="4" width="5" height="10" rx="1.5" /><rect x="17" y="4" width="4" height="13" rx="1.5" /></>);
+const VIEW_ICONS: Record<View, () => React.JSX.Element> = { graph: () => <GraphIcon />, calendar: () => <CalendarIcon />, board: () => <BoardIcon /> };
 const GraphIcon = () => icon(<><circle cx="6" cy="6" r="2.5" /><circle cx="18" cy="8" r="2.5" /><circle cx="9" cy="18" r="2.5" /><path d="M8.3 7.2l7.4 0.6M7 8.4l1.6 7.2" /></>);
 const SearchIcon = () => icon(<><circle cx="11" cy="11" r="6.5" /><path d="M20 20l-4.2-4.2" /></>);
 // Four arrows out from the middle: the usual sign for "move".
@@ -249,7 +253,7 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
     else openContext(heading);
   }, [focus, openContext]);
   const [view, setView] = usePreference<View>("attraverso.view", "graph", VIEWS);
-  const otherView: View = view === "graph" ? "calendar" : "graph";
+  const otherViews = VIEWS.filter((candidate) => candidate !== view);
   // The minimap is a help on a big screen and a quarter of a small one, so it starts hidden on a narrow one, and
   // the choice is remembered - **separately for each**. One shared choice meant hiding it on a phone-sized
   // window hid it on the desktop too, since every tab of the viewer shares one browser's storage.
@@ -713,9 +717,12 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
       setHiddenStatuses((set) => (set.has(item.status) ? toggle(set, item.status) : set));
       setHiddenAreas((set) => (set.has(item.area) ? toggle(set, item.area) : set));
     }
-    setView("graph");
+    // The board shows every visible item already, so it stays; the calendar shows only dated ones, so it gives way.
+    if (view !== "board") {
+      setView("graph");
+      setPanTo(item.id);
+    }
     setSelectedId(item.id);
-    setPanTo(item.id);
   };
 
   const onNodeClick: NodeMouseHandler = (_event, node) => {
@@ -825,17 +832,14 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
         <div className="filters">
           {/* Toolbar buttons carry their detail underneath rather than inline (a caption below the icon), which
               is what lets the toolbar fit a phone's width in one row. */}
-          {/* One button that switches to the other view, rather than a two-way switch: there are only two, so the
-              button can name where it goes, and it costs one slot instead of two. */}
-          <button
-            className="toolbtn"
-            aria-label={`Show the ${otherView}`}
-            title={`Show the ${otherView}`}
-            onClick={() => setView(otherView)}
-          >
-            <span className="toolbtn__main">{otherView === "calendar" ? <CalendarIcon /> : <GraphIcon />}</span>
-            <span className="toolbtn__sub">{otherView}</span>
-          </button>
+          {/* A button for each view but the one showing, so each names where it goes. Tabs for all three are
+              VIEW-57's, which this stands in for until then. */}
+          {otherViews.map((other) => (
+            <button key={other} className="toolbtn" aria-label={`Show the ${other}`} title={`Show the ${other}`} onClick={() => setView(other)}>
+              <span className="toolbtn__main">{VIEW_ICONS[other]()}</span>
+              <span className="toolbtn__sub">{other}</span>
+            </button>
+          ))}
           {/* Everything set occasionally lives in one dialog (VIEW-37): on a phone the toolbar was most of the screen.
               The button says how much is filtered out, because a filter set last week and tucked behind a menu
               otherwise reads as items gone missing. */}
@@ -1075,7 +1079,7 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
           {/* The floating controls at the canvas's top left, in one row: the agreed order, and beside it the
               project's context sections (VIEW-30), which open in the right-hand pane rather than here, since a
               section is too long to read in a panel this size. */}
-          {view === "graph" && project !== null && (
+          {view !== "calendar" && project !== null && (
           <div className="fabs">
           {next.length > 0 && (
             <button
@@ -1098,6 +1102,7 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
             </button>
           )}
           {/* Move mode (VIEW-54): the only time cards and boxes drag or resize. */}
+          {view === "graph" && (
           <button
             className="next-fab"
             data-on={moving}
@@ -1108,6 +1113,7 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
             <MoveIcon />
             {moving ? "Done" : "Move"}
           </button>
+          )}
           {/* Search (VIEW-25), with the other things you open over the canvas rather than in the toolbar, which a
               phone has no room in. Icon-only: the magnifier is the most widely understood one there is. */}
           <button
@@ -1121,7 +1127,21 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
           </button>
           </div>
           )}
-          {view === "calendar" ? (
+          {view === "board" && project !== null ? (
+            <Board
+              items={visibleItems}
+              areas={areas}
+              hiddenStatuses={hiddenStatuses}
+              next={next.map((item) => item.id)}
+              colours={colours}
+              areaName={areaName}
+              selectedId={selectedId}
+              onSelect={(ref) => {
+                setSelectedId(ref);
+                setCameFrom(null);
+              }}
+            />
+          ) : view === "calendar" ? (
             <Calendar
               entries={calendarEntries}
               multiProject={allProjects}
@@ -1299,6 +1319,16 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
           <aside className="detail" aria-label="Next">
             <div className="detail__head">
               <span className="detail__id">Next</span>
+              {/* The same order laid out by status and area (VIEW-46), one click from the list it sorts by. */}
+              <button
+                className="chip next__board"
+                data-on={view === "board"}
+                onClick={() => setView(view === "board" ? "graph" : "board")}
+                title={view === "board" ? "Back to the graph" : "See every item by status and area, in this order"}
+              >
+                <BoardIcon />
+                {view === "board" ? "graph" : "board"}
+              </button>
               <button className="detail__close" onClick={() => setListShown(null)} aria-label="Close">
                 ×
               </button>

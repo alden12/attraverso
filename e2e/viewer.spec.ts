@@ -371,6 +371,48 @@ test.describe("several projects in one store", () => {
     await expect(list.locator(".next__item")).toHaveCount(2);
   });
 
+  test("lays the items out by status and area on the board, in the agreed order, from the Next pane (VIEW-46)", async ({ page }) => {
+    await page.route("**/api/store", (route) =>
+      route.fulfill({
+        json: {
+          path: "/tmp/one.apm.yaml",
+          store: {
+            projects: [
+              {
+                key: "apm",
+                name: "AI PM",
+                next: ["MCP-3", "MCP-2"],
+                items: [
+                  { ref: "MCP-1", area: "MCP", title: "the stdio server", status: "to-do" },
+                  { ref: "MCP-2", area: "MCP", title: "the tool boundary", status: "to-do" },
+                  { ref: "MCP-3", area: "MCP", title: "the error shape", status: "to-do" },
+                  { ref: "DATA-1", area: "DATA", title: "the schema", status: "in-progress" },
+                ],
+              },
+            ],
+          },
+        },
+      }),
+    );
+    await page.goto("/");
+    await expect(page.locator(".react-flow__node").first()).toBeVisible();
+    await page.locator('aside.detail[aria-label="Next"]').locator(".next__board").click();
+
+    const board = page.getByRole("grid", { name: "Board" });
+    await expect(board.getByRole("columnheader")).toHaveText([/^$/, /planning/i, /to-do/i, /in-progress/i, /review/i]);
+    await expect(board.getByRole("rowheader")).toHaveText(["MCP", "DATA"]); // the plan's area order, as the graph has it
+    // The agreed order first and numbered, then the rest as the plan lists them.
+    const todo = board.getByRole("gridcell", { name: "MCP to-do" }).locator(".board__card");
+    await expect(todo.locator(".board__ref")).toHaveText(["MCP-3", "MCP-2", "MCP-1"]);
+    await expect(todo.first().locator(".board__next")).toHaveText("1");
+    await expect(todo.last().locator(".board__next")).toHaveCount(0);
+
+    // A card opens in the pane like any other, and the board stays.
+    await board.locator(".board__card", { hasText: "DATA-1" }).click();
+    await expect(page.locator(".detail__id")).toHaveText("DATA-1");
+    await expect(board).toBeVisible();
+  });
+
   test("shows an item's measurements under its prose, summarised (METRIC-4)", async ({ page }) => {
     // A fixture for the same reason the order panel uses one: the committed store's measurements are live
     // data that will grow and change, so a test reading them asserts less every time it runs.

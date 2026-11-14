@@ -1581,3 +1581,172 @@ body {
   padding: 4px 8px 10px;
   overflow: visible;
 }
+
+/* The board (VIEW-46): status columns across, area lanes down, in one grid so every lane's cells line up with the
+   column heads. A lane is `display: contents`, so it groups its cells in the DOM without boxing them. Starts below
+   the floating buttons, and scrolls both ways with the heads pinned, so a long lane keeps its columns named. */
+.board {
+  position: absolute;
+  inset: 56px 0 0 0;
+  overflow: auto;
+  display: grid;
+  grid-template-columns: minmax(120px, 170px) repeat(var(--columns), minmax(220px, 1fr));
+  align-content: start;
+  padding: 0 12px 24px;
+}
+.board--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+}
+.board__corner,
+.board__column {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--bg);
+}
+.board__corner {
+  left: 0;
+  z-index: 3;
+}
+.board__column {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 2px solid var(--area);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.board__column-icon {
+  color: var(--area);
+}
+.board__count {
+  margin-left: auto;
+  color: var(--muted);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.board__lane {
+  display: contents;
+}
+.board__lane-head {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 10px 10px 12px;
+  border-top: 1px solid var(--line);
+  border-left: 3px solid var(--area);
+  background: var(--bg);
+}
+.board__lane-name {
+  color: var(--area);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.board__lane-key {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+.board__cell {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 8px 6px;
+  border-top: 1px solid var(--line);
+  background: color-mix(in srgb, var(--area) 4%, transparent);
+}
+.board__card {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  padding: 7px 10px 8px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--area);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.board__card:hover {
+  border-color: #38455a;
+  border-left-color: var(--area);
+}
+.board__card[data-on="true"] {
+  border-color: var(--area);
+  box-shadow: 0 0 0 1px var(--area);
+}
+.board__card-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.board__ref {
+  color: var(--area);
+  letter-spacing: 0.03em;
+}
+/* Its place in the agreed order: a small numbered badge, since that order is what sorts the column. */
+.board__next {
+  margin-left: auto;
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #263243;
+  color: var(--text);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.board__title {
+  font-size: 13px;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.board__card[data-strike="true"] .board__title {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+/* The Next pane's way to the board, in its head beside the close button. */
+.next__board {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.next__board svg {
+  width: 13px;
+  height: 13px;
+}
+/* On a phone the lane names narrow and each column is most of a screen, so one column reads at a time and the
+   next is a sideways swipe. */
+@media (max-width: 640px) {
+  .board {
+    grid-template-columns: 84px repeat(var(--columns), minmax(200px, 76vw));
+    padding: 0 0 24px;
+  }
+  .board__lane-head {
+    padding: 8px 6px 8px 8px;
+  }
+  .board__lane-name {
+    font-size: 12px;
+    overflow-wrap: anywhere;
+  }
+}
