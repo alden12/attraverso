@@ -1634,8 +1634,17 @@ body {
   gap: 6px;
   padding: 8px 6px 8px 10px;
 }
+/* Never wider than its cell: the Context button gives up the end of its label (keeping its count) rather than
+   spilling over the column heads beside it on a narrow screen. */
 .board__corner .next-fab {
   box-shadow: none;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.board__corner {
+  min-width: 0;
 }
 .board__column {
   display: flex;
@@ -1806,7 +1815,7 @@ body {
    next is a sideways swipe. */
 @media (max-width: 640px) {
   .board {
-    grid-template-columns: 84px repeat(var(--columns), minmax(200px, 76vw));
+    grid-template-columns: 100px repeat(var(--columns), minmax(200px, 76vw));
     padding: 0 0 24px;
   }
   .board__lane-head {
@@ -2048,5 +2057,55 @@ body {
   .view-tabs .toolbtn[data-on="true"] {
     background: #263243;
     border-color: #3a4a60;
+  }
+}
+.next-fab__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.next-fab .chip__count {
+  flex: none;
+}
+/* The hidden count as a badge, for the phone's icon-only header; the caption says it everywhere else. */
+.toolbtn__badge {
+  display: none;
+}
+/* On a phone the header's buttons are bare icons (VIEW-58): no border, no caption, so the project's name keeps its
+   width. The view tabs are in the bottom bar there and keep their labels. */
+@media (max-width: 640px) {
+  .filters > .toolbtn {
+    position: relative;
+    min-width: 0;
+    padding: 6px 7px;
+    border-color: transparent;
+    background: none;
+    justify-content: center;
+  }
+  .filters > .toolbtn[data-on="true"] {
+    background: #263243;
+  }
+  .filters > .toolbtn .toolbtn__sub,
+  .filters > .toolbtn .toolbtn__text {
+    display: none;
+  }
+  .filters > .toolbtn svg {
+    width: 20px;
+    height: 20px;
+  }
+  .toolbtn__badge {
+    display: block;
+    position: absolute;
+    top: 0;
+    right: -2px;
+    min-width: 16px;
+    padding: 0 4px;
+    border-radius: 999px;
+    background: #3a4a60;
+    color: var(--text);
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 16px;
+    text-align: center;
   }
 }

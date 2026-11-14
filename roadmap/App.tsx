@@ -828,7 +828,8 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
       onClick={() => (contextView === null ? openContext(null) : setContextView(null))}
       title="The project's context sections: what it is, and how it is worked on"
     >
-      Context<span className="chip__count">{project.context.length}</span>
+      <span className="next-fab__label">Context</span>
+      <span className="chip__count">{project.context.length}</span>
     </button>
   );
 
@@ -941,9 +942,15 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
           >
             <span className="toolbtn__main">
               <SlidersIcon />
-              view
+              <span className="toolbtn__text">view</span>
             </span>
             <span className="toolbtn__sub">{hiddenCount > 0 ? `${hiddenCount} hidden` : "all shown"}</span>
+            {/* On a phone the caption goes, so the count rides on the icon instead (styles.css). */}
+            {hiddenCount > 0 && (
+              <span className="toolbtn__badge" aria-hidden="true">
+                {hiddenCount}
+              </span>
+            )}
           </button>
           {/* What is set rarely (VIEW-56), behind the kebab at the end, so the bar keeps to what is used constantly. */}
           <button
