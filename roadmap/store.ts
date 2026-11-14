@@ -63,13 +63,29 @@ export function writeHeaders(action: string): Record<string, string> {
  * status is not the only thing affected - the node on the graph changes colour and may gain a strike-through.
  * A local update would have to duplicate all of that and would still be a copy that drifts.
  */
+/**
+ * Why a write failed, for a person to read: the server's own `error` where it sent one, else `fallback`. Read as
+ * text first, because not every refusal is JSON - a server older than the route answers a plain "not found", and
+ * parsing that as JSON put `Unexpected token 'o'` in front of the user instead of the reason.
+ */
+async function failure(response: Response, fallback: string): Promise<string> {
+  const text = await response.text().catch(() => "");
+  try {
+    const error = (JSON.parse(text) as { error?: string }).error;
+    if (error !== undefined) return error;
+  } catch {
+    // Not JSON: say what came back, below.
+  }
+  return response.status === 404 ? `${fallback}: this server does not know the request. Restart it on newer code.` : fallback;
+}
+
 export async function setTicketStatus(projectKey: string, ref: string, status: Status): Promise<void> {
   const response = await fetch(`/api/ticket?project=${encodeURIComponent(projectKey)}&ref=${encodeURIComponent(ref)}`, {
     method: "POST",
     headers: { "content-type": "application/json", ...writeHeaders("change a status") },
     body: JSON.stringify({ status }),
   });
-  if (!response.ok) throw new Error(((await response.json()) as { error?: string }).error ?? `could not change the status (${response.status})`);
+  if (!response.ok) throw new Error(await failure(response, `could not change the status (${response.status})`));
 }
 
 /** Put an item at the end of the agreed order, or take it out (`VIEW-46`). */
@@ -79,7 +95,7 @@ export async function setInNext(projectKey: string, ref: string, listed: boolean
     headers: { "content-type": "application/json", ...writeHeaders("change the next list") },
     body: JSON.stringify({ listed }),
   });
-  if (!response.ok) throw new Error(((await response.json()) as { error?: string }).error ?? `could not change the next list (${response.status})`);
+  if (!response.ok) throw new Error(await failure(response, `could not change the next list (${response.status})`));
 }
 
 /**
@@ -92,7 +108,7 @@ export async function saveLayout(projectKey: string, layout: Record<string, { x:
     headers: { "content-type": "application/json", ...writeHeaders("save the layout") },
     body: JSON.stringify({ layout }),
   });
-  if (!response.ok) throw new Error(((await response.json()) as { error?: string }).error ?? `could not save the layout (${response.status})`);
+  if (!response.ok) throw new Error(await failure(response, `could not save the layout (${response.status})`));
 }
 
 /** Remove an attachment from its ticket. The blob stays on disk - another ticket may reference the same bytes
@@ -160,7 +176,7 @@ export async function deleteAttachment(projectKey: string, hash: string): Promis
     method: "DELETE",
     headers: writeHeaders("remove an image"),
   });
-  if (!response.ok) throw new Error(((await response.json()) as { error?: string }).error ?? `remove failed (${response.status})`);
+  if (!response.ok) throw new Error(await failure(response, `remove failed (${response.status})`));
 }
 
 /** Post an image to the ticket it was dropped on. Returns the stored reference, or throws with the server's
