@@ -1,6 +1,32 @@
 # attraverso
 
-Durable, structured project memory for AI coding agents, over [MCP](https://modelcontextprotocol.io).
+Durable, structured project memory for AI coding agents, over [MCP](https://modelcontextprotocol.io): the plan,
+the reasoning behind it and what was decided, kept in your repo and shown as a graph, a board and a calendar.
+
+| | |
+| :-: | :-: |
+| <img src="docs/screenshots/desktop-graph.jpg" alt="The graph: each area a coloured box of its items, summarised when zoomed out" width="420"> | <img src="docs/screenshots/desktop-board.jpg" alt="The board: status columns, area lanes, the agreed order first" width="420"> |
+| **Graph**: items by dependency, grouped by area | **Board**: status columns, the agreed order first |
+| <img src="docs/screenshots/desktop-calendar.jpg" alt="The calendar: items on their planned days, or when they were filed or last changed" width="420"> | <img src="docs/screenshots/mobile-graph.jpg" alt="The graph on a phone, with the views in a bar along the bottom" width="200"> |
+| **Calendar**: planned dates, or when items were filed or changed | **Phone**: the same views, tabs along the bottom |
+
+## Quick start
+
+Needs Node 22 or newer. In your repo, with [Claude Code](https://claude.com/claude-code):
+
+```bash
+claude mcp add --scope project attraverso -- npx -y attraverso
+```
+
+That writes the server into the repo's `.mcp.json`, so everyone who opens the repo gets it, and `npx` fetches the
+package on first run - there is nothing to install. Start a new Claude Code session and ask it to create a project
+and start planning. Then see the plan:
+
+```bash
+npx attraverso viewer --open
+```
+
+## Why
 
 An agent is good at working on a project and bad at remembering it three weeks later. The usual workaround is
 a `CLAUDE.md` file that grows unmaintainably, cannot be queried, and rots. Attraverso moves that state into a
@@ -12,11 +38,9 @@ like any other file, and is rebuilt into an in-memory Postgres ([PGlite](https:/
 
 ## Using it
 
-Requires Node 22 or newer.
-
 ### In Claude Code
 
-Add it to the `.mcp.json` at the root of your repo:
+The quick start's command writes this to the `.mcp.json` at the root of your repo, which you can also add by hand:
 
 ```json
 {
@@ -38,23 +62,14 @@ themselves, and `get_project` returns the project's protocol - its operating man
 
 ### Seeing it
 
-Ask the agent to open the viewer (the `open_viewer` tool). It serves the plan as a dependency graph on a
-`127.0.0.1` address, so it only opens on the machine running the server.
-
-| | |
-| :-: | :-: |
-| <img src="docs/screenshots/desktop-graph.jpg" alt="The graph: each area a coloured box of its items, summarised when zoomed out" width="420"> | <img src="docs/screenshots/desktop-board.jpg" alt="The board: status columns, area lanes, the agreed order first" width="420"> |
-| **Graph**: items by dependency, grouped by area | **Board**: status columns, the agreed order first |
-| <img src="docs/screenshots/desktop-calendar.jpg" alt="The calendar: items on their planned days, or when they were filed or last changed" width="420"> | <img src="docs/screenshots/mobile-graph.jpg" alt="The graph on a phone, with the views in a bar along the bottom" width="200"> |
-| **Calendar**: planned dates, or when items were filed or changed | **Phone**: the same views, tabs along the bottom |
-
-Or open it yourself from a terminal, in the project:
+Ask the agent to open the viewer (the `open_viewer` tool), or open it yourself from a terminal, in the project:
 
 ```bash
 npx attraverso viewer --open
 ```
 
-It finds the plan the way the server does (or takes `--store <path>`), prints the URL, and opens it with
+Either way it serves the plan on a `127.0.0.1` address, so it only opens on the machine running it. The terminal
+command finds the plan the way the server does (or takes `--store <path>`), prints the URL, and opens it with
 `--open`. `--project <key>` picks which project it lands on. It can edit the plan as the agent's viewer can, and
 is safe to run beside a connected server on the same file. Ctrl+C stops it.
 
