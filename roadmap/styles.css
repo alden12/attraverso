@@ -440,14 +440,21 @@ body {
   border-radius: 50%;
   background: var(--area, var(--muted));
 }
-/* An area's name beside its key in the view menu (PROJ-3): quieter than the key, and cut short rather than letting
-   one long name stretch its row. */
+/* An area in the view menu (PROJ-3), as the graph titles it: the name first in the area's colour, cut short rather
+   than letting one long name widen every row, and the key after it as a quieter caption. */
 .chip__name {
   max-width: 14em;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--area, var(--text));
+  font-weight: 600;
+}
+.chip__key {
   color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
 }
 .chip__count {
   color: var(--muted);

@@ -908,9 +908,9 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
                           onClick={() => zoomToArea(area)}
                           title={hiddenAreas.has(area) ? `Show ${area} and zoom to it` : `Zoom to ${area}`}
                         >
-                          <span className="chip__dot" />
-                          {area}
-                          {areaName(area) !== null && <span className="chip__name">{areaName(area)}</span>}
+                          {/* As the graph's area titles have it: the name in the area's colour, the key after it. */}
+                          <span className="chip__name">{areaName(area) ?? area}</span>
+                          {areaName(area) !== null && <span className="chip__key">{area}</span>}
                           <span className="chip__count">{counts.byArea.get(area)}</span>
                         </button>
                         <button
@@ -934,9 +934,8 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
                         style={{ "--area": colours[area] } as React.CSSProperties}
                         onClick={() => setHiddenAreas((set) => toggle(set, area))}
                       >
-                        <span className="chip__dot" />
-                        {area}
-                        {areaName(area) !== null && <span className="chip__name">{areaName(area)}</span>}
+                        <span className="chip__name">{areaName(area) ?? area}</span>
+                        {areaName(area) !== null && <span className="chip__key">{area}</span>}
                         <span className="chip__count">{counts.byArea.get(area)}</span>
                       </button>
                     ),
@@ -1021,9 +1020,9 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
           <>
             <div className="settings__backdrop" onClick={() => setMenu(null)} />
             <div className="settings settings--more" role="menu" aria-label="More">
+              {!(view === "calendar" && allProjects) && <div className="settings__label">Colour cards by</div>}
               {!(view === "calendar" && allProjects) && (
                 <div className="segmented" role="group" aria-label="Colour by">
-                  <span className="segmented__label">colour</span>
                   {COLOUR_MODES.map((mode) => (
                     <button
                       key={mode}
@@ -1036,6 +1035,7 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
                   ))}
                 </div>
               )}
+              {view === "graph" && <div className="settings__label">Layout</div>}
               {view === "graph" && (
                 <button
                   className="chip"
