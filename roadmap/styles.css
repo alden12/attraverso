@@ -1606,7 +1606,8 @@ body {
   display: grid;
   grid-template-columns: minmax(120px, 170px) repeat(var(--columns), minmax(220px, 1fr));
   align-content: start;
-  padding: 0 12px 24px;
+  /* Nothing on the left: the pinned lane names stick inside any padding there, and cards scrolled through the gap. */
+  padding: 0 12px 24px 0;
 }
 .board--empty {
   display: flex;
@@ -1629,7 +1630,7 @@ body {
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  padding: 8px 6px 8px 0;
+  padding: 8px 6px 8px 10px;
 }
 .board__corner .next-fab {
   box-shadow: none;
