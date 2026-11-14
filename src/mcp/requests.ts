@@ -23,6 +23,12 @@ export const ticketChange = z.object({
 });
 
 /**
+ * What `POST /api/next` accepts (`VIEW-46`): one item into the agreed order (at its end) or out of it. The item
+ * travels in the query string as `/api/ticket`'s does, so the body is only the choice.
+ */
+export const nextChange = z.object({ listed: z.boolean() });
+
+/**
  * A save of the graph layout's memory (`VIEW-23.1`): every node's position, relative to its container. Whole
  * numbers because the layout works on a grid, and because a fraction would round differently on its way back.
  */

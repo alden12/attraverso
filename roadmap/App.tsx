@@ -22,7 +22,7 @@ import remarkGfm from "remark-gfm";
 // The plan is fetched at runtime and handed in by `main.tsx` (VIEW-11), so this component renders whichever
 // store was served to it rather than one baked into the bundle, and whichever project of it the URL asked
 // for (VIEW-4).
-import { canWrite, saveLayout, SECTION_PREFIX, sectionInFocus, type Plan, type Selection } from "./store";
+import { canWrite, saveLayout, SECTION_PREFIX, sectionInFocus, setInNext, type Plan, type Selection } from "./store";
 import { useExtensions } from "./extensions";
 import { areasOf, STATUSES, type Status, splitScope } from "../scripts/tickets";
 import { areaColours, buildGraph, buildEdges, memoryOf, remembered, type ColourMode, type LayoutMemory, type RoadmapNode } from "./graph";
@@ -1328,6 +1328,28 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
                   <>
                     <div className="settings__backdrop" onClick={() => setItemMenu(false)} />
                     <div className="item-menu" role="menu" aria-label="Show this item in">
+                      {/* Into the agreed order or out of it (VIEW-46): only where the page can write, and not for a
+                          finished item, which the list drops on read anyway. */}
+                      {project !== null && canWrite() && selected.status !== "done" && (
+                        <button
+                          role="menuitem"
+                          className="item-menu__row"
+                          onClick={() => {
+                            const listed = next.some((item) => item.id === selected.id);
+                            setItemMenu(false);
+                            setInNext(project.key, selected.id, !listed)
+                              .catch((problem: unknown) => window.alert(problem instanceof Error ? problem.message : String(problem)))
+                              .finally(reload);
+                          }}
+                        >
+                          <span className="item-menu__glyph" aria-hidden="true">
+                            {next.some((item) => item.id === selected.id) ? "−" : "+"}
+                          </span>
+                          {next.some((item) => item.id === selected.id)
+                            ? `Remove from Next (#${next.findIndex((item) => item.id === selected.id) + 1})`
+                            : "Add to Next"}
+                        </button>
+                      )}
                       {VIEWS.map((target) => {
                         // Only a dated item (or a finished one, which dates itself) has a day to land on.
                         const undated = target === "calendar" && spanBy(selected, calendarDates) === null;

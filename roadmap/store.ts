@@ -72,6 +72,16 @@ export async function setTicketStatus(projectKey: string, ref: string, status: S
   if (!response.ok) throw new Error(((await response.json()) as { error?: string }).error ?? `could not change the status (${response.status})`);
 }
 
+/** Put an item at the end of the agreed order, or take it out (`VIEW-46`). */
+export async function setInNext(projectKey: string, ref: string, listed: boolean): Promise<void> {
+  const response = await fetch(`/api/next?project=${encodeURIComponent(projectKey)}&ref=${encodeURIComponent(ref)}`, {
+    method: "POST",
+    headers: { "content-type": "application/json", ...writeHeaders("change the next list") },
+    body: JSON.stringify({ listed }),
+  });
+  if (!response.ok) throw new Error(((await response.json()) as { error?: string }).error ?? `could not change the next list (${response.status})`);
+}
+
 /**
  * Save the graph's layout to the plan (`VIEW-23.1`), so the map is the same on every device and travels with the
  * file. The whole layout every time: it is small, and a partial save would need a merge rule for nothing.

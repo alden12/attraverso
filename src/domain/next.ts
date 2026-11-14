@@ -162,3 +162,24 @@ export async function setNext(db: Database, projectId: OwnedProjectId, refs: str
 
   return getNext(db, projectId);
 }
+
+/**
+ * Put one item at the end of the agreed order, or take it out (the viewer's "add to next", `VIEW-46`).
+ *
+ * The one place the list is edited by a single ref rather than replaced whole, because a person clicking a button
+ * on one item is not restating the list. It is still `setNext` underneath, so there is one write and one event
+ * shape. It works on the *stored* refs rather than `getNext`'s shown ones, so a done item's place is kept and
+ * reopening it still restores it. Adding an item already listed leaves it where it is.
+ */
+export async function toggleNext(db: Database, projectId: OwnedProjectId, ref: string, listed: boolean, actor: Actor): Promise<NextItem[]> {
+  const stored = (
+    await db
+      .select({ ref: items.ref })
+      .from(projectNext)
+      .innerJoin(items, eq(projectNext.itemId, items.id))
+      .where(eq(projectNext.projectId, projectId))
+      .orderBy(asc(projectNext.position))
+  ).map((row) => row.ref);
+  if (listed && stored.includes(ref)) return getNext(db, projectId);
+  return setNext(db, projectId, listed ? [...stored, ref] : stored.filter((candidate) => candidate !== ref), actor);
+}

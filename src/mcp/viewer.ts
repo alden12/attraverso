@@ -38,10 +38,11 @@ import { itemFeed } from "./itemFeed";
 import { addAttachment, removeAttachment } from "../domain/attachments";
 import { setStatus } from "../domain/items";
 import { setLayout } from "../domain/layout";
+import { toggleNext } from "../domain/next";
 import { getProjectByKey } from "../domain/projects";
 import type { Caller } from "./tools";
 import { createFileMediaStore, mediaDirFor, unacceptable, type MediaStore } from "../media/store";
-import { layoutSave, parseBody, readBody, ticketChange } from "./requests";
+import { layoutSave, nextChange, parseBody, readBody, ticketChange } from "./requests";
 
 /** Above the dev server's 5176 so both can run at once (developing the viewer while a Desktop server is up). */
 const FIRST_PORT = 5177;
@@ -200,6 +201,7 @@ export function createViewerHost(db: Database, sources: ViewerSources, store: St
   const WRITES: { matches: (path: string) => boolean; method: string; hint: string }[] = [
     { matches: (p) => p === "/api/ticket", method: "POST", hint: "POST a change here" },
     { matches: (p) => p === "/api/layout", method: "POST", hint: "POST the layout here" },
+    { matches: (p) => p === "/api/next", method: "POST", hint: "POST whether the item is listed" },
     { matches: (p) => p === "/api/media", method: "POST", hint: "POST an image here" },
     { matches: (p) => p.startsWith("/api/media/"), method: "DELETE", hint: "DELETE an attachment here" },
   ];
@@ -328,6 +330,20 @@ export function createViewerHost(db: Database, sources: ViewerSources, store: St
         // and passes the `IMP-13` guard rather than going around it.
         await store.persist();
         return json(200, { ref: item.ref, status: item.status, title: item.title });
+      } catch (error) {
+        return json(400, { error: error instanceof Error ? error.message : String(error) });
+      }
+    }
+
+    /** One item into the agreed order or out of it (`VIEW-46`), with the same write-through as a status change. */
+    if (path === "/api/next") {
+      try {
+        const project = await getProjectByKey(db, caller.ownerId, params.get("project") ?? "");
+        if (project === null) return json(404, { error: `no project "${params.get("project") ?? ""}"` });
+        const { listed } = await parseBody(request, nextChange);
+        const next = await toggleNext(db, project.id, params.get("ref") ?? "", listed, "user");
+        await store.persist();
+        return json(200, { next: next.map((entry) => entry.ref) });
       } catch (error) {
         return json(400, { error: error instanceof Error ? error.message : String(error) });
       }

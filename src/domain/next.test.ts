@@ -9,7 +9,7 @@ import { freshDb } from "../db/testing";
 import { projectNext } from "../db/schema";
 import { createProject } from "./projects";
 import { createItem, deleteItem, setStatus } from "./items";
-import { getNext, setNext } from "./next";
+import { getNext, setNext, toggleNext } from "./next";
 
 const ACTOR = "test";
 const project = (db: Awaited<ReturnType<typeof freshDb>>["db"], ownerId: string) =>
@@ -144,6 +144,43 @@ describe("the agreed order (PROJ-8)", () => {
     const p = await project(db, ownerId);
     for (const title of ["one", "two"]) await createItem(db, { projectId: p.id, area: "MCP", title }, ACTOR);
     expect((await setNext(db, p.id, ["MCP-1", "MCP-2", "MCP-1"], ACTOR)).map((n) => n.ref)).toEqual(["MCP-1", "MCP-2"]);
+    await close();
+  });
+});
+
+describe("adding one item to the agreed order, or taking it out (VIEW-46)", () => {
+  it("appends, leaves an item already listed where it is, and removes", async () => {
+    const { db, ownerId, close } = await freshDb();
+    const p = await project(db, ownerId);
+    for (const title of ["one", "two", "three"]) await createItem(db, { projectId: p.id, area: "MCP", title }, ACTOR);
+    await setNext(db, p.id, ["MCP-2", "MCP-1"], ACTOR);
+
+    await toggleNext(db, p.id, "MCP-3", true, ACTOR);
+    expect((await getNext(db, p.id)).map((n) => n.ref)).toEqual(["MCP-2", "MCP-1", "MCP-3"]);
+    await toggleNext(db, p.id, "MCP-2", true, ACTOR);
+    expect((await getNext(db, p.id)).map((n) => n.ref)).toEqual(["MCP-2", "MCP-1", "MCP-3"]);
+    await toggleNext(db, p.id, "MCP-1", false, ACTOR);
+    expect((await getNext(db, p.id)).map((n) => n.ref)).toEqual(["MCP-2", "MCP-3"]);
+    await close();
+  });
+
+  it("keeps a done item's stored place, so reopening it still restores it", async () => {
+    const { db, ownerId, close } = await freshDb();
+    const p = await project(db, ownerId);
+    for (const title of ["one", "two", "three"]) await createItem(db, { projectId: p.id, area: "MCP", title }, ACTOR);
+    await setNext(db, p.id, ["MCP-1", "MCP-2"], ACTOR);
+    await setStatus(db, { projectId: p.id, ref: "MCP-1", status: "done" }, ACTOR);
+
+    await toggleNext(db, p.id, "MCP-3", true, ACTOR);
+    await setStatus(db, { projectId: p.id, ref: "MCP-1", status: "to-do" }, ACTOR);
+    expect((await getNext(db, p.id)).map((n) => n.ref)).toEqual(["MCP-1", "MCP-2", "MCP-3"]);
+    await close();
+  });
+
+  it("refuses a ref that is not in the project", async () => {
+    const { db, ownerId, close } = await freshDb();
+    const p = await project(db, ownerId);
+    await expect(toggleNext(db, p.id, "MCP-9", true, ACTOR)).rejects.toThrow(/no item "MCP-9"/);
     await close();
   });
 });

@@ -313,6 +313,22 @@ describe("changing a status from the graph (VIEW-17)", () => {
     expect(one(await listItems(db.db, { projectId: one(await listProjects(db.db, db.ownerId)).id })).status).toBe("in-progress");
   });
 
+  it("puts an item into the agreed order and takes it out, writing the store through (VIEW-46)", async () => {
+    const toggle = (listed: unknown) =>
+      fetch(`${origin}/api/next?project=apm&ref=MCP-1`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-apm-token": token },
+        body: JSON.stringify({ listed }),
+      });
+    const before = persisted;
+    const added = await toggle(true);
+    expect(added.status).toBe(200);
+    expect(await added.json()).toEqual({ next: ["MCP-1"] });
+    expect(persisted).toBe(before + 1);
+    expect(await (await toggle(false)).json()).toEqual({ next: [] });
+    expect((await toggle("yes")).status).toBe(400);
+  });
+
   it("refuses a status outside the vocabulary rather than storing one nothing renders", async () => {
     const response = await change({ status: "nearly" });
     expect(response.status).toBe(400);
@@ -367,6 +383,7 @@ describe("the write surface is guarded as a whole, not route by route (VIEW-17)"
   const WRITES = [
     { path: "/api/ticket?project=apm&ref=MCP-1", method: "POST", body: JSON.stringify({ status: "done" }) },
     { path: "/api/layout?project=apm", method: "POST", body: JSON.stringify({ layout: { "MCP-1": { x: 0, y: 0 } } }) },
+    { path: "/api/next?project=apm&ref=MCP-1", method: "POST", body: JSON.stringify({ listed: true }) },
     { path: "/api/media?project=apm&ref=MCP-1", method: "POST", body: "x" },
     { path: "/api/media/deadbeef?project=apm", method: "DELETE", body: undefined },
   ];

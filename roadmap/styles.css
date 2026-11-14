@@ -1939,3 +1939,11 @@ body {
     gap: 6px;
   }
 }
+/* A menu row's sign where the others have an icon, the same width so the labels line up. */
+.item-menu__glyph {
+  width: 15px;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1;
+}
