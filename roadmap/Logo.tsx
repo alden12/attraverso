@@ -4,8 +4,9 @@
 
 // Two crops of one drawing. "full" is the whole mark. "icon" is a square around the robot with the bridge running
 // off both edges, as the favicon is: the mark is ~1.75x wider than tall, so fitting all of it into a small square
-// leaves the robot a few pixels high.
-const VIEW_BOXES = { full: "55.9 59.4 271 154.5", icon: "111.4 56.7 160 160" };
+// leaves the robot a few pixels high. The icon's square is a little wider than the drawing is tall, with the spare room
+// mostly below, so the sag of the bridge's deck clears the bottom of the disc: the gap is what reads as hanging.
+const VIEW_BOXES = { full: "55.9 59.4 271 154.5", icon: "93.4 46.7 196 196" };
 
 export function Logo({ className, crop = "full" }: { className?: string; crop?: keyof typeof VIEW_BOXES }) {
   return (
