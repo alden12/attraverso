@@ -172,6 +172,9 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
   // area to read it is exactly what made it draggable, so a group still moved by accident. A mode is one rule with
   // a visible state. Off on every load rather than remembered: left on from last week, it is the accident again.
   const [moving, setMoving] = useState(false);
+  // An item the board should scroll to and open the lane of (VIEW-46): set by a search hit or a jump-list row, and
+  // a fresh object each time so picking the same item twice still scrolls back to it.
+  const [reveal, setReveal] = useState<{ ref: string; nonce: number } | null>(null);
   // Seeded from the URL (`#apm/CAL-1`), which is how the calendar opens another project's item: it switches
   // project, which remounts this, so the item has to arrive with the new mount.
   // A context section in the hash (`#apm/context:protocol`) opens that section instead (VIEW-30).
@@ -721,7 +724,7 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
     if (view !== "board") {
       setView("graph");
       setPanTo(item.id);
-    }
+    } else setReveal({ ref: item.id, nonce: Date.now() });
     setSelectedId(item.id);
   };
 
@@ -1136,6 +1139,7 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
               colours={colours}
               areaName={areaName}
               selectedId={selectedId}
+              reveal={reveal}
               onSelect={(ref) => {
                 setSelectedId(ref);
                 setCameFrom(null);

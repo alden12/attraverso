@@ -400,14 +400,23 @@ test.describe("several projects in one store", () => {
 
     const board = page.getByRole("grid", { name: "Board" });
     await expect(board.getByRole("columnheader")).toHaveText([/^$/, /planning/i, /to-do/i, /in-progress/i, /review/i]);
-    await expect(board.getByRole("rowheader")).toHaveText(["MCP", "DATA"]); // the plan's area order, as the graph has it
+    // The agreed order's own lane first, then the areas in the plan's order, as the graph has them.
+    const heads = board.getByRole("rowheader");
+    await expect(heads.locator(".board__lane-name")).toHaveText([/Next/, /MCP/, /DATA/]);
+    await expect(board.getByRole("gridcell", { name: "Next to-do" }).locator(".board__ref")).toHaveText(["MCP-3", "MCP-2"]);
+
+    // The areas start folded to a count per column, and open on a click.
+    const todoCell = board.getByRole("gridcell", { name: "MCP to-do" });
+    await expect(todoCell.locator(".board__folded")).toHaveText("3");
+    await heads.filter({ hasText: "MCP" }).click();
     // The agreed order first and numbered, then the rest as the plan lists them.
-    const todo = board.getByRole("gridcell", { name: "MCP to-do" }).locator(".board__card");
+    const todo = todoCell.locator(".board__card");
     await expect(todo.locator(".board__ref")).toHaveText(["MCP-3", "MCP-2", "MCP-1"]);
     await expect(todo.first().locator(".board__next")).toHaveText("1");
     await expect(todo.last().locator(".board__next")).toHaveCount(0);
 
     // A card opens in the pane like any other, and the board stays.
+    await heads.filter({ hasText: "DATA" }).click();
     await board.locator(".board__card", { hasText: "DATA-1" }).click();
     await expect(page.locator(".detail__id")).toHaveText("DATA-1");
     await expect(board).toBeVisible();
