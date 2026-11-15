@@ -17,7 +17,7 @@ const PLUGINS = [remarkGfm];
  *   a line of its own, the block above it. Rendered markdown keeps no character offsets, so this is the finest
  *   grain the page can mark without a markdown parser of its own; the panel quotes the exact text regardless.
  * - **A changed claim says so**, with the text its source vouched for, which is the comparison worth having when
- *   deciding whether the source still holds.
+ *   deciding whether the source still holds - and its number carries a "?", [2?], so it shows without a click.
  */
 export function ReferencedBody({ body, references }: { body: string; references: ItemReference[] }) {
   const [active, setActive] = useState<string | null>(null);
@@ -35,6 +35,18 @@ export function ReferencedBody({ body, references }: { body: string; references:
     }
     return { markdown, numbers, covers: new Map(pointers.map((p) => [p.key, p.covers])) };
   }, [body]);
+
+  // Why a reference deserves a second look, like Wikipedia's "dubious" marks: its claim was edited after a source
+  // vouched for it, or nothing stands behind it at all. Absent for a reference whose sources all still match.
+  const doubt = useMemo(() => {
+    const reasons = new Map<string, string>();
+    for (const [key, claim] of covers) {
+      const behind = references.filter((r) => r.key === key);
+      if (behind.length === 0) reasons.set(key, "no source is recorded for this claim");
+      else if (behind.some((r) => normaliseClaim(r.text) !== claim)) reasons.set(key, "the claim has changed since its source vouched for it");
+    }
+    return reasons;
+  }, [covers, references]);
 
   // A body edited elsewhere can drop the open reference; close the panel rather than show sources for nothing.
   useEffect(() => {
@@ -74,15 +86,18 @@ export function ReferencedBody({ body, references }: { body: string; references:
             className="ref-link"
             data-ref={key}
             data-active={active === key}
-            aria-label={`Reference ${numbers.get(key)}: where this came from`}
+            data-doubt={doubt.has(key)}
+            aria-label={`Reference ${numbers.get(key)}: ${doubt.get(key) ?? "where this came from"}`}
+            title={doubt.get(key)}
             onClick={() => setActive((open) => (open === key ? null : key))}
           >
-            [{numbers.get(key)}]
+            [{numbers.get(key)}
+            {doubt.has(key) && <span className="ref-link__doubt">?</span>}]
           </button>
         );
       },
     }),
-    [numbers, active],
+    [numbers, active, doubt],
   );
 
   const sources = active === null ? [] : references.filter((r) => r.key === active);

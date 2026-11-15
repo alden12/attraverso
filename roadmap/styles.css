@@ -1386,6 +1386,13 @@ body {
   color: #b7d3ff;
   text-decoration: underline;
 }
+/* A reference worth a second look (its claim changed since its source, or it has none): [2?], in amber. */
+.ref-link[data-doubt="true"] {
+  color: #f0c36a;
+}
+.ref-link__doubt {
+  font-weight: 700;
+}
 .ref-highlight {
   background: rgba(250, 204, 21, 0.12);
   box-shadow: 0 0 0 3px rgba(250, 204, 21, 0.12);

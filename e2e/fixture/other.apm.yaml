@@ -3,9 +3,9 @@ projects:
     name: The other half
     type: software
     status: active
-    id: 01a1e0fa-1715-74ec-8001-ac5048d054de
-    created_at: 2026-11-15T20:50:48.725Z
-    updated_at: 2026-11-15T20:50:48.725Z
+    id: 01a1e12c-17bb-741f-8d9e-feb974fdc486
+    created_at: 2026-11-15T21:45:25.691Z
+    updated_at: 2026-11-15T21:45:25.691Z
     areas: []
     items:
       - ref: OPS-1
@@ -13,14 +13,14 @@ projects:
         title: Host the server
         status: to-do
         sort_path: "000001"
-        id: 01a1e0fa-171c-754b-85ef-514d6f6ccfad
-        created_at: 2026-11-15T20:50:48.732Z
-        updated_at: 2026-11-15T20:50:48.732Z
+        id: 01a1e12c-17c3-754f-8a1b-31d2bbfa9c39
+        created_at: 2026-11-15T21:45:25.699Z
+        updated_at: 2026-11-15T21:45:25.699Z
       - ref: OPS-2
         area: OPS
         title: Sign people in
         status: to-do
         sort_path: "000002"
-        id: 01a1e0fa-1729-76d7-9d88-8acb33cc2e5e
-        created_at: 2026-11-15T20:50:48.745Z
-        updated_at: 2026-11-15T20:50:48.745Z
+        id: 01a1e12c-17d3-74f2-83ac-af7ae0fcb280
+        created_at: 2026-11-15T21:45:25.715Z
+        updated_at: 2026-11-15T21:45:25.715Z

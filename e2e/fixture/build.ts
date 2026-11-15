@@ -79,7 +79,17 @@ await addComment(db, { projectId: demo.id, itemId: prose!.id, body: "Moved to th
 await addComment(db, { projectId: demo.id, itemId: prose!.id, body: "Checked the markdown renders **bold**.", audience: "agent" }, ACTOR);
 
 // Two context sections (VIEW-30), `protocol` written second so the suite can see the viewer lists it first.
-await setSection(db, { projectId: demo.id, heading: "Goals", content: "Ship a **demo** plan the suite can render.\n\nOne section of prose, so the pane has markdown to show." }, ACTOR);
+await setSection(
+  db,
+  {
+    projectId: demo.id,
+    heading: "Goals",
+    content: "Ship a **demo** plan the suite can render.\n\nOne section of prose, so the pane has markdown to show [ref gl1].",
+    // A context section's references come through the bulk feed, unlike an item's (CTX-13).
+    sources: { gl1: { source: "docs", detail: "e2e/fixture/build.ts" } },
+  },
+  ACTOR,
+);
 await setSection(db, { projectId: demo.id, heading: "protocol", content: "Read the next list first." }, ACTOR);
 
 await saveStore(db, here("demo.apm.yaml"), new Set([demo.id]));

@@ -1075,7 +1075,9 @@ test.describe("source references in the pane (CTX-13)", () => {
     await expect(doc).toContainText("A TypeScript project with vite");
 
     // Numbered in reading order; the stored pointer never shows.
-    await expect(doc.locator(".ref-link")).toHaveText(["[1]", "[2]"]);
+    // The second claim was edited after its source, so its number asks the question without a click: [2?].
+    await expect(doc.locator(".ref-link")).toHaveText(["[1]", "[2?]"]);
+    await expect(doc.locator('.ref-link[data-doubt="true"]')).toHaveAttribute("title", /changed since its source/);
     await expect(doc).not.toContainText("[ref ");
 
     // The first still reads as its source vouched for: the source, and no "changed" note.
@@ -1087,7 +1089,7 @@ test.describe("source references in the pane (CTX-13)", () => {
     await expect(doc.locator(".ref-highlight")).toHaveCount(1);
 
     // The second was edited after its source: it says so, quoting what the source vouched for.
-    await doc.locator(".ref-link", { hasText: "[2]" }).click();
+    await doc.locator(".ref-link", { hasText: "[2?]" }).click();
     await expect(panel).toContainText("we are on node 20");
     await expect(panel.locator(".refs-panel__changed")).toContainText("The node version is 20");
 
@@ -1095,5 +1097,14 @@ test.describe("source references in the pane (CTX-13)", () => {
     await panel.locator(".refs-panel__close").click();
     await expect(page.locator(".refs-panel")).toHaveCount(0);
     await expect(doc.locator(".ref-highlight")).toHaveCount(0);
+  });
+
+  test("shows a context section's references the same way", async ({ page }) => {
+    await page.addInitScript(() => window.localStorage.clear());
+    await page.goto("/#demo/context:Goals");
+    const doc = page.locator(".detail__doc");
+    await expect(doc.locator(".ref-link")).toHaveText(["[1]"]);
+    await doc.locator(".ref-link").click();
+    await expect(page.locator(".refs-panel")).toContainText("e2e/fixture/build.ts");
   });
 });

@@ -239,6 +239,9 @@ interface StoreProject {
   layout?: Record<string, string>;
   /** Context sections, heading -> markdown, in the order the project chose (`VIEW-30`). */
   context?: Record<string, string>;
+  /** Source references in those sections (`CTX-13`), heading -> pointer key -> its sources, as the plan file holds
+   *  them. In the bulk feed beside the sections they explain, unlike an item's, which come with its body. */
+  context_references?: Record<string, Record<string, { source: string; detail: string; text: string; at: string; retired?: string }[]>>;
   /** The `areas` rows: a name and maybe a description, for the areas that have one (`VIEW-49`). */
   areas?: { key: string; name: string; description?: string }[];
 }
@@ -305,6 +308,8 @@ export interface ProjectPlan {
 export interface ContextSection {
   heading: string;
   content: string;
+  /** The live sources behind the section's pointers (`CTX-13`). */
+  references: ItemReference[];
 }
 
 /**
@@ -312,9 +317,15 @@ export interface ContextSection {
  * every session), then the rest as the project ordered them. Not special-cased out: it is a section like any
  * other, it just leads.
  */
-export const orderSections = (context: Record<string, string>): ContextSection[] =>
+export const orderSections = (context: Record<string, string>, references: StoreProject["context_references"] = {}): ContextSection[] =>
   Object.entries(context)
-    .map(([heading, content]) => ({ heading, content }))
+    .map(([heading, content]) => ({
+      heading,
+      content,
+      references: Object.entries(references[heading] ?? {}).flatMap(([key, rows]) =>
+        rows.filter((row) => row.retired === undefined).map((row) => ({ key, source: row.source, detail: row.detail, text: row.text, at: row.at })),
+      ),
+    }))
     .sort((a, b) => Number(b.heading === "protocol") - Number(a.heading === "protocol"));
 
 /** Every project in the served store. The viewer holds them all and switches between them client-side, because
@@ -383,7 +394,7 @@ export async function fetchPlan(): Promise<Plan> {
         }),
       ),
       metrics: groupBy(metrics?.[project.key] ?? [], (m) => m.ref ?? ""),
-      context: orderSections(project.context ?? {}),
+      context: orderSections(project.context ?? {}, project.context_references),
       file: files?.[project.key] ?? null,
       areaInfo: Object.fromEntries((project.areas ?? []).map((area) => [area.key, { name: area.name, description: area.description }])),
       areaOrder: areasOldestFirst(project.items),

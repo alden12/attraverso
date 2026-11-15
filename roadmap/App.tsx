@@ -15,10 +15,8 @@ import {
   type Edge,
   type ReactFlowInstance,
 } from "@xyflow/react";
-import ReactMarkdown from "react-markdown";
 import { Attachments } from "./Attachments";
 import { Metrics } from "./Metrics";
-import remarkGfm from "remark-gfm";
 // The plan is fetched at runtime and handed in by `main.tsx` (VIEW-11), so this component renders whichever
 // store was served to it rather than one baked into the bundle, and whichever project of it the URL asked
 // for (VIEW-4).
@@ -1551,9 +1549,10 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
                 <h2 className="detail__title">{contextView.heading}</h2>
                 {/* The item body's renderer, so a section reads the same wherever it is shown. */}
                 <div className="detail__doc">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {project.context.find((section) => section.heading === contextView.heading)?.content ?? "This section no longer exists."}
-                  </ReactMarkdown>
+                  {(() => {
+                    const section = project.context.find((candidate) => candidate.heading === contextView.heading);
+                    return section === undefined ? <p>This section no longer exists.</p> : <ReferencedBody body={section.content} references={section.references} />;
+                  })()}
                 </div>
               </>
             )}
