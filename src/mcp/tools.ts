@@ -21,6 +21,7 @@ import { countItems, createItem, deleteItem, editItem, getItem, getItemDetail, l
 import { dependencyRefsByItem } from "../domain/dependencies";
 import { addComment, deleteComment, editComment, listComments, shortCommentId, AUDIENCES, MAX_BODY, SHORT_ID, type Comment } from "../domain/comments";
 import { deleteSection, getSection, listSections, setSection, PROTOCOL_HEADING } from "../domain/context";
+import { expandPointers, fmtReferenceChanges, liveSources, SOURCE_KINDS } from "../domain/references";
 import { resumeProject, type ContextPack, type PackBoard } from "../domain/memory";
 import { setNext, type NextItem } from "../domain/next";
 import { listAreas, MAX_AREA_DESCRIPTION, MAX_AREA_NAME, setArea, type AreaSummary } from "../domain/areas";
@@ -92,6 +93,24 @@ const date = (what: string, more?: string) => z.string().describe(dateText(what,
  * a description set first lands on the string branch inside it, where a client showing the field never looks.
  */
 const clearableDate = (what: string) => z.string().nullable().describe(dateText(`${what}; null clears it`));
+
+/**
+ * Where claims in some prose came from (`CTX-13`), shared by every tool that writes prose. Kept to one parameter's
+ * description rather than a tool of its own, because every tool description sits in every conversation's context:
+ * this is the whole of the guidance, and it says once what the rest of the design does.
+ */
+const SOURCE = z.object({
+  source: z.enum(SOURCE_KINDS),
+  detail: z.string().describe("For user, their words verbatim; for test, the command; for search, the URL; for docs, the file or page."),
+});
+const SOURCES = z
+  .record(z.string(), z.union([SOURCE, z.array(SOURCE)]))
+  .describe(
+    "Where claims in this text came from, when it is more than your own reasoning. Write a pointer straight after the claim, like " +
+      '"Postgres 18.4 runs in production [ref pg18].", and give its sources here keyed by it: {"pg18": {"source": "test", "detail": "yarn cloud:check"}}. ' +
+      "Keys are short lowercase letters and digits. A key already in the text gains another source. Unreferenced text is yours by default, so reference only claims with a real source - above all facts about systems outside the repo.",
+  )
+  .optional();
 
 const DEPS = z
   .array(z.string())
@@ -748,12 +767,13 @@ export function registerTools(server: McpServer, db: Database, store: StoreAcces
         deps: DEPS,
         start: date("When work on it is planned to begin", "Optional; most items have no dates.").optional(),
         due: date("When it is due", "Optional; most items have no dates.").optional(),
+        sources: SOURCES,
       },
     },
-    async ({ project, area, parent, ref, title, body, status, deps, start, due }): Promise<CallToolResult> =>
+    async ({ project, area, parent, ref, title, body, status, deps, start, due, sources }): Promise<CallToolResult> =>
       guarded(async () => {
         const p = await resolveProject(db, caller, project);
-        const item = await createItem(db, { projectId: p.id, area, parent, ref, title, body, status, deps, start, due }, ACTOR);
+        const item = await createItem(db, { projectId: p.id, area, parent, ref, title, body, status, deps, start, due, sources }, ACTOR);
         await store.persist();
         return text(`created ${fmtItem(item)}${deps?.length ? `\ndepends on: ${deps.join(", ")}` : ""}`);
       }),
@@ -843,14 +863,21 @@ export function registerTools(server: McpServer, db: Database, store: StoreAcces
     {
       annotations: READ,
       description:
-        "Read one item in full by its ref: status, title, dependencies, its body (the prose the viewer's detail pane shows), and any comments recorded against it. Use list_items to find the ref.",
-      inputSchema: { project: z.string(), ref: z.string() },
+        "Read one item in full by its ref: status, title, dependencies, its body (the prose the viewer's detail pane shows), and any comments recorded against it. Use list_items to find the ref. " +
+        "A claim followed by [ref key: ...] has sources, named with their dates; \"text changed since\" means the claim was edited after its source vouched for it.",
+      inputSchema: {
+        project: z.string(),
+        ref: z.string(),
+        references: z.enum(["full"]).describe('"full" includes every source\'s detail, however long; otherwise only short ones are shown.').optional(),
+      },
     },
-    async ({ project, ref }): Promise<CallToolResult> =>
+    async ({ project, ref, references }): Promise<CallToolResult> =>
       guarded(async () => {
         const p = await resolveProject(db, caller, project);
-        const detail = await getItemDetail(db, p.id, ref);
-        if (detail === null) throw await noSuchRef(db, p, ref);
+        const found = await getItemDetail(db, p.id, ref);
+        if (found === null) throw await noSuchRef(db, p, ref);
+        // Pointers expanded in place, in the reply only (`CTX-13`): where a claim came from, beside the claim.
+        const detail = found.item.body === null ? found : { ...found, item: { ...found.item, body: expandPointers(found.item.body, await liveSources(db, { itemId: found.item.id }), references === "full") } };
         // Prose, and deliberately **not** an `outputSchema` (`MCP-26`). One was tried here on 2026-09-01 and
         // reverted once the measurement came in: declaring a schema does not add structure alongside the text,
         // it *replaces* it, and this reply is a document rather than a record - a body of markdown, meant to be
@@ -894,9 +921,10 @@ export function registerTools(server: McpServer, db: Database, store: StoreAcces
         deps: DEPS,
         start: clearableDate("When work on it is planned to begin").optional(),
         due: clearableDate("When it is due").optional(),
+        sources: SOURCES,
       },
     },
-    async ({ project, ref, title, body, deps, start, due }): Promise<CallToolResult> =>
+    async ({ project, ref, title, body, deps, start, due, sources }): Promise<CallToolResult> =>
       guarded(async () => {
         const p = await resolveProject(db, caller, project);
         await resolveRef(db, p, ref);
@@ -906,9 +934,12 @@ export function registerTools(server: McpServer, db: Database, store: StoreAcces
         // wrong thing to suggest, and an unresolved one is valid by design. `setDependencies` owns that case,
         // including the error for a scoped ref whose project *is* loaded and lacks it.
         for (const dep of deps ?? []) if (splitScope(dep) === null) await resolveRef(db, p, dep);
-        const item = await editItem(db, { projectId: p.id, ref, title, body, deps, start, due }, ACTOR);
+        const item = await editItem(db, { projectId: p.id, ref, title, body, deps, start, due, sources }, ACTOR);
         await store.persist();
-        return text(`edited ${fmtItem(item)}${deps ? `\ndepends on: ${deps.length ? deps.join(", ") : "(nothing)"}` : ""}`);
+        return text(
+          `edited ${fmtItem(item)}${deps ? `\ndepends on: ${deps.length ? deps.join(", ") : "(nothing)"}` : ""}` +
+            `${sources ? `\nsources added to: ${Object.keys(sources).sort().join(", ")}` : ""}${fmtReferenceChanges(item.referenceChanges)}`,
+        );
       }),
   );
 
@@ -1072,7 +1103,7 @@ export function registerTools(server: McpServer, db: Database, store: StoreAcces
         const p = await resolveProject(db, caller, project);
         const section = await getSection(db, p.id, heading);
         if (section === null) throw await noSuchSection(db, p, heading);
-        return text(`### ${section.heading}\n${section.content}`);
+        return text(`### ${section.heading}\n${expandPointers(section.content, await liveSources(db, { sectionId: section.id }))}`);
       }),
   );
 
@@ -1092,20 +1123,21 @@ export function registerTools(server: McpServer, db: Database, store: StoreAcces
           .string()
           .describe('Place this section immediately after the named one. Pass "" to put it first. Omit to append, or to leave an existing section where it is.')
           .optional(),
+        sources: SOURCES,
       },
     },
-    async ({ project, heading, content, after }): Promise<CallToolResult> =>
+    async ({ project, heading, content, after, sources }): Promise<CallToolResult> =>
       guarded(async () => {
         const p = await resolveProject(db, caller, project);
         // "" means first, which the tool schema spells that way because a JSON Schema optional cannot
         // distinguish "omitted" from "null" for a model, and those mean different things here.
         const placement = after === undefined ? undefined : after === "" ? null : after;
-        const section = await setSection(db, { projectId: p.id, heading, content, after: placement }, ACTOR);
+        const section = await setSection(db, { projectId: p.id, heading, content, after: placement, sources }, ACTOR);
         await store.persist();
         // Echo the resulting order, not just the heading: placement is derived state, and a reply that changes
         // it should state it (MCP-21).
         const order = (await listSections(db, p.id)).map((s) => s.heading);
-        return text(`set context section "${section.heading}"\norder: ${order.join(" -> ")}`);
+        return text(`set context section "${section.heading}"\norder: ${order.join(" -> ")}${fmtReferenceChanges(section.referenceChanges)}`);
       }),
   );
 

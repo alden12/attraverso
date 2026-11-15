@@ -14,7 +14,8 @@ import type { OwnedProjectId } from "./owned";
 import { mutate, type Actor } from "./events";
 import { dependencyRefs, setDependencies } from "./dependencies";
 import { listComments, type Comment } from "./comments";
-import { retireRemovedPointers } from "./references";
+import { addSources, liveSources, referenceChanges, retireRemovedPointers, type ReferenceChange, type SourcesInput } from "./references";
+import { bareForm } from "../../scripts/references";
 import { areaOf, isCalendarDate, isRef, parentRef, STATUSES, type Status } from "../../scripts/tickets";
 
 export type Item = typeof items.$inferSelect;
@@ -138,6 +139,8 @@ export interface NewItem {
   /** Planned dates, `YYYY-MM-DD` (`CAL-1`). Both optional: an undated item is the normal case. */
   start?: string | null;
   due?: string | null;
+  /** Sources for claims in the body, keyed by the pointer written after each (`CTX-13`). */
+  sources?: SourcesInput;
 }
 
 export async function createItem(db: Database, input: NewItem, actor: Actor): Promise<Item> {
@@ -151,12 +154,14 @@ export async function createItem(db: Database, input: NewItem, actor: Actor): Pr
     const item = one(
       await tx
         .insert(items)
-        .values({ projectId: input.projectId, ref, areaKey: area, sortPath: path, parentId, title: input.title, body: input.body ?? null, status, startOn, dueOn })
+        // Pointers are stored bare (`CTX-13`): an expanded `[ref k: ...]` copied from a reply is display, not data.
+        .values({ projectId: input.projectId, ref, areaKey: area, sortPath: path, parentId, title: input.title, body: input.body === undefined ? null : bareForm(input.body), status, startOn, dueOn })
         .returning(),
     );
     // After the insert, so a pair of tickets created together can reference each other and so the cycle check
     // sees the finished row rather than a graph the new item is not in yet.
     if (input.deps && input.deps.length > 0) await setDependencies(tx, item, input.deps);
+    if (input.sources !== undefined) await addSources(tx, input.projectId, { itemId: item.id }, item.body ?? "", input.sources, actor);
     return { result: item, event: { projectId: input.projectId, entityType: "item", entityId: item.id, kind: "created", after: item } };
   });
 }
@@ -301,34 +306,42 @@ export interface EditItem {
   /** Planned dates (`CAL-1`): a `YYYY-MM-DD` sets one, `null` clears it, absent leaves it alone. */
   start?: string | null;
   due?: string | null;
+  /** Sources to add to claims in the body, keyed by pointer (`CTX-13`): a new reference, or more behind an old one. */
+  sources?: SourcesInput;
 }
+
+/** The edited item, and what the edit did to its sourced claims, for the writer's reply (`CTX-13`). */
+export type EditedItem = Item & { referenceChanges: ReferenceChange[] };
 
 /** Revise a ticket's title, body, dependencies and/or planned dates. Status has its own path (`setStatus`), so this never
  *  touches it; at least one field must be given. The whole before/after is logged, so the edit is auditable
  *  and reversible like any other mutation. */
-export async function editItem(db: Database, input: EditItem, actor: Actor): Promise<Item> {
-  if (input.title === undefined && input.body === undefined && input.deps === undefined && input.start === undefined && input.due === undefined) {
-    throw new Error("nothing to edit: provide a title, body, deps, start and/or due");
+export async function editItem(db: Database, input: EditItem, actor: Actor): Promise<EditedItem> {
+  if (input.title === undefined && input.body === undefined && input.deps === undefined && input.start === undefined && input.due === undefined && input.sources === undefined) {
+    throw new Error("nothing to edit: provide a title, body, deps, start, due and/or sources");
   }
   return mutate(db, actor, async (tx) => {
     const before = maybeOne(await tx.select().from(items).where(and(eq(items.projectId, input.projectId), eq(items.ref, input.ref))));
     if (before === null) throw new Error(`no ticket "${input.ref}" in this project`);
     const changes: Partial<typeof items.$inferInsert> = { updatedAt: timestamp() };
     if (input.title !== undefined) changes.title = input.title;
-    if (input.body !== undefined) changes.body = input.body;
+    if (input.body !== undefined) changes.body = bareForm(input.body);
     if (input.start !== undefined) changes.startOn = input.start;
     if (input.due !== undefined) changes.dueOn = input.due;
     assertDates(input.start === undefined ? before.startOn : input.start, input.due === undefined ? before.dueOn : input.due);
     const after = one(await tx.update(items).set(changes).where(eq(items.id, before.id)).returning());
     // A body edit that removed a reference's pointer retires that reference with it (`CTX-13`), so the commit-time
     // check is satisfied and the reference's history records when its claim went.
-    const retiredReferences = input.body === undefined ? [] : await retireRemovedPointers(tx, { itemId: before.id }, input.body);
+    const sourcesBefore = input.body === undefined ? [] : await liveSources(tx, { itemId: before.id });
+    const retiredReferences = input.body === undefined ? [] : await retireRemovedPointers(tx, { itemId: before.id }, after.body ?? "");
+    if (input.sources !== undefined) await addSources(tx, input.projectId, { itemId: before.id }, after.body ?? "", input.sources, actor);
+    const changedReferences = input.body === undefined ? [] : referenceChanges(before.body ?? "", after.body ?? "", sourcesBefore);
     // Dep refs ride along in the event payload when they changed, because the item row does not carry them:
     // without this a deps-only edit logs a before and after that differ by nothing but `updated_at`.
     const beforeDeps = input.deps === undefined ? undefined : await dependencyRefs(tx, before.id);
     const afterDeps = input.deps === undefined ? undefined : await setDependencies(tx, before, input.deps);
     return {
-      result: after,
+      result: { ...after, referenceChanges: changedReferences },
       event: {
         projectId: input.projectId,
         entityType: "item",

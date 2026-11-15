@@ -8,11 +8,11 @@
  * true for every tool write by retiring, in the same transaction, the references whose pointers an edit removed;
  * the trigger is the backstop for every other path.
  */
-import { and, eq, isNull } from "drizzle-orm";
-import type { Tx } from "../db/client";
+import { and, asc, eq, isNull, sql } from "drizzle-orm";
+import type { Database, Tx } from "../db/client";
 import { sourceReferences } from "../db/schema";
 import { timestamp } from "../db/ids";
-import { parsePointers } from "../../scripts/references";
+import { normaliseClaim, parsePointers } from "../../scripts/references";
 
 /**
  * Whether `text` carries the pointer for `key`: `[ref key]`, or the expanded `[ref key: ...]` that `get_item` returns
@@ -49,4 +49,170 @@ export async function retireRemovedPointers(tx: Tx, owner: ReferenceOwner, text:
       .where(and(ownedBy, eq(sourceReferences.key, key), isNull(sourceReferences.retiredAt)));
   }
   return gone;
+}
+
+/** Where a claim's source can come from. `agent` is the default for anything unreferenced and is never written. */
+export const SOURCE_KINDS = ["user", "test", "search", "docs"] as const;
+export type SourceKind = (typeof SOURCE_KINDS)[number];
+
+/** A source to add: the kind, and its detail - the command, URL or file, or for `user` the words verbatim. */
+export interface NewSource {
+  source: SourceKind;
+  detail: string;
+}
+
+/** Sources to add, keyed by the pointer the writer put after each claim. */
+export type SourcesInput = Record<string, NewSource | NewSource[]>;
+
+/** One source as a reader needs it. */
+export interface ReferenceSource {
+  key: string;
+  source: string;
+  detail: string;
+  quotedText: string;
+  recordedAt: string;
+}
+
+/** A different advisory-lock namespace from ref allocation's, so the two never queue behind each other. */
+const REFERENCE_LOCK = 7_172_013;
+
+/**
+ * Add sources to the references in `text`, after it has been written, inside the writing transaction.
+ *
+ * Each key must have its pointer in the text - the source stands behind *that* claim, and records the text it
+ * covers now as what it vouched for - and must not be live under another owner. Serialised per project by an
+ * advisory lock, because "one key, one owner" is a read-then-write: under READ COMMITTED two writers giving one
+ * key to different items at once would both pass the check (found in the `CTX-13` spike, the same race `OPS-2`
+ * fixed for ref allocation). The commit-time trigger would still refuse the second, but as a bare failure; the
+ * lock turns it into a named one.
+ */
+export async function addSources(
+  tx: Tx,
+  projectId: string,
+  owner: ReferenceOwner,
+  text: string,
+  sources: SourcesInput,
+  actor: string,
+): Promise<string[]> {
+  const keys = Object.keys(sources);
+  if (keys.length === 0) return [];
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(${REFERENCE_LOCK}, hashtext(${projectId}))`);
+  const covers = new Map(parsePointers(text).pointers.map((p) => [p.key, p.covers]));
+  const ownerId = "itemId" in owner ? owner.itemId : owner.sectionId;
+  const rows: (typeof sourceReferences.$inferInsert)[] = [];
+  for (const key of keys) {
+    const claim = covers.get(key);
+    if (claim === undefined) throw new Error(`no [ref ${key}] in the text: write it straight after the claim it stands behind, as [ref ${key}]`);
+    if (claim === "") throw new Error(`[ref ${key}] has no claim before it: put it straight after the sentence it stands behind`);
+    const elsewhere = await tx
+      .select({ itemId: sourceReferences.itemId, sectionId: sourceReferences.sectionId })
+      .from(sourceReferences)
+      .where(and(eq(sourceReferences.projectId, projectId), eq(sourceReferences.key, key), isNull(sourceReferences.retiredAt)));
+    if (elsewhere.some((row) => (row.itemId ?? row.sectionId) !== ownerId)) {
+      throw new Error(`reference ${key} already stands behind a claim elsewhere in this project: choose another key`);
+    }
+    for (const source of [sources[key]!].flat()) {
+      if (!(SOURCE_KINDS as readonly string[]).includes(source.source)) {
+        throw new Error(`"${source.source}" is not a source: use one of ${SOURCE_KINDS.join(", ")} (unreferenced text is your own reasoning)`);
+      }
+      if (source.detail.trim() === "") throw new Error(`a ${source.source} source needs its detail: the command, URL or file, or the user's words verbatim`);
+      rows.push({
+        projectId,
+        key,
+        itemId: "itemId" in owner ? owner.itemId : null,
+        sectionId: "sectionId" in owner ? owner.sectionId : null,
+        source: source.source,
+        detail: source.detail.trim(),
+        quotedText: claim,
+        actor,
+      });
+    }
+  }
+  await tx.insert(sourceReferences).values(rows);
+  return keys.sort();
+}
+
+/** The live sources behind an owner's references, oldest first within each key. */
+export async function liveSources(db: Database | Tx, owner: ReferenceOwner): Promise<ReferenceSource[]> {
+  const ownedBy = "itemId" in owner ? eq(sourceReferences.itemId, owner.itemId) : eq(sourceReferences.sectionId, owner.sectionId);
+  return db
+    .select({
+      key: sourceReferences.key,
+      source: sourceReferences.source,
+      detail: sourceReferences.detail,
+      quotedText: sourceReferences.quotedText,
+      recordedAt: sourceReferences.recordedAt,
+    })
+    .from(sourceReferences)
+    .where(and(ownedBy, isNull(sourceReferences.retiredAt)))
+    .orderBy(asc(sourceReferences.key), asc(sourceReferences.recordedAt), asc(sourceReferences.id));
+}
+
+/** Details longer than this are left out of an expanded pointer: a command or a file fits, a URL cut short is noise. */
+const SHORT_DETAIL = 40;
+
+/**
+ * The text a reader is given: every pointer expanded in place with its sources, so an agent sees where a claim
+ * came from beside the claim, at the moment it reads it, without another call. Never stored - writing reduces it
+ * back with `bareForm` - and in the reply only.
+ *
+ * `[ref r7k2: search 2026-08-10, test 2026-08-13 yarn cloud:check, text changed since]` - each source's kind and
+ * date, its detail when short (or always, with `full`), and `text changed since` when a source vouched for words
+ * the claim no longer says. A pointer with nothing behind it says so, rather than passing as backed.
+ */
+export function expandPointers(text: string, sources: ReferenceSource[], full = false): string {
+  const byKey = new Map<string, ReferenceSource[]>();
+  for (const s of sources) byKey.set(s.key, [...(byKey.get(s.key) ?? []), s]);
+  const { pointers } = parsePointers(text);
+  let out = "";
+  let last = 0;
+  for (const p of pointers.sort((a, b) => a.at - b.at)) {
+    const behind = byKey.get(p.key) ?? [];
+    const parts = behind.map((s) => {
+      const detail = s.source === "user" ? `"${s.detail}"` : s.detail;
+      return full || detail.length <= SHORT_DETAIL ? `${s.source} ${s.recordedAt.slice(0, 10)} ${detail}` : `${s.source} ${s.recordedAt.slice(0, 10)}`;
+    });
+    if (behind.length === 0) parts.push("no reference behind it");
+    else if (behind.some((s) => normaliseClaim(s.quotedText) !== p.covers)) parts.push("text changed since");
+    out += text.slice(last, p.at) + `[ref ${p.key}: ${parts.join(", ")}]`;
+    last = p.at + p.written.length;
+  }
+  return out + text.slice(last);
+}
+
+/** What an edit did to one sourced claim, for the writer's reply. */
+export type ReferenceChange =
+  | { key: string; kind: "changed"; sources: string; before: string; after: string }
+  | { key: string; kind: "retired"; sources: string };
+
+/**
+ * The sourced claims an edit touched, old text against new, so the writer sees them in the same reply rather than
+ * finding out on the next read. Nothing is refused: a changed claim keeps its sources and will read "text changed
+ * since"; a removed pointer has already been retired.
+ */
+export function referenceChanges(before: string, after: string, sources: ReferenceSource[]): ReferenceChange[] {
+  const was = new Map(parsePointers(before).pointers.map((p) => [p.key, p.covers]));
+  const now = new Map(parsePointers(after).pointers.map((p) => [p.key, p.covers]));
+  const keys = [...new Set(sources.map((s) => s.key))].sort();
+  return keys.flatMap((key): ReferenceChange[] => {
+    const summary = sources
+      .filter((s) => s.key === key)
+      .map((s) => `${s.source} ${s.recordedAt.slice(0, 10)}`)
+      .join(", ");
+    if (!now.has(key)) return was.has(key) ? [{ key, kind: "retired", sources: summary }] : [];
+    const before = was.get(key);
+    const after = now.get(key)!;
+    return before !== undefined && before !== after ? [{ key, kind: "changed", sources: summary, before, after }] : [];
+  });
+}
+
+/** The changes as lines for a tool reply. Empty when nothing sourced was touched, so a reply stays as it was. */
+export function fmtReferenceChanges(changes: ReferenceChange[]): string {
+  if (changes.length === 0) return "";
+  const lines = changes.map((c) =>
+    c.kind === "retired"
+      ? `- ${c.key} (${c.sources}): pointer removed, so its sources were retired`
+      : `- ${c.key} (${c.sources}): "${c.before}" -> "${c.after}". Kept; reads "text changed since" until a source is added for the new text`,
+  );
+  return `\nsourced claims you changed:\n${lines.join("\n")}`;
 }

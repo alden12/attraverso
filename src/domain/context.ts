@@ -11,7 +11,8 @@ import { maybeOne, one } from "../db/rows";
 import { contextSections } from "../db/schema";
 import type { OwnedProjectId } from "./owned";
 import { mutate, type Actor } from "./events";
-import { retireRemovedPointers } from "./references";
+import { addSources, liveSources, referenceChanges, retireRemovedPointers, type ReferenceChange, type SourcesInput } from "./references";
+import { bareForm } from "../../scripts/references";
 
 export type ContextSection = typeof contextSections.$inferSelect;
 
@@ -36,7 +37,12 @@ export interface SetSection {
   /** Place this section immediately after the named one, or at the front when `null` (CTX-11). Resolved to a
    *  `sortOrder` here rather than by the caller - see `orderAfter`. */
   after?: string | null;
+  /** Sources for claims in the content, keyed by pointer (`CTX-13`). */
+  sources?: SourcesInput;
 }
+
+/** The section as written, and what the write did to its sourced claims (`CTX-13`). */
+export type SetSectionResult = ContextSection & { referenceChanges: ReferenceChange[] };
 
 /**
  * The `sortOrder` that puts a section immediately after `heading` (or first, when `heading` is null).
@@ -80,7 +86,9 @@ async function orderAfter(tx: Tx, projectId: OwnedProjectId, after: string | nul
   return index * 16 + 8;
 }
 
-export async function setSection(db: Database, input: SetSection, actor: Actor): Promise<ContextSection> {
+export async function setSection(db: Database, input: SetSection, actor: Actor): Promise<SetSectionResult> {
+  // Pointers are stored bare (`CTX-13`): an expanded `[ref k: ...]` copied from a reply is display, not data.
+  const content = bareForm(input.content);
   return mutate(db, actor, async (tx) => {
     const existing = maybeOne(
       await tx.select().from(contextSections).where(and(eq(contextSections.projectId, input.projectId), eq(contextSections.heading, input.heading))),
@@ -96,17 +104,19 @@ export async function setSection(db: Database, input: SetSection, actor: Actor):
     const after = one(
       await tx
         .insert(contextSections)
-        .values({ projectId: input.projectId, heading: input.heading, content: input.content, sortOrder: order, createdAt: now, updatedAt: now })
+        .values({ projectId: input.projectId, heading: input.heading, content, sortOrder: order, createdAt: now, updatedAt: now })
         .onConflictDoUpdate({
           target: [contextSections.projectId, contextSections.heading],
-          set: { content: input.content, sortOrder: order, updatedAt: now },
+          set: { content, sortOrder: order, updatedAt: now },
         })
         .returning(),
     );
     // As for an item body (`CTX-13`): a reference whose pointer this content no longer carries is retired with it.
-    const retiredReferences = existing ? await retireRemovedPointers(tx, { sectionId: after.id }, input.content) : [];
+    const sourcesBefore = existing ? await liveSources(tx, { sectionId: after.id }) : [];
+    const retiredReferences = existing ? await retireRemovedPointers(tx, { sectionId: after.id }, content) : [];
+    if (input.sources !== undefined) await addSources(tx, input.projectId, { sectionId: after.id }, content, input.sources, actor);
     return {
-      result: after,
+      result: { ...after, referenceChanges: existing ? referenceChanges(existing.content, content, sourcesBefore) : [] },
       event: {
         projectId: input.projectId,
         entityType: "context_section",
