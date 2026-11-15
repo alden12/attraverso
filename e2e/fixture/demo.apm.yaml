@@ -3,9 +3,9 @@ projects:
     name: Demo plan
     type: software
     status: active
-    id: 01a169c5-05ac-7258-a1c5-489951bd9242
-    created_at: 2026-10-23T17:18:02.156Z
-    updated_at: 2026-10-23T17:18:02.156Z
+    id: 01a1e0fa-172c-713d-964f-2660214715bc
+    created_at: 2026-11-15T20:50:48.748Z
+    updated_at: 2026-11-15T20:50:48.748Z
     context:
       Goals: |-
         Ship a **demo** plan the suite can render.
@@ -22,18 +22,18 @@ projects:
         deps:
           - PLAT-1
         body: Drizzle ORM over PGlite locally and server Postgres in the cloud, behind one small interface.
-        id: 01a169c5-05b2-7157-ba5e-9a2d674af28d
-        created_at: 2026-10-23T17:18:02.162Z
-        updated_at: 2026-10-23T17:18:02.200Z
-        closed_at: 2026-10-23T17:18:02.200Z
+        id: 01a1e0fa-174e-71c3-a55d-e9eba222adfe
+        created_at: 2026-11-15T20:50:48.782Z
+        updated_at: 2026-11-15T20:50:48.871Z
+        closed_at: 2026-11-15T20:50:48.871Z
       - ref: DATA-2
         area: DATA
         title: Migrations
         status: to-do
         sort_path: "000002"
-        id: 01a169c5-05b9-7714-95d1-246e0ac353ea
-        created_at: 2026-10-23T17:18:02.169Z
-        updated_at: 2026-10-23T17:18:02.169Z
+        id: 01a1e0fa-175c-7047-9260-56de6c27b1c8
+        created_at: 2026-11-15T20:50:48.796Z
+        updated_at: 2026-11-15T20:50:48.796Z
       - ref: DATA-3
         area: DATA
         title: The plan as YAML
@@ -43,9 +43,9 @@ projects:
           - DATA-1
           - DATA-2
         body: Deterministic export, so a change is a one-line diff.
-        id: 01a169c5-05ba-711b-ab99-c7e5d72fbc89
-        created_at: 2026-10-23T17:18:02.170Z
-        updated_at: 2026-10-23T17:18:02.202Z
+        id: 01a1e0fa-1760-73e4-a416-8bc4b9abc129
+        created_at: 2026-11-15T20:50:48.800Z
+        updated_at: 2026-11-15T20:50:48.873Z
       - ref: DATA-4
         area: DATA
         title: Full-text search
@@ -53,9 +53,9 @@ projects:
         sort_path: "000004"
         deps:
           - DATA-1
-        id: 01a169c5-05bf-77ce-87a8-65343980c0cb
-        created_at: 2026-10-23T17:18:02.175Z
-        updated_at: 2026-10-23T17:18:02.175Z
+        id: 01a1e0fa-176b-72ab-94f3-68a11038021d
+        created_at: 2026-11-15T20:50:48.811Z
+        updated_at: 2026-11-15T20:50:48.811Z
       - ref: DATA-5
         area: DATA
         title: Round-trip the plan
@@ -64,18 +64,18 @@ projects:
         deps:
           - DATA-3
         body: Export, import and export again, byte for byte.
-        id: 01a169c5-05c3-7562-a0fc-3cb56af68013
-        created_at: 2026-10-23T17:18:02.179Z
-        updated_at: 2026-10-23T17:18:02.179Z
+        id: 01a1e0fa-1775-755d-a23d-4c5750a8d466
+        created_at: 2026-11-15T20:50:48.821Z
+        updated_at: 2026-11-15T20:50:48.821Z
       - ref: DATA-6
         area: DATA
         title: A ticket that was withdrawn
         status: to-do
         sort_path: "000006"
-        id: 01a169c5-05c8-7574-ac90-1ae4c2caf75c
-        created_at: 2026-10-23T17:18:02.184Z
-        updated_at: 2026-10-23T17:18:02.205Z
-        deleted_at: 2026-10-23T17:18:02.205Z
+        id: 01a1e0fa-177e-7071-a147-10636cbfe085
+        created_at: 2026-11-15T20:50:48.830Z
+        updated_at: 2026-11-15T20:50:48.881Z
+        deleted_at: 2026-11-15T20:50:48.881Z
       - ref: MCP-1
         area: MCP
         title: Serve the tools over stdio
@@ -85,36 +85,51 @@ projects:
           - DATA-1
           - other:OPS-1
           - other:OPS-2
-        id: 01a169c5-05d1-76b9-bed1-4612fb662a3a
-        created_at: 2026-10-23T17:18:02.193Z
-        updated_at: 2026-10-23T17:18:02.193Z
+        id: 01a1e0fa-1797-71c6-9bd9-49c3dfbac58b
+        created_at: 2026-11-15T20:50:48.855Z
+        updated_at: 2026-11-15T20:50:48.855Z
       - ref: PLAT-1
         area: PLAT
         title: Scaffold the repo
         status: done
         sort_path: "000001"
-        body: A TypeScript project with vite, vitest and one `verify`.
-        id: 01a169c5-05ae-70ed-aa39-5aed1bb81d17
-        created_at: 2026-10-23T17:18:02.158Z
-        updated_at: 2026-10-23T17:18:02.198Z
-        closed_at: 2026-10-23T17:18:02.198Z
+        body: A TypeScript project with vite, vitest and one `verify` [ref ts1]. The node version is 22 [ref nv1].
+        id: 01a1e0fa-1730-711b-bfc7-de46a4764c35
+        created_at: 2026-11-15T20:50:48.752Z
+        updated_at: 2026-11-15T20:50:48.868Z
+        closed_at: 2026-11-15T20:50:48.868Z
+        references:
+          nv1:
+            - source: user
+              detail: we are on node 20
+              text: The node version is 20
+              id: 01a1e0fa-1736-7097-b637-714d9a5c8589
+              at: 2026-11-15T20:50:48.758Z
+              actor: fixture
+          ts1:
+            - source: docs
+              detail: package.json
+              text: A TypeScript project with vite, vitest and one `verify`
+              id: 01a1e0fa-1736-7097-b637-6d946e4e6ad2
+              at: 2026-11-15T20:50:48.758Z
+              actor: fixture
       - ref: PLAT-2
         area: PLAT
         title: Run CI on every pull request
         status: to-do
         sort_path: "000002"
-        id: 01a169c5-05b0-70a8-b34c-c3e4179b82f7
-        created_at: 2026-10-23T17:18:02.160Z
-        updated_at: 2026-10-23T17:18:02.160Z
+        id: 01a1e0fa-174a-7111-b251-13f567c3f265
+        created_at: 2026-11-15T20:50:48.778Z
+        updated_at: 2026-11-15T20:50:48.778Z
       - ref: VIEW-1
         area: VIEW
         title: The graph viewer
         status: to-do
         sort_path: "000001"
         body: "A parent: its children are drawn inside its box."
-        id: 01a169c5-05c9-704a-ba01-97cdfbb78938
-        created_at: 2026-10-23T17:18:02.185Z
-        updated_at: 2026-10-23T17:18:02.185Z
+        id: 01a1e0fa-1783-7248-b716-356af4a06233
+        created_at: 2026-11-15T20:50:48.835Z
+        updated_at: 2026-11-15T20:50:48.835Z
       - ref: VIEW-1.1
         area: VIEW
         title: Lay out the graph
@@ -123,26 +138,26 @@ projects:
         parent: VIEW-1
         deps:
           - DATA-3
-        id: 01a169c5-05cb-712d-ad60-fc2ec0ec02a2
-        created_at: 2026-10-23T17:18:02.187Z
-        updated_at: 2026-10-23T17:18:02.203Z
+        id: 01a1e0fa-1787-70e1-8a0c-0ffacf0cd4db
+        created_at: 2026-11-15T20:50:48.839Z
+        updated_at: 2026-11-15T20:50:48.876Z
       - ref: VIEW-1.2
         area: VIEW
         title: Show an item's prose
         status: to-do
         sort_path: "000001.000002"
         parent: VIEW-1
-        id: 01a169c5-05cf-70bd-9a11-692f05bba6aa
-        created_at: 2026-10-23T17:18:02.191Z
-        updated_at: 2026-10-23T17:18:02.191Z
+        id: 01a1e0fa-1794-71c0-a555-a29e93b3df1b
+        created_at: 2026-11-15T20:50:48.852Z
+        updated_at: 2026-11-15T20:50:48.852Z
         comments:
           - body: Moved to the pane so the graph stays readable.
             audience: user
-            id: 019a7e10-0000-7000-8000-000000000001
-            at: 2026-11-01T10:00:00.000Z
+            id: 01a1e0fa-17b5-7490-9e55-23375ba0bc6c
+            at: 2026-11-15T20:50:48.885Z
             actor: fixture
           - body: Checked the markdown renders **bold**.
             audience: agent
-            id: 019a7e10-0000-7000-8000-000000000002
-            at: 2026-11-02T10:00:00.000Z
+            id: 01a1e0fa-17b8-77e4-ad17-921e0204b823
+            at: 2026-11-15T20:50:48.888Z
             actor: fixture

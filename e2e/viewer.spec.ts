@@ -1066,3 +1066,34 @@ test.describe("an item's comments in the pane (VIEW-5, VIEW-29)", () => {
     expect(itemFetched).toBe(true);
   });
 });
+
+test.describe("source references in the pane (CTX-13)", () => {
+  test("shows a claim's references as numbers, and its sources and highlight on a click", async ({ page }) => {
+    await page.addInitScript(() => window.localStorage.clear());
+    await page.goto("/#demo/PLAT-1");
+    const doc = page.locator(".detail__doc");
+    await expect(doc).toContainText("A TypeScript project with vite");
+
+    // Numbered in reading order; the stored pointer never shows.
+    await expect(doc.locator(".ref-link")).toHaveText(["[1]", "[2]"]);
+    await expect(doc).not.toContainText("[ref ");
+
+    // The first still reads as its source vouched for: the source, and no "changed" note.
+    await doc.locator(".ref-link", { hasText: "[1]" }).click();
+    const panel = page.locator(".refs-panel");
+    await expect(panel).toContainText("docs");
+    await expect(panel).toContainText("package.json");
+    await expect(panel.locator(".refs-panel__changed")).toHaveCount(0);
+    await expect(doc.locator(".ref-highlight")).toHaveCount(1);
+
+    // The second was edited after its source: it says so, quoting what the source vouched for.
+    await doc.locator(".ref-link", { hasText: "[2]" }).click();
+    await expect(panel).toContainText("we are on node 20");
+    await expect(panel.locator(".refs-panel__changed")).toContainText("The node version is 20");
+
+    // And closes again, taking the highlight with it.
+    await panel.locator(".refs-panel__close").click();
+    await expect(page.locator(".refs-panel")).toHaveCount(0);
+    await expect(doc.locator(".ref-highlight")).toHaveCount(0);
+  });
+});

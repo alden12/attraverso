@@ -215,7 +215,8 @@ export function asPlan(store: Store): Store {
       return {
         ...rest,
         next: project.next?.filter((ref) => actionable.has(ref)),
-        items: live.map(({ body: _body, comments: _comments, notes: _notes, attachments: _attachments, ...item }) => ({
+        // An item's source references (`CTX-13`) are the pane's too: they explain its body, which travels with them.
+        items: live.map(({ body: _body, comments: _comments, notes: _notes, attachments: _attachments, references: _references, ...item }) => ({
           ...item,
           // A scoped ref (`PROJ-11`) names an item in another project, so `present` never holds it: keeping it
           // is the point, since an unresolved edge is what the viewer draws as a placeholder.

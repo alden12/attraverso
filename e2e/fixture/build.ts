@@ -14,7 +14,8 @@
  */
 import { fileURLToPath } from "node:url";
 import { createInMemoryDb } from "../../src/db/memory";
-import { createItem, deleteItem, getItem, setStatus } from "../../src/domain/items";
+import { createItem, deleteItem, editItem, getItem, setStatus } from "../../src/domain/items";
+import type { SourcesInput } from "../../src/domain/references";
 import { addComment } from "../../src/domain/comments";
 import { createProject } from "../../src/domain/projects";
 import { setSection } from "../../src/domain/context";
@@ -32,10 +33,22 @@ await createItem(db, { projectId: other.id, area: "OPS", title: "Host the server
 await createItem(db, { projectId: other.id, area: "OPS", title: "Sign people in" }, ACTOR);
 
 const demo = await createProject(db, { key: "demo", name: "Demo plan", type: "software", ownerId }, ACTOR);
-const item = (input: { area?: string; parent?: string; title: string; body?: string; deps?: string[] }) =>
+const item = (input: { area?: string; parent?: string; title: string; body?: string; deps?: string[]; sources?: SourcesInput }) =>
   createItem(db, { projectId: demo.id, ...input }, ACTOR);
 
-await item({ area: "PLAT", title: "Scaffold the repo", body: "A TypeScript project with vite, vitest and one `verify`." });
+// Two source references (CTX-13): one whose claim still reads as its source vouched for, and one edited since, so
+// the pane has a plain reference and a "changed since" one to show.
+await item({
+  area: "PLAT",
+  title: "Scaffold the repo",
+  body: "A TypeScript project with vite, vitest and one `verify` [ref ts1]. The node version is 20 [ref nv1].",
+  sources: { ts1: { source: "docs", detail: "package.json" }, nv1: { source: "user", detail: "we are on node 20" } },
+});
+await editItem(
+  db,
+  { projectId: demo.id, ref: "PLAT-1", body: "A TypeScript project with vite, vitest and one `verify` [ref ts1]. The node version is 22 [ref nv1]." },
+  ACTOR,
+);
 await item({ area: "PLAT", title: "Run CI on every pull request" });
 await item({
   area: "DATA",

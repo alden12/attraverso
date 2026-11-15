@@ -15,6 +15,7 @@ import { listAttachments } from "../domain/attachments";
 import { listComments } from "../domain/comments";
 import { getItem } from "../domain/items";
 import { getProjectByKey } from "../domain/projects";
+import { liveSources } from "../domain/references";
 
 /** Comments on one item, all of them: the pane shows the whole record, and a busy item has a few dozen. */
 const COMMENT_LIMIT = 500;
@@ -27,6 +28,9 @@ export interface ItemFeed {
   comments: { id: string; body: string; audience: "user" | "agent"; actor: string; at: string }[];
   /** Oldest first, so a sequence of photos reads in the order it was taken. */
   attachments: { hash: string; mime: string; bytes: number; caption?: string; at: string }[];
+  /** The live sources behind the body's pointers (`CTX-13`), by key, each oldest first: the pane numbers the
+   *  pointers and shows these when one is clicked. `text` is what the source vouched for. */
+  references: { key: string; source: string; detail: string; text: string; at: string }[];
 }
 
 /** Null when the owner has no such project, or the project no such live item; a host answers 404. */
@@ -35,14 +39,16 @@ export async function itemFeed(db: Database, ownerId: string, projectKey: string
   if (project === null) return null;
   const item = await getItem(db, project.id, ref);
   if (item === null || item.deletedAt !== null) return null;
-  const [comments, attachments] = await Promise.all([
+  const [comments, attachments, references] = await Promise.all([
     listComments(db, { projectId: project.id, itemId: item.id, limit: COMMENT_LIMIT }),
     listAttachments(db, project.id, ref),
+    liveSources(db, { itemId: item.id }),
   ]);
   return {
     ref: item.ref,
     body: item.body ?? "",
     comments: comments.map((c) => ({ id: c.id, body: c.body, audience: c.audience as "user" | "agent", actor: c.actor, at: c.createdAt })),
     attachments: attachments.map((a) => ({ hash: a.hash, mime: a.mime, bytes: a.bytes, ...(a.caption ? { caption: a.caption } : {}), at: a.createdAt })),
+    references: references.map((r) => ({ key: r.key, source: r.source, detail: r.detail, text: r.quotedText, at: r.recordedAt })),
   };
 }

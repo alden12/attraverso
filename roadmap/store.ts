@@ -128,6 +128,17 @@ export interface ItemDetail {
   body: string;
   comments: ItemComment[];
   attachments: Attachment[];
+  /** The sources behind the body's pointers (`CTX-13`). Absent from an older server, which is no references. */
+  references?: ItemReference[];
+}
+
+/** One source behind a pointer in an item's body: `text` is the claim as it read when the source vouched for it. */
+export interface ItemReference {
+  key: string;
+  source: string;
+  detail: string;
+  text: string;
+  at: string;
 }
 
 export interface ItemComment {

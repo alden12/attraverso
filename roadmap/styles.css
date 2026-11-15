@@ -1368,6 +1368,86 @@ body {
   overflow-x: auto;
   flex: none;
 }
+/* Source references in an item's body (CTX-13): a small number after the claim, and the panel it opens. */
+.ref-link {
+  padding: 0 1px;
+  border: none;
+  background: none;
+  color: #7fb2ff;
+  font: inherit;
+  font-size: 0.75em;
+  /* Raised, without line-height 0: a zero-height box reads as invisible, to assistive tools as well as to tests. */
+  vertical-align: super;
+  line-height: 1;
+  cursor: pointer;
+}
+.ref-link:hover,
+.ref-link[data-active="true"] {
+  color: #b7d3ff;
+  text-decoration: underline;
+}
+.ref-highlight {
+  background: rgba(250, 204, 21, 0.12);
+  box-shadow: 0 0 0 3px rgba(250, 204, 21, 0.12);
+  border-radius: 3px;
+}
+.refs-panel {
+  margin: 12px 0 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+  font-size: 12px;
+}
+.refs-panel__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.refs-panel__close {
+  border: none;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.refs-panel__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.refs-panel__list li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: baseline;
+}
+.refs-panel__kind {
+  font-weight: 600;
+  color: var(--text);
+}
+.refs-panel__date {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.refs-panel__detail {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #c3ccd8;
+}
+.refs-panel__changed,
+.refs-panel__none {
+  flex-basis: 100%;
+  margin: 2px 0 0;
+  color: #f0c36a;
+}
 .detail__doc h1,
 .detail__doc h2,
 .detail__doc h3,

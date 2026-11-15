@@ -39,6 +39,7 @@ import type { BoardGroup } from "./Board";
 import { Logo } from "./Logo";
 import { Search } from "./Search";
 import { fetchItem, type ItemDetail, type SearchHit } from "./store";
+import { ReferencedBody } from "./References";
 import { Comments } from "./Comments";
 import { AreaPane } from "./AreaPane";
 import { ZoomFade } from "./ZoomFade";
@@ -1427,7 +1428,7 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
             )}
             <div className="detail__doc">
               {loaded !== null ? (
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{loaded.body}</ReactMarkdown>
+                <ReferencedBody body={loaded.body} references={loaded.references ?? []} />
               ) : (
                 <p className="detail__pending">
                   {detail !== null && "state" in detail && detail.state === "missing"
