@@ -22,7 +22,7 @@ const ACTOR = "test";
 async function setup() {
   const fresh = await freshDb();
   const project = await createProject(fresh.db, { key: "apm", name: "AI PM", type: "software", ownerId: fresh.ownerId }, ACTOR);
-  const item = await createItem(fresh.db, { projectId: project.id, area: "OPS", title: "hosting", body: "Neon runs Postgres 18.4 [ref r7k2]." }, ACTOR);
+  const item = await createItem(fresh.db, { projectId: project.id, area: "OPS", title: "hosting", body: "The database runs Postgres 18.4 [ref r7k2]." }, ACTOR);
   return { ...fresh, project, item };
 }
 
@@ -32,8 +32,8 @@ const reference = (projectId: string, owner: { itemId?: string; sectionId?: stri
   itemId: owner.itemId ?? null,
   sectionId: owner.sectionId ?? null,
   source,
-  detail: "https://neon.tech/docs",
-  quotedText: "Neon runs Postgres 18.4",
+  detail: "https://example.com/docs",
+  quotedText: "The database runs Postgres 18.4",
   actor: ACTOR,
 });
 
@@ -70,7 +70,7 @@ describe("the pointer rule, at commit (CTX-13)", () => {
     const { db, project, item, close } = await setup();
     await db.insert(sourceReferences).values(reference(project.id, { itemId: item.id }));
     const { items } = await import("../db/schema");
-    expect(await refusal(db.update(items).set({ body: "Neon runs Postgres 18.4." }).where(eq(items.id, item.id)))).toMatch(/r7k2 is live/);
+    expect(await refusal(db.update(items).set({ body: "The database runs Postgres 18.4." }).where(eq(items.id, item.id)))).toMatch(/r7k2 is live/);
     await close();
   });
 
@@ -93,7 +93,7 @@ describe("edits keep the rule rather than tripping it", () => {
   it("retires an item's reference when an edit removes its pointer, and records it on the event", async () => {
     const { db, project, item, close } = await setup();
     await db.insert(sourceReferences).values(reference(project.id, { itemId: item.id }));
-    await editItem(db, { projectId: project.id, ref: item.ref, body: "Neon runs Postgres 18.6." }, ACTOR);
+    await editItem(db, { projectId: project.id, ref: item.ref, body: "The database runs Postgres 18.6." }, ACTOR);
     expect(await live(db, "r7k2")).toHaveLength(0);
     const edited = (await db.select().from(events).where(eq(events.kind, "edited"))).at(-1)!;
     expect(String(edited.after)).toContain("retiredReferences");
@@ -103,16 +103,16 @@ describe("edits keep the rule rather than tripping it", () => {
   it("keeps a reference whose pointer survives the edit, expanded or not", async () => {
     const { db, project, item, close } = await setup();
     await db.insert(sourceReferences).values(reference(project.id, { itemId: item.id }));
-    await editItem(db, { projectId: project.id, ref: item.ref, body: "Neon runs Postgres 18.6 [ref r7k2: search 2026-08-10]." }, ACTOR);
+    await editItem(db, { projectId: project.id, ref: item.ref, body: "The database runs Postgres 18.6 [ref r7k2: search 2026-08-10]." }, ACTOR);
     expect(await live(db, "r7k2")).toHaveLength(1);
     await close();
   });
 
   it("retires a context section's reference the same way", async () => {
     const { db, project, close } = await setup();
-    const section = await setSection(db, { projectId: project.id, heading: "Hosting", content: "Fly, not Workers [ref d4p1]." }, ACTOR);
-    await db.insert(sourceReferences).values({ ...reference(project.id, { sectionId: section.id }, "d4p1", "user"), quotedText: "Fly, not Workers" });
-    await setSection(db, { projectId: project.id, heading: "Hosting", content: "Fly, not Workers." }, ACTOR);
+    const section = await setSection(db, { projectId: project.id, heading: "Hosting", content: "A VM, not serverless [ref d4p1]." }, ACTOR);
+    await db.insert(sourceReferences).values({ ...reference(project.id, { sectionId: section.id }, "d4p1", "user"), quotedText: "A VM, not serverless" });
+    await setSection(db, { projectId: project.id, heading: "Hosting", content: "A VM, not serverless." }, ACTOR);
     expect(await live(db, "d4p1")).toHaveLength(0);
     await close();
   });
@@ -121,9 +121,9 @@ describe("edits keep the rule rather than tripping it", () => {
 describe("loading a plan (CTX-13)", () => {
   it("round-trips references on items and in context sections", async () => {
     const { db, project, item, ownerId, close } = await setup();
-    const section = await setSection(db, { projectId: project.id, heading: "Hosting", content: "Fly, not Workers [ref d4p1]." }, ACTOR);
+    const section = await setSection(db, { projectId: project.id, heading: "Hosting", content: "A VM, not serverless [ref d4p1]." }, ACTOR);
     await db.insert(sourceReferences).values(reference(project.id, { itemId: item.id }));
-    await db.insert(sourceReferences).values({ ...reference(project.id, { sectionId: section.id }, "d4p1", "user"), quotedText: "Fly, not Workers" });
+    await db.insert(sourceReferences).values({ ...reference(project.id, { sectionId: section.id }, "d4p1", "user"), quotedText: "A VM, not serverless" });
     const exported = await exportStore(db, ownerId);
     const next = await freshDb();
     await importStore(next.db, exported);
@@ -137,7 +137,7 @@ describe("loading a plan (CTX-13)", () => {
     await db.insert(sourceReferences).values(reference(project.id, { itemId: item.id }));
     const exported = await exportStore(db, ownerId);
     const handEdited = structuredClone(exported);
-    handEdited.projects[0]!.items[0]!.body = "Neon runs Postgres 18.4, pointer deleted by hand.";
+    handEdited.projects[0]!.items[0]!.body = "The database runs Postgres 18.4, pointer deleted by hand.";
     const next = await freshDb();
     await importStore(next.db, handEdited);
     expect(await live(next.db, "r7k2")).toHaveLength(1); // loaded as it was: stale, not refused
