@@ -11,6 +11,7 @@
  * ```
  * attraverso.yaml
  * .attraverso/layout.yaml
+ * .attraverso/references.yaml
  * .attraverso/measurements/2026-08.yaml
  * .attraverso/measurements/2026-09.yaml
  * ```
@@ -38,12 +39,28 @@ import type { Database } from "../db/client";
 import { measurements as measurementsTable } from "../db/schema";
 import { measurementFiles, parseMeasurementFile, toRecords, type MeasurementRecord } from "./measurements";
 import { dataDirFor, isStoreFile, STORE_FILE } from "./paths";
-import { exportStore, mergeLayout, parseLayout, parseStore, restrict, splitLayout, stringifyLayout, stringifyStore, type Store } from "./store";
+import {
+  exportStore,
+  mergeLayout,
+  mergeReferences,
+  parseLayout,
+  parseReferences,
+  parseStore,
+  restrict,
+  splitLayout,
+  splitReferences,
+  stringifyLayout,
+  stringifyReferences,
+  stringifyStore,
+  type Store,
+} from "./store";
 
 /** Where a plan file's measurement months sit inside the bundle, mirroring `measurementsDirFor` beside it. */
 const measurementsDirIn = (planName: string): string => `${dataDirFor(planName)}/measurements/`;
 /** Where its layout sits, mirroring `layoutPathFor` (`VIEW-23.2`). */
 const layoutPathIn = (planName: string): string => `${dataDirFor(planName)}/layout.yaml`;
+/** Where its source references sit, mirroring `referencesPathFor` (`CTX-13`). */
+const referencesPathIn = (planName: string): string => `${dataDirFor(planName)}/references.yaml`;
 
 export interface Bundle {
   /** The plan file's name, as it should land in a checkout (`attraverso.yaml`). */
@@ -52,6 +69,8 @@ export interface Bundle {
   text: string;
   /** The layout file's contents (`VIEW-23.2`), when the project has a layout. */
   layout?: string;
+  /** The references file's contents (`CTX-13`), when the project has source references. */
+  references?: string;
   measurements: MeasurementRecord[];
 }
 
@@ -60,7 +79,10 @@ export interface Bundle {
  * from before the layout had a file of its own, simply has none, or carries it inline in the plan.
  */
 export const storeOf = (bundle: Bundle): Store =>
-  mergeLayout(parseStore(bundle.text), bundle.layout === undefined ? {} : parseLayout(bundle.layout));
+  mergeReferences(
+    mergeLayout(parseStore(bundle.text), bundle.layout === undefined ? {} : parseLayout(bundle.layout)),
+    bundle.references === undefined ? {} : parseReferences(bundle.references),
+  );
 
 /** The first four bytes of every zip: `PK\x03\x04`. A bare plan file is YAML and cannot begin with them. */
 export function looksLikeZip(bytes: Uint8Array): boolean {
@@ -70,6 +92,7 @@ export function looksLikeZip(bytes: Uint8Array): boolean {
 export function packBundle(bundle: Bundle): Uint8Array {
   const files: Record<string, Uint8Array> = { [bundle.name]: strToU8(bundle.text) };
   if (bundle.layout !== undefined) files[layoutPathIn(bundle.name)] = strToU8(bundle.layout);
+  if (bundle.references !== undefined) files[referencesPathIn(bundle.name)] = strToU8(bundle.references);
   for (const [name, text] of measurementFiles(bundle.measurements)) files[measurementsDirIn(bundle.name) + name] = strToU8(text);
   // `mtime` is left at fflate's default rather than set to now, so exporting an unchanged project twice
   // produces the same bytes. Nothing depends on that today; a diffable export is the habit this whole
@@ -114,7 +137,14 @@ export function unpackBundle(bytes: Uint8Array, fallbackName: string): Bundle {
   }
 
   const layout = entries[layoutPathIn(name)];
-  return { name, text: strFromU8(entries[name] as Uint8Array), ...(layout === undefined ? {} : { layout: strFromU8(layout) }), measurements };
+  const references = entries[referencesPathIn(name)];
+  return {
+    name,
+    text: strFromU8(entries[name] as Uint8Array),
+    ...(layout === undefined ? {} : { layout: strFromU8(layout) }),
+    ...(references === undefined ? {} : { references: strFromU8(references) }),
+    measurements,
+  };
 }
 
 /**
@@ -132,12 +162,15 @@ export function unpackBundle(bytes: Uint8Array, fallbackName: string): Bundle {
  * replaces.
  */
 export async function buildBundle(db: Database, ownerId: string, project: { id: string; key: string }): Promise<Bundle> {
-  const { plan, layouts } = splitLayout(restrict(await exportStore(db, ownerId), new Set([project.id])));
+  const withoutLayout = splitLayout(restrict(await exportStore(db, ownerId), new Set([project.id])));
+  const { plan, references } = splitReferences(withoutLayout.plan);
+  const layouts = withoutLayout.layouts;
   const rows = await db.select().from(measurementsTable).where(eq(measurementsTable.projectId, project.id));
   return {
     name: STORE_FILE,
     text: stringifyStore(plan),
     ...(Object.keys(layouts).length === 0 ? {} : { layout: stringifyLayout(layouts) }),
+    ...(Object.keys(references).length === 0 ? {} : { references: stringifyReferences(references) }),
     measurements: await toRecords(db, project.key, rows),
   };
 }

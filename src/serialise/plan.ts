@@ -757,6 +757,79 @@ export function parseLayout(text: string): LayoutFile {
   return layoutFileSchema.parse(parse(text) ?? {});
 }
 
+/**
+ * A plan's source references (`CTX-13`), kept in their own file beside it (`references.yaml`): per project key, its
+ * items' references by ref and its context sections' by heading, each a pointer key to its sources. Keyed the way
+ * the plan names things, by key, ref and heading, so the file reads beside the plan it explains.
+ */
+const referencesFileSchema = z.record(
+  z.string(),
+  z.object({ items: z.record(z.string(), referencesSchema).optional(), context: z.record(z.string(), referencesSchema).optional() }),
+);
+export type ReferencesFile = z.infer<typeof referencesFileSchema>;
+
+/** A plan, with its source references taken out to be written to their own file. Everything else stays as it was. */
+export function splitReferences(store: Store): { plan: Store; references: ReferencesFile } {
+  const references: ReferencesFile = {};
+  const projects = store.projects.map(({ context_references, ...project }) => {
+    const items: Record<string, z.infer<typeof referencesSchema>> = {};
+    const stripped = project.items.map(({ references: refs, ...item }) => {
+      if (refs !== undefined) items[item.ref] = refs;
+      return item;
+    });
+    const entry = { ...(Object.keys(items).length > 0 ? { items } : {}), ...(context_references !== undefined ? { context: context_references } : {}) };
+    if (Object.keys(entry).length > 0) references[project.key] = entry;
+    return { ...project, items: stripped };
+  });
+  return { plan: { projects }, references };
+}
+
+/**
+ * Put a references file's sources back into the plan they belong to. **The file wins** for a project it names, over
+ * references still inline in the plan (a plan saved before they had a file of their own), since every save since
+ * has gone to the file; a project it does not name keeps what it had, so an inline plan loads, and its next save
+ * moves them out. An entry naming an item or a heading the plan does not have is left out here and reported by
+ * `apm:check` (`orphanedReferences`), rather than refusing the load.
+ */
+export const mergeReferences = (store: Store, references: ReferencesFile): Store => ({
+  projects: store.projects.map((project) => {
+    const entry = references[project.key];
+    if (entry === undefined) return project;
+    const items = project.items.map(({ references: _inline, ...item }) => {
+      const refs = entry.items?.[item.ref];
+      return refs === undefined ? item : { ...item, references: refs };
+    });
+    const context = Object.fromEntries(Object.entries(entry.context ?? {}).filter(([heading]) => heading in (project.context ?? {})));
+    return { ...project, items, context_references: Object.keys(context).length > 0 ? context : undefined };
+  }),
+});
+
+/** Entries in a references file that name a project, item or section the plans do not have: sources with nowhere
+ *  to go, which a save would drop. `apm:check` reports them, since loading never refuses over a reference. */
+export function orphanedReferences(stores: Store[], references: ReferencesFile): string[] {
+  const projects = new Map(stores.flatMap((store) => store.projects).map((project) => [project.key, project]));
+  return Object.entries(references).flatMap(([key, entry]) => {
+    const project = projects.get(key);
+    if (project === undefined) return [`references for project ${key}, which no plan file holds`];
+    const refs = new Set(project.items.map((item) => item.ref));
+    return [
+      ...Object.keys(entry.items ?? {})
+        .filter((ref) => !refs.has(ref))
+        .map((ref) => `${key}: references under ${ref}, which has no item`),
+      ...Object.keys(entry.context ?? {})
+        .filter((heading) => !(heading in (project.context ?? {})))
+        .map((heading) => `${key}: references under context "${heading}", which has no section`),
+    ];
+  });
+}
+
+export const stringifyReferences = (references: ReferencesFile): string => stringify(references, YAML_FORMAT);
+
+/** A references file's contents. An empty file is no references. */
+export function parseReferences(text: string): ReferencesFile {
+  return referencesFileSchema.parse(parse(text) ?? {});
+}
+
 export function parseStore(text: string): Store {
   return storeSchema.parse(parse(text));
 }

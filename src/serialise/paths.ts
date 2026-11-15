@@ -39,3 +39,10 @@ export const dataDirFor = (storePath: string): string =>
  * because positions change on every drag and every new item, and the plan file is the one a reviewer reads.
  */
 export const layoutPathFor = (storePath: string): string => join(dataDirFor(storePath), "layout.yaml");
+
+/**
+ * Where a plan's source references live (`CTX-13`): beside it in its data folder, like its layout, because a source
+ * carries a verbatim quote or a URL and a copy of the claim it vouched for - bulk a reader of the plan never reads,
+ * and which would bury the items in it. Unlike the layout it is real data, so a save guards it like the plan.
+ */
+export const referencesPathFor = (storePath: string): string => join(dataDirFor(storePath), "references.yaml");

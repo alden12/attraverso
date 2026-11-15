@@ -34,7 +34,7 @@ import { searchFeed } from "./searchFeed";
 import { versionFeed } from "./versionFeed";
 import { MIME } from "./static";
 import { createChangeFeed } from "./changes";
-import { layoutPathFor } from "../serialise/paths";
+import { layoutPathFor, referencesPathFor } from "../serialise/paths";
 import { itemFeed } from "./itemFeed";
 import { addAttachment, removeAttachment } from "../domain/attachments";
 import { setStatus } from "../domain/items";
@@ -220,7 +220,7 @@ export function createViewerHost(db: Database, sources: ViewerSources, store: St
   // files, so nothing to watch, and an open page there simply never hears of a change.
   // The layout files too, so a `git stash` that moved only the map reaches the page, which adopts it rather than
   // saving its own positions back over it.
-  const watched = (store.paths?.() ?? []).flatMap((path) => [path, layoutPathFor(path)]);
+  const watched = (store.paths?.() ?? []).flatMap((path) => [path, layoutPathFor(path), referencesPathFor(path)]);
   const changes = createChangeFeed(watched, async () => {
     await store.refresh();
     return (await versionFeed(db, caller.ownerId, store.reloads?.() ?? 0)).version;

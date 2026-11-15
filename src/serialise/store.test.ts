@@ -1442,6 +1442,124 @@ describe("the layout's own file (VIEW-23.2)", () => {
   });
 });
 
+/**
+ * Source references in their own file (`CTX-13`): `.attraverso/references.yaml` beside the plan, because a source's
+ * verbatim quote, URL and copy of its claim are bulk a reader of the plan never reads. Unlike the layout they are
+ * data, so a save guards the file exactly as it guards the plan.
+ */
+describe("source references' own file (CTX-13)", () => {
+  async function opened() {
+    const dir = await mkdtemp(join(tmpdir(), "apm-refs-"));
+    const path = join(dir, "attraverso.yaml");
+    const { db, ownerId, close } = await freshDb();
+    const store = createStoreFile(path);
+    await store.open(db);
+    const project = await createProject(db, { key: "apm", name: "AI PM", type: "software", ownerId }, ACTOR);
+    await createItem(
+      db,
+      { projectId: project.id, area: "OPS", title: "hosting", body: "Postgres 18.4 runs in production [ref pg18].", sources: { pg18: { source: "test", detail: "yarn cloud:check" } } },
+      ACTOR,
+    );
+    await store.save(db);
+    const refsPath = join(dir, ".attraverso", "references.yaml");
+    return { dir, path, refsPath, db, ownerId, store, project, done: async () => (await close(), rm(dir, { recursive: true, force: true })) };
+  }
+
+  it("writes the sources beside the plan, never in it", async () => {
+    const a = await opened();
+    expect(await readFile(a.path, "utf8")).not.toMatch(/references:/);
+    const file = parse(await readFile(a.refsPath, "utf8"));
+    expect(file.apm.items["OPS-1"].pg18[0]).toMatchObject({ source: "test", detail: "yarn cloud:check", text: "Postgres 18.4 runs in production" });
+    await a.done();
+  });
+
+  it("leaves the plan's content alone when only a source was added", async () => {
+    const a = await opened();
+    const plan = await readFile(a.path, "utf8");
+    await editItem(a.db, { projectId: a.project.id, ref: "OPS-1", sources: { pg18: { source: "docs", detail: "README.md" } } }, ACTOR);
+    await a.store.save(a.db);
+    // The item's `updated_at` moves, as for any edit through `edit_item`; nothing else in the plan does.
+    const withoutStamps = (text: string) => text.replace(/updated_at: .*/g, "");
+    expect(withoutStamps(await readFile(a.path, "utf8"))).toBe(withoutStamps(plan));
+    expect(parse(await readFile(a.refsPath, "utf8")).apm.items["OPS-1"].pg18).toHaveLength(2);
+    await a.done();
+  });
+
+  it("opens with its sources, and reloads a references file changed on disk", async () => {
+    const a = await opened();
+    const b = await freshDb();
+    const bStore = createStoreFile(a.path);
+    await bStore.open(b.db);
+    expect((await exportStore(b.db, b.ownerId)).projects[0]!.items[0]!.references?.pg18).toHaveLength(1);
+    const bProject = one(await listProjects(b.db, b.ownerId));
+    await editItem(b.db, { projectId: bProject.id, ref: "OPS-1", sources: { pg18: { source: "user", detail: "it is 18.4" } } }, ACTOR);
+    await bStore.save(b.db);
+
+    expect(await a.store.refresh(a.db)).toBe(true);
+    expect((await exportStore(a.db, a.ownerId)).projects[0]!.items[0]!.references?.pg18).toHaveLength(2);
+    await b.close();
+    await a.done();
+  });
+
+  it("refuses to save over a references file changed underneath it, as it does for the plan", async () => {
+    const a = await opened();
+    await writeFile(a.refsPath, (await readFile(a.refsPath, "utf8")) + "# edited by hand\n");
+    await editItem(a.db, { projectId: a.project.id, ref: "OPS-1", title: "hosting, retitled" }, ACTOR);
+    await expect(a.store.save(a.db)).rejects.toThrow(/refusing to save: .*references\.yaml has changed/);
+    await a.done();
+  });
+
+  it("loads a plan written with its references inline, and the next save moves them out", async () => {
+    const a = await opened();
+    const inline = stringifyStore(await exportStore(a.db, a.ownerId));
+    expect(inline).toMatch(/references:/);
+    const dir = await mkdtemp(join(tmpdir(), "apm-refs-inline-"));
+    const path = join(dir, "attraverso.yaml");
+    await writeFile(path, inline);
+    const fresh = await freshDb();
+    const store = createStoreFile(path);
+    await store.open(fresh.db);
+    expect((await exportStore(fresh.db, fresh.ownerId)).projects[0]!.items[0]!.references?.pg18).toHaveLength(1);
+    await editItem(fresh.db, { projectId: one(await listProjects(fresh.db, fresh.ownerId)).id, ref: "OPS-1", title: "moved" }, ACTOR);
+    await store.save(fresh.db);
+    expect(await readFile(path, "utf8")).not.toMatch(/references:/);
+    expect(existsSync(join(dir, ".attraverso", "references.yaml"))).toBe(true);
+    await fresh.close();
+    await rm(dir, { recursive: true, force: true });
+    await a.done();
+  });
+
+  it("travels in an export bundle as its own file, and comes back on import", async () => {
+    const a = await opened();
+    const bundle = unpackBundle(packBundle(await buildBundle(a.db, a.ownerId, a.project)), "attraverso.yaml");
+    expect(bundle.text).not.toMatch(/references:/);
+    expect(bundle.references).toBeDefined();
+    expect(storeOf(bundle).projects[0]?.items[0]?.references?.pg18).toHaveLength(1);
+    await a.done();
+  });
+
+  it("counts the references file in what a save would write, for apm:check", async () => {
+    const a = await opened();
+    const forms = await canonicalForms(a.db, [{ path: a.path, store: (await exportStore(a.db, a.ownerId)) }]);
+    expect(forms.get(a.path)).toBe(await readFile(a.path, "utf8"));
+    expect(forms.get(a.refsPath)).toBe(await readFile(a.refsPath, "utf8"));
+    await a.done();
+  });
+
+  it("writes no references file for a plan with no sources", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "apm-refs-none-"));
+    const path = join(dir, "attraverso.yaml");
+    const { db, ownerId, close } = await freshDb();
+    const store = createStoreFile(path);
+    await store.open(db);
+    await createProject(db, { key: "plain", name: "Plain", type: "software", ownerId }, ACTOR);
+    await store.save(db);
+    expect(existsSync(join(dir, ".attraverso", "references.yaml"))).toBe(false);
+    await close();
+    await rm(dir, { recursive: true, force: true });
+  });
+});
+
 describe("counting reloads from disk (VIEW-7)", () => {
   it("counts each foreign change it reloads, and nothing for its own writes", async () => {
     const dir = await mkdtemp(join(tmpdir(), "apm-reloads-"));

@@ -4,8 +4,8 @@ import { readFile, stat } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
 import { existsSync } from "node:fs";
-import { asPlan, displayPath, mergeLayout, parseLayout, resolveStorePaths, type Store } from "../src/serialise/store";
-import { layoutPathFor } from "../src/serialise/paths";
+import { asPlan, displayPath, mergeLayout, mergeReferences, parseLayout, parseReferences, resolveStorePaths, type Store } from "../src/serialise/store";
+import { layoutPathFor, referencesPathFor } from "../src/serialise/paths";
 import type { Database } from "../src/db/client";
 import { summariseFromFiles } from "../src/serialise/measurements";
 import { createChangeFeed } from "../src/mcp/changes";
@@ -48,13 +48,14 @@ function servePlan(): Plugin {
   const load = <T,>(server: ViteDevServer, path: string) => server.ssrLoadModule(fileURLToPath(new URL(path, import.meta.url))) as Promise<T>;
   async function buildSearch(server: ViteDevServer) {
     const { createInMemoryDb } = await load<typeof import("../src/db/memory")>(server, "../src/db/memory.ts");
-    const { importStore } = await load<typeof import("../src/serialise/store")>(server, "../src/serialise/store.ts");
+    const { importStore, withSides } = await load<typeof import("../src/serialise/store")>(server, "../src/serialise/store.ts");
     const { ensureUser, LOCAL_IDENTITY } = await load<typeof import("../src/domain/users")>(server, "../src/domain/users.ts");
     const { searchFeed } = await load<typeof import("../src/mcp/searchFeed")>(server, "../src/mcp/searchFeed.ts");
     const { itemFeed } = await load<typeof import("../src/mcp/itemFeed")>(server, "../src/mcp/itemFeed.ts");
     const { codeDrift } = await load<typeof import("../src/mcp/codeDrift")>(server, "../src/mcp/codeDrift.ts");
     const { db, close } = await createInMemoryDb();
-    const stores = await Promise.all(storePaths.map(async (path) => parse(await readFile(path, "utf8")) as Store));
+    // With each plan's side files laid over it, its source references above all (`CTX-13`), which the pane reads.
+    const stores = await Promise.all(storePaths.map(async (path) => withSides(path, parse(await readFile(path, "utf8")) as Store)));
     await importStore(db, { projects: stores.flatMap((store) => store.projects ?? []) });
     const { id: ownerId } = await ensureUser(db, LOCAL_IDENTITY);
     return { db: db as Database, ownerId, close, searchFeed, itemFeed, codeDrift };
@@ -64,19 +65,19 @@ function servePlan(): Plugin {
     name: "apm-serve-store",
     configureServer(server: ViteDevServer) {
       dev = server;
-      for (const path of storePaths) server.watcher.add(path);
+      for (const path of storePaths) server.watcher.add([path, referencesPathFor(path)]);
       // A changed plan file reaches an open page through `/api/changes` below (VIEW-7), rather than
       // a full page reload over Vite's socket: that threw away the selection, the open pane and the filters, which
       // is exactly what a live refresh has to keep.
       server.watcher.on("change", (file) => {
-        if (!storePaths.includes(file)) return;
+        if (!storePaths.includes(file) && !storePaths.map(referencesPathFor).includes(file)) return;
         forgetSearch();
         void searchable().catch(() => {}); // rebuilt from the changed files straight away, for the same reason
       });
       // Live refresh (VIEW-7), through the same change feed the MCP server's host uses. The token is the files'
       // modification times: this server never writes, so anything that moves them is a change.
       // The layout files as well: a `git stash` can move only the map, and the page must adopt that, not save over it.
-      const watched = storePaths.flatMap((path) => [path, layoutPathFor(path)]);
+      const watched = storePaths.flatMap((path) => [path, layoutPathFor(path), referencesPathFor(path)]);
       const changes = createChangeFeed(watched, async () =>
         (await Promise.all(watched.map((path) => stat(path).then((info) => `${info.mtimeMs}:${info.size}`, () => "-")))).join("|"),
       );
@@ -136,12 +137,16 @@ function servePlan(): Plugin {
           // server that refuses to serve a store the real server accepts would be a second source of truth.
           // Projected through the same `asPlan` the real server uses, though - the two routes must agree
           // about what a plan is, or the graph differs between `yarn viewer` and open_viewer (VIEW-15).
-          // With each plan's layout file laid back over it (`VIEW-23.2`), so this server draws the same shared map.
+          // With each plan's layout file laid back over it (`VIEW-23.2`), so this server draws the same shared map,
+          // and its references file (`CTX-13`), since a context section's sources ride in this feed.
           const loaded = await Promise.all(
             storePaths.map(async (path) => {
-              const store = parse(await readFile(path, "utf8")) as Store;
+              let store = parse(await readFile(path, "utf8")) as Store;
               const layoutPath = layoutPathFor(path);
-              return { path, store: existsSync(layoutPath) ? mergeLayout(store, parseLayout(await readFile(layoutPath, "utf8"))) : store };
+              if (existsSync(layoutPath)) store = mergeLayout(store, parseLayout(await readFile(layoutPath, "utf8")));
+              const referencesPath = referencesPathFor(path);
+              if (existsSync(referencesPath)) store = mergeReferences(store, parseReferences(await readFile(referencesPath, "utf8")));
+              return { path, store };
             }),
           );
           const store = asPlan({ projects: loaded.flatMap(({ store: one }) => one.projects ?? []) });

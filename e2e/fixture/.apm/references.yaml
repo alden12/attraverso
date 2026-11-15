@@ -1,0 +1,26 @@
+demo:
+  items:
+    PLAT-1:
+      nv1:
+        - source: user
+          detail: we are on node 20
+          text: The node version is 20
+          id: 01a1e12c-17df-704f-bd55-b4679162f13b
+          at: 2026-11-15T21:45:25.727Z
+          actor: fixture
+      ts1:
+        - source: docs
+          detail: package.json
+          text: A TypeScript project with vite, vitest and one `verify`
+          id: 01a1e12c-17df-704f-bd55-b178ae2b71cb
+          at: 2026-11-15T21:45:25.727Z
+          actor: fixture
+  context:
+    Goals:
+      gl1:
+        - source: docs
+          detail: e2e/fixture/build.ts
+          text: One section of prose, so the pane has markdown to show
+          id: 01a1e12c-1862-77e8-8b90-628cb3f25fbe
+          at: 2026-11-15T21:45:25.858Z
+          actor: fixture

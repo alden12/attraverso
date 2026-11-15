@@ -21,7 +21,19 @@ import { existsSync, readFileSync } from "node:fs";
 import { relative } from "node:path";
 import { createInMemoryDb } from "../src/db/memory";
 import { checkReferences } from "../src/serialise/referenceCheck";
-import { assertDistinctProjects, canonicalForms, importStore, parseStore, resolveStorePaths, storePathsIn, writeAtomic } from "../src/serialise/store";
+import {
+  assertDistinctProjects,
+  canonicalForms,
+  importStore,
+  orphanedReferences,
+  parseReferences,
+  parseStore,
+  resolveStorePaths,
+  storePathsIn,
+  withSides,
+  writeAtomic,
+} from "../src/serialise/store";
+import { referencesPathFor } from "../src/serialise/paths";
 
 async function main(): Promise<void> {
   const paths = resolveStorePaths(storePathsIn(process.argv));
@@ -32,10 +44,13 @@ async function main(): Promise<void> {
   }
   // Parsed before anything is loaded, so a schema error names its own file rather than surfacing as a
   // failure to insert whichever file happened to be read first.
-  const stores = paths.map((path) => {
-    const text = readFileSync(path, "utf8");
-    return { path, text, store: parseStore(text) };
-  });
+  // With their side files laid over them, layout and source references, as the server loads them.
+  const stores = await Promise.all(
+    paths.map(async (path) => {
+      const text = readFileSync(path, "utf8");
+      return { path, text, store: await withSides(path, parseStore(text)) };
+    }),
+  );
   // Named before the insert that would otherwise report it as a unique-index violation on two uuids.
   assertDistinctProjects(stores);
   const fix = process.argv.includes("--fix");
@@ -46,8 +61,16 @@ async function main(): Promise<void> {
     for (const { store } of stores) await importStore(db, store);
 
     const canonical = await canonicalForms(db, stores);
-    for (const { path, text } of stores) {
-      const expected = canonical.get(path);
+    // The plan files and their references files (real data, so held to the same standard): every one a save
+    // would write, and every one on disk, so a references file the plan no longer needs is caught too.
+    const onDisk = new Map(stores.map(({ path, text }) => [path, text]));
+    for (const { path } of stores) {
+      const references = referencesPathFor(path);
+      if (existsSync(references)) onDisk.set(references, readFileSync(references, "utf8"));
+      else if (canonical.has(references)) onDisk.set(references, "");
+    }
+    for (const [path, text] of onDisk) {
+      const expected = canonical.get(path) ?? (path.endsWith("references.yaml") ? "{}\n" : undefined);
       if (expected === undefined || expected === text) continue;
       if (fix) {
         await writeAtomic(path, expected);
@@ -70,6 +93,13 @@ async function main(): Promise<void> {
   // Source references (CTX-13): what loading let through, and what only a parse of the prose can see.
   const references = stores.map(({ path, store }) => ({ path, ...checkReferences(store) }));
   const referenceErrors = references.flatMap(({ path, errors }) => errors.map((error) => `${shown(path)}: ${error}`));
+  // And sources in a references file with nowhere to go: a project, item or heading no plan has, which a save drops.
+  for (const path of new Set(paths.map(referencesPathFor))) {
+    if (!existsSync(path)) continue;
+    for (const orphan of orphanedReferences(stores.map(({ store }) => store), parseReferences(readFileSync(path, "utf8")))) {
+      referenceErrors.push(`${shown(path)}: ${orphan}`);
+    }
+  }
   if (referenceErrors.length > 0) {
     console.error(`store: REFERENCES\n${referenceErrors.map((line) => `  - ${line}`).join("\n")}`);
     process.exit(1);
