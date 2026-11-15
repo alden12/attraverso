@@ -2,7 +2,8 @@
  * Whether the code a `code` source pinned has changed since (`CTX-13`): the lines at the pinned commit against the
  * same lines of the file as it is now.
  *
- * **Only where it is cheap and possible, and only when an item is read.** The pinned lines are fetched for every
+ * **Only where it is cheap and possible, and only when one item or section is read** - `get_item`, `get_context`
+ * and the pane opening an item; never a listing, a search or `get_project`, and at most `MAX_CODE_CHECKS` a read. The pinned lines are fetched for every
  * source in one `git cat-file --batch` process (measured 2026-11-15: about 0.25 ms a file batched, 2 ms spawning git
  * per file), so a read with a few code references pays a few milliseconds. A host with no checkout - the hosted
  * server - never calls this, and in a checkout without the pinned commit (a shallow clone: CI, a cloud session) the
@@ -29,6 +30,14 @@ const run = (args: string[], cwd: string, input?: string): Promise<Buffer> =>
     );
     if (input !== undefined) child.stdin?.end(input);
   });
+
+/**
+ * How many `code` sources one read checks. A read is one item or one section, so this is a body that leans on a lot
+ * of code; past it the rest are not checked and so not reported, which is what an unchecked source always means
+ * here - unknown, never changed. Keeps a heavily referenced body from costing a large batch and a scan of each file
+ * on every read.
+ */
+export const MAX_CODE_CHECKS = 20;
 
 /** Each plan file's checkout, looked up once a process: a plan file does not move between repos while it runs. */
 const checkouts = new Map<string, Promise<string | null>>();
@@ -99,10 +108,12 @@ function contains(file: string[], lines: string[]): boolean {
  */
 export async function codeDrift(planFile: string | undefined, sources: { source: string; detail: string }[]): Promise<Set<string>> {
   const changed = new Set<string>();
-  const code = [...new Set(sources.filter((s) => s.source === "code").map((s) => s.detail))].flatMap((detail) => {
-    const ref = parseCodeRef(detail);
-    return ref === null ? [] : [{ detail, ref }];
-  });
+  const code = [...new Set(sources.filter((s) => s.source === "code").map((s) => s.detail))]
+    .flatMap((detail) => {
+      const ref = parseCodeRef(detail);
+      return ref === null ? [] : [{ detail, ref }];
+    })
+    .slice(0, MAX_CODE_CHECKS);
   if (code.length === 0 || planFile === undefined) return changed;
   try {
     const root = await checkoutOf(planFile);

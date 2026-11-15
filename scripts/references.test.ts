@@ -122,3 +122,21 @@ describe("the review's edge cases (CTX-13)", () => {
     expect(Date.now() - started).toBeLessThan(2000);
   });
 });
+
+describe("parsing the same text twice (CTX-13)", () => {
+  it("answers from what it kept, and the answer cannot be changed by a caller", () => {
+    const text = "A claim [ref c1]. Another [ref c2].";
+    const first = parsePointers(text);
+    expect(parsePointers(text)).toBe(first);
+    expect(() => (first.pointers as unknown as unknown[]).sort()).toThrow();
+  });
+});
+
+describe("hostile input (CTX-13)", () => {
+  it("stays fast on a paragraph of many unmatched backticks", () => {
+    const started = Date.now();
+    parsePointers("a ` ".repeat(50_000) + "[ref a1]");
+    parsePointers("b ` c `` ".repeat(20_000) + "[ref a2]");
+    expect(Date.now() - started).toBeLessThan(1000);
+  });
+});

@@ -110,16 +110,27 @@ function maskCode(text: string): string {
  */
 function maskSpans(paragraph: string): string {
   const runs = [...paragraph.matchAll(/`+/g)].map((m) => ({ at: m.index, length: m[0].length }));
-  let out = paragraph;
+  // Each run's next run of the same length, found in one pass from the end, so a paragraph of many unmatched
+  // backticks costs linear time rather than a scan forward from every one of them.
+  const nextSame: number[] = new Array(runs.length).fill(-1);
+  const seen = new Map<number, number>();
+  for (let i = runs.length - 1; i >= 0; i--) {
+    nextSame[i] = seen.get(runs[i]!.length) ?? -1;
+    seen.set(runs[i]!.length, i);
+  }
+  // Built once from its pieces, not re-sliced per span, which would be quadratic in a paragraph of many spans.
+  const pieces: string[] = [];
+  let last = 0;
   for (let i = 0; i < runs.length; i++) {
     const open = runs[i]!;
-    const close = runs.findIndex((run, j) => j > i && run.length === open.length);
+    const close = nextSame[i]!;
     if (close === -1) continue;
     const end = runs[close]!.at + open.length;
-    out = out.slice(0, open.at) + " ".repeat(end - open.at) + out.slice(end);
+    pieces.push(paragraph.slice(last, open.at), " ".repeat(end - open.at));
+    last = end;
     i = close;
   }
-  return out;
+  return last === 0 ? paragraph : pieces.join("") + paragraph.slice(last);
 }
 
 /**
@@ -187,7 +198,26 @@ function blocks(text: string): Block[] {
  * pointer, the same key twice, and a pointer line directly under a table row, which markdown reads as another row
  * of the table rather than a pointer below it (the blank line nobody sees).
  */
-export function parsePointers(text: string): { pointers: Pointer[]; problems: PointerProblem[] } {
+export function parsePointers(text: string): { readonly pointers: readonly Pointer[]; readonly problems: readonly PointerProblem[] } {
+  // One write asks about the same text several times over - what to retire, what each new source covers, what an
+  // edit changed, what to warn about - so the last few answers are kept. Frozen, because they are shared: a caller
+  // that wants them sorted copies first, and one that forgets fails loudly instead of corrupting the next answer.
+  const cached = parsed.get(text);
+  if (cached !== undefined) return cached;
+  const result = Object.freeze(parseUncached(text));
+  Object.freeze(result.pointers);
+  Object.freeze(result.problems);
+  parsed.set(text, result);
+  if (parsed.size > PARSE_CACHE) parsed.delete(parsed.keys().next().value!);
+  return result;
+}
+
+/** How many texts' answers `parsePointers` keeps: enough for a write's before and after, its tool reply, and a
+ *  read or two in between, without holding on to a whole plan's bodies. Oldest out first. */
+const PARSE_CACHE = 16;
+const parsed = new Map<string, { pointers: Pointer[]; problems: PointerProblem[] }>();
+
+function parseUncached(text: string): { pointers: Pointer[]; problems: PointerProblem[] } {
   const masked = maskCode(text);
   const all = blocks(text);
   const pointers: Pointer[] = [];

@@ -186,7 +186,7 @@ export function expandPointers(text: string, sources: ReferenceSource[], full = 
   const { pointers } = parsePointers(text);
   let out = "";
   let last = 0;
-  for (const p of pointers.sort((a, b) => a.at - b.at)) {
+  for (const p of [...pointers].sort((a, b) => a.at - b.at)) {
     const behind = byKey.get(p.key) ?? [];
     const parts = behind.map((s) => {
       const detail = s.source === "user" ? `"${shown(s.detail)}"` : shown(s.detail);

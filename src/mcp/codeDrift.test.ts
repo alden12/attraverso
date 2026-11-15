@@ -8,7 +8,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { codeDrift } from "./codeDrift";
+import { codeDrift, MAX_CODE_CHECKS } from "./codeDrift";
 
 const git = (cwd: string, ...args: string[]) =>
   execFileSync("git", ["-c", "user.name=test", "-c", "user.email=test@example.com", "-c", "commit.gpgsign=false", ...args], { cwd, encoding: "utf8" }).trim();
@@ -72,5 +72,11 @@ describe("code changed since (CTX-13)", () => {
     expect(parseCodeRef(`/etc/passwd:1@${commit}`)).toBeNull();
     expect(parseCodeRef(`src\\x.ts:1@${commit}`)).toBeNull();
     expect(parseCodeRef(`app/[id]/page.tsx:1@${commit}`)).not.toBeNull();
+  });
+
+  it("checks at most MAX_CODE_CHECKS sources on one read", async () => {
+    // Every one of these has changed (line 2 of the file it pins); only the first MAX_CODE_CHECKS are looked at.
+    const many = Array.from({ length: MAX_CODE_CHECKS + 5 }, (_, i) => code(`lib.ts:2:${i + 1}@${commit}`));
+    expect((await codeDrift(plan, many)).size).toBe(MAX_CODE_CHECKS);
   });
 });
