@@ -110,6 +110,15 @@ describe("source references through the tools (CTX-13)", () => {
     expect(said(result)).toContain("use one of user, test, search, docs");
   });
 
+  it("takes a code source pinned to a commit, and refuses one that is not", async () => {
+    const ok = await call("edit_item", { ref: "OPS-1", sources: { pg18: { source: "code", detail: "src/db/schema.ts:120-140@345a746" } } });
+    expect(ok.isError).toBeFalsy();
+    expect(said(await call("get_item", { ref: "OPS-1" }))).toContain("code ");
+    const bad = await call("edit_item", { ref: "OPS-1", sources: { pg18: { source: "code", detail: "src/db/schema.ts" } } });
+    expect(bad.isError).toBe(true);
+    expect(said(bad)).toContain("write path:line or path:from-to, optionally :column, then @commit");
+  });
+
   it("does the same for context sections", async () => {
     await call("set_context", { heading: "Hosting", content: "One region only [ref reg1].", sources: { reg1: { source: "docs", detail: "infra/region.tf" } } });
     expect(said(await call("get_context", { heading: "Hosting" }))).toMatch(new RegExp(`One region only \\[ref reg1: docs ${DAY} infra/region\\.tf\\]`));

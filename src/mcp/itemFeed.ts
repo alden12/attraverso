@@ -29,12 +29,16 @@ export interface ItemFeed {
   /** Oldest first, so a sequence of photos reads in the order it was taken. */
   attachments: { hash: string; mime: string; bytes: number; caption?: string; at: string }[];
   /** The live sources behind the body's pointers (`CTX-13`), by key, each oldest first: the pane numbers the
-   *  pointers and shows these when one is clicked. `text` is what the source vouched for. */
-  references: { key: string; source: string; detail: string; text: string; at: string }[];
+   *  pointers and shows these when one is clicked. `text` is what the source vouched for; `codeChanged` marks a
+   *  `code` source whose pinned lines differ from the file now, where the host could tell. */
+  references: { key: string; source: string; detail: string; text: string; at: string; codeChanged?: true }[];
 }
 
+/** Which `code` sources' pinned lines differ from the file now (`codeDrift`), for a host with a checkout. */
+export type CodeDriftCheck = (sources: { source: string; detail: string }[]) => Promise<ReadonlySet<string>>;
+
 /** Null when the owner has no such project, or the project no such live item; a host answers 404. */
-export async function itemFeed(db: Database, ownerId: string, projectKey: string, ref: string): Promise<ItemFeed | null> {
+export async function itemFeed(db: Database, ownerId: string, projectKey: string, ref: string, drift?: CodeDriftCheck): Promise<ItemFeed | null> {
   const project = await getProjectByKey(db, ownerId, projectKey);
   if (project === null) return null;
   const item = await getItem(db, project.id, ref);
@@ -49,6 +53,17 @@ export async function itemFeed(db: Database, ownerId: string, projectKey: string
     body: item.body ?? "",
     comments: comments.map((c) => ({ id: c.id, body: c.body, audience: c.audience as "user" | "agent", actor: c.actor, at: c.createdAt })),
     attachments: attachments.map((a) => ({ hash: a.hash, mime: a.mime, bytes: a.bytes, ...(a.caption ? { caption: a.caption } : {}), at: a.createdAt })),
-    references: references.map((r) => ({ key: r.key, source: r.source, detail: r.detail, text: r.quotedText, at: r.recordedAt })),
+    references: await (async () => {
+      // Only a host with a checkout passes `drift` (`CTX-13`), so the hosted server never shells out to git.
+      const changed = drift === undefined ? new Set<string>() : await drift(references);
+      return references.map((r) => ({
+        key: r.key,
+        source: r.source,
+        detail: r.detail,
+        text: r.quotedText,
+        at: r.recordedAt,
+        ...(r.source === "code" && changed.has(r.detail) ? { codeChanged: true as const } : {}),
+      }));
+    })(),
   };
 }

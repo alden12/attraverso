@@ -139,6 +139,8 @@ export interface ItemReference {
   detail: string;
   text: string;
   at: string;
+  /** A `code` source whose pinned lines differ from the file now, where the host had a checkout to tell. */
+  codeChanged?: true;
 }
 
 export interface ItemComment {

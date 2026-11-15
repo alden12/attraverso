@@ -64,3 +64,18 @@ describe("the stored form", () => {
     expect(normaliseClaim("Café")).toBe(normaliseClaim("Café"));
   });
 });
+
+describe("code references (CTX-13)", () => {
+  it("reads a file, a line or a range, an optional column, and a commit", async () => {
+    const { parseCodeRef } = await import("./references");
+    expect(parseCodeRef("src/db/schema.ts:120-140@345a746")).toEqual({ path: "src/db/schema.ts", from: 120, to: 140, commit: "345a746" });
+    expect(parseCodeRef("a.ts:7:3@0123456789abcdef")).toEqual({ path: "a.ts", from: 7, to: 7, column: 3, commit: "0123456789abcdef" });
+  });
+
+  it("refuses what is not one: no commit, a backwards range, line zero, a URL", async () => {
+    const { parseCodeRef } = await import("./references");
+    for (const detail of ["src/a.ts:12", "src/a.ts:20-10@345a746", "src/a.ts:0@345a746", "https://example.com/a.ts#L1"]) {
+      expect(parseCodeRef(detail), detail).toBeNull();
+    }
+  });
+});

@@ -52,11 +52,12 @@ function servePlan(): Plugin {
     const { ensureUser, LOCAL_IDENTITY } = await load<typeof import("../src/domain/users")>(server, "../src/domain/users.ts");
     const { searchFeed } = await load<typeof import("../src/mcp/searchFeed")>(server, "../src/mcp/searchFeed.ts");
     const { itemFeed } = await load<typeof import("../src/mcp/itemFeed")>(server, "../src/mcp/itemFeed.ts");
+    const { codeDrift } = await load<typeof import("../src/mcp/codeDrift")>(server, "../src/mcp/codeDrift.ts");
     const { db, close } = await createInMemoryDb();
     const stores = await Promise.all(storePaths.map(async (path) => parse(await readFile(path, "utf8")) as Store));
     await importStore(db, { projects: stores.flatMap((store) => store.projects ?? []) });
     const { id: ownerId } = await ensureUser(db, LOCAL_IDENTITY);
-    return { db: db as Database, ownerId, close, searchFeed, itemFeed };
+    return { db: db as Database, ownerId, close, searchFeed, itemFeed, codeDrift };
   }
   const described = storePaths.join(", ");
   return {
@@ -96,9 +97,9 @@ function servePlan(): Plugin {
       server.middlewares.use("/api/item", async (request, response) => {
         response.setHeader("Content-Type", "application/json");
         try {
-          const { db, ownerId, itemFeed } = await searchable();
+          const { db, ownerId, itemFeed, codeDrift } = await searchable();
           const params = new URL(request.url ?? "/", "http://localhost").searchParams;
-          const found = await itemFeed(db, ownerId, params.get("project") ?? "", params.get("ref") ?? "");
+          const found = await itemFeed(db, ownerId, params.get("project") ?? "", params.get("ref") ?? "", (sources) => codeDrift(storePaths, sources));
           if (found === null) response.statusCode = 404;
           response.end(JSON.stringify(found ?? { error: `no item "${params.get("ref") ?? ""}"` }));
         } catch (error) {

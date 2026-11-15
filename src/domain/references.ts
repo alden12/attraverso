@@ -12,7 +12,7 @@ import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import type { Database, Tx } from "../db/client";
 import { sourceReferences } from "../db/schema";
 import { timestamp } from "../db/ids";
-import { normaliseClaim, parsePointers } from "../../scripts/references";
+import { normaliseClaim, parseCodeRef, parsePointers } from "../../scripts/references";
 
 /**
  * Whether `text` carries the pointer for `key`: `[ref key]`, or the expanded `[ref key: ...]` that `get_item` returns
@@ -52,7 +52,7 @@ export async function retireRemovedPointers(tx: Tx, owner: ReferenceOwner, text:
 }
 
 /** Where a claim's source can come from. `agent` is the default for anything unreferenced and is never written. */
-export const SOURCE_KINDS = ["user", "test", "search", "docs"] as const;
+export const SOURCE_KINDS = ["user", "test", "search", "docs", "code"] as const;
 export type SourceKind = (typeof SOURCE_KINDS)[number];
 
 /** A source to add: the kind, and its detail - the command, URL or file, or for `user` the words verbatim. */
@@ -116,6 +116,9 @@ export async function addSources(
         throw new Error(`"${source.source}" is not a source: use one of ${SOURCE_KINDS.join(", ")} (unreferenced text is your own reasoning)`);
       }
       if (source.detail.trim() === "") throw new Error(`a ${source.source} source needs its detail: the command, URL or file, or the user's words verbatim`);
+      if (source.source === "code" && parseCodeRef(source.detail) === null) {
+        throw new Error(`"${source.detail}" is not a code reference: write path:line or path:from-to, optionally :column, then @commit, e.g. src/db/schema.ts:120-140@345a746`);
+      }
       rows.push({
         projectId,
         key,
@@ -157,10 +160,11 @@ const SHORT_DETAIL = 40;
  * back with `bareForm` - and in the reply only.
  *
  * `[ref r7k2: search 2026-08-10, test 2026-08-13 yarn cloud:check, text changed since]` - each source's kind and
- * date, its detail when short (or always, with `full`), and `text changed since` when a source vouched for words
- * the claim no longer says. A pointer with nothing behind it says so, rather than passing as backed.
+ * date, its detail when short (or always, with `full`), `text changed since` when a source vouched for words the
+ * claim no longer says, and `code changed since` when a `code` source's lines are in `codeChanged`. A pointer with
+ * nothing behind it says so, rather than passing as backed.
  */
-export function expandPointers(text: string, sources: ReferenceSource[], full = false): string {
+export function expandPointers(text: string, sources: ReferenceSource[], full = false, codeChanged: ReadonlySet<string> = new Set()): string {
   const byKey = new Map<string, ReferenceSource[]>();
   for (const s of sources) byKey.set(s.key, [...(byKey.get(s.key) ?? []), s]);
   const { pointers } = parsePointers(text);
@@ -174,6 +178,8 @@ export function expandPointers(text: string, sources: ReferenceSource[], full = 
     });
     if (behind.length === 0) parts.push("no reference behind it");
     else if (behind.some((s) => normaliseClaim(s.quotedText) !== p.covers)) parts.push("text changed since");
+    // Only where a checkout could tell (see `mcp/codeDrift.ts`): the lines a `code` source pinned differ from the file now.
+    if (behind.some((s) => s.source === "code" && codeChanged.has(s.detail))) parts.push("code changed since");
     out += text.slice(last, p.at) + `[ref ${p.key}: ${parts.join(", ")}]`;
     last = p.at + p.written.length;
   }

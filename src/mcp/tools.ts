@@ -22,6 +22,7 @@ import { dependencyRefsByItem } from "../domain/dependencies";
 import { addComment, deleteComment, editComment, listComments, shortCommentId, AUDIENCES, MAX_BODY, SHORT_ID, type Comment } from "../domain/comments";
 import { deleteSection, getSection, listSections, setSection, PROTOCOL_HEADING } from "../domain/context";
 import { expandPointers, fmtReferenceChanges, liveSources, SOURCE_KINDS } from "../domain/references";
+import { codeDrift } from "./codeDrift";
 import { resumeProject, type ContextPack, type PackBoard } from "../domain/memory";
 import { setNext, type NextItem } from "../domain/next";
 import { listAreas, MAX_AREA_DESCRIPTION, MAX_AREA_NAME, setArea, type AreaSummary } from "../domain/areas";
@@ -101,7 +102,9 @@ const clearableDate = (what: string) => z.string().nullable().describe(dateText(
  */
 const SOURCE = z.object({
   source: z.enum(SOURCE_KINDS),
-  detail: z.string().describe("For user, their words verbatim; for test, the command; for search, the URL; for docs, the file or page."),
+  detail: z
+    .string()
+    .describe("For user, their words verbatim; for test, the command; for search, the URL; for docs, the file or page; for code, path:line or path:from-to@commit (e.g. src/db/schema.ts:120-140@345a746)."),
 });
 const SOURCES = z
   .record(z.string(), z.union([SOURCE, z.array(SOURCE)]))
@@ -877,7 +880,12 @@ export function registerTools(server: McpServer, db: Database, store: StoreAcces
         const found = await getItemDetail(db, p.id, ref);
         if (found === null) throw await noSuchRef(db, p, ref);
         // Pointers expanded in place, in the reply only (`CTX-13`): where a claim came from, beside the claim.
-        const detail = found.item.body === null ? found : { ...found, item: { ...found.item, body: expandPointers(found.item.body, await liveSources(db, { itemId: found.item.id }), references === "full") } };
+        // A `code` source's pinned lines are checked against the checkout here, on read and only where there is one.
+        const sources = found.item.body === null ? [] : await liveSources(db, { itemId: found.item.id });
+        const detail =
+          found.item.body === null
+            ? found
+            : { ...found, item: { ...found.item, body: expandPointers(found.item.body, sources, references === "full", await codeDrift(store.paths?.(), sources)) } };
         // Prose, and deliberately **not** an `outputSchema` (`MCP-26`). One was tried here on 2026-09-01 and
         // reverted once the measurement came in: declaring a schema does not add structure alongside the text,
         // it *replaces* it, and this reply is a document rather than a record - a body of markdown, meant to be
@@ -1103,7 +1111,8 @@ export function registerTools(server: McpServer, db: Database, store: StoreAcces
         const p = await resolveProject(db, caller, project);
         const section = await getSection(db, p.id, heading);
         if (section === null) throw await noSuchSection(db, p, heading);
-        return text(`### ${section.heading}\n${expandPointers(section.content, await liveSources(db, { sectionId: section.id }))}`);
+        const sources = await liveSources(db, { sectionId: section.id });
+        return text(`### ${section.heading}\n${expandPointers(section.content, sources, false, await codeDrift(store.paths?.(), sources))}`);
       }),
   );
 

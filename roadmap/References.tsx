@@ -44,6 +44,7 @@ export function ReferencedBody({ body, references }: { body: string; references:
       const behind = references.filter((r) => r.key === key);
       if (behind.length === 0) reasons.set(key, "no source is recorded for this claim");
       else if (behind.some((r) => normaliseClaim(r.text) !== claim)) reasons.set(key, "the claim has changed since its source vouched for it");
+      else if (behind.some((r) => r.codeChanged === true)) reasons.set(key, "the code it points at has changed since");
     }
     return reasons;
   }, [covers, references]);
@@ -138,6 +139,11 @@ export function ReferencedBody({ body, references }: { body: string; references:
                   {normaliseClaim(s.text) !== claim && (
                     <p className="refs-panel__changed">
                       The claim has changed since. This source vouched for: <q>{s.text}</q>
+                    </p>
+                  )}
+                  {s.codeChanged === true && (
+                    <p className="refs-panel__changed">
+                      These lines have changed since that commit: <code>git diff {s.detail.split("@")[1]} -- {s.detail.split(":")[0]}</code>
                     </p>
                   )}
                 </li>

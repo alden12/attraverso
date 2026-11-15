@@ -225,3 +225,26 @@ export function bareForm(text: string): string {
   }
   return out + text.slice(last);
 }
+
+/** A `code` source's detail, parsed: lines of a file at a commit, which never change, so the evidence cannot rot. */
+export interface CodeRef {
+  path: string;
+  from: number;
+  to: number;
+  column?: number;
+  commit: string;
+}
+
+/**
+ * `path:line[-line][:column]@commit`, e.g. `packages/core/src/domain/items.ts:308-339@345a746`. Repo-relative rather
+ * than a hosting provider's URL, so it works in a private repo, a fork and the open export alike; a viewer can still
+ * make a link of it where it knows the host. Null when the detail is not one, which the writing tool refuses.
+ */
+export function parseCodeRef(detail: string): CodeRef | null {
+  const match = /^([^\s:@][^\s:@]*):([1-9]\d*)(?:-([1-9]\d*))?(?::([1-9]\d*))?@([0-9a-f]{7,40})$/.exec(detail.trim());
+  if (match === null) return null;
+  const from = Number(match[2]);
+  const to = match[3] === undefined ? from : Number(match[3]);
+  if (to < from) return null;
+  return { path: match[1]!, from, to, ...(match[4] === undefined ? {} : { column: Number(match[4]) }), commit: match[5]! };
+}
