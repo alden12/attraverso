@@ -12,11 +12,13 @@ import { and, eq, isNull } from "drizzle-orm";
 import type { Tx } from "../db/client";
 import { sourceReferences } from "../db/schema";
 import { timestamp } from "../db/ids";
+import { parsePointers } from "../../scripts/references";
 
 /**
  * Whether `text` carries the pointer for `key`: `[ref key]`, or the expanded `[ref key: ...]` that `get_item` returns
- * and an agent may send straight back. Matched exactly, so `r7k2` never matches `r7k29` - the same rule as the
- * trigger in migration 0016, which these two must keep agreeing on.
+ * and an agent may send straight back. Matched exactly, so `r7k2` never matches `r7k29`. This is the trigger's own
+ * test in migration 0016, restated for anything that must agree with what the database will accept; deciding which
+ * pointers a text holds is `parsePointers`'s job.
  */
 export const hasPointer = (text: string, key: string): boolean => text.includes(`[ref ${key}]`) || text.includes(`[ref ${key}:`);
 
@@ -33,7 +35,11 @@ export type ReferenceOwner = { itemId: string } | { sectionId: string };
 export async function retireRemovedPointers(tx: Tx, owner: ReferenceOwner, text: string): Promise<string[]> {
   const ownedBy = "itemId" in owner ? eq(sourceReferences.itemId, owner.itemId) : eq(sourceReferences.sectionId, owner.sectionId);
   const live = await tx.select({ key: sourceReferences.key }).from(sourceReferences).where(and(ownedBy, isNull(sourceReferences.retiredAt)));
-  const gone = [...new Set(live.map((row) => row.key))].filter((key) => !hasPointer(text, key)).sort();
+  // The shared parser decides what is still pointed at, not a substring search, so a pointer pasted into a code span
+  // counts as gone here exactly as it does in `apm:check` and the viewer. (The trigger's substring test is looser,
+  // which is the safe direction: it is the backstop for existence, and this is what decides.)
+  const pointed = new Set(parsePointers(text).pointers.map((p) => p.key));
+  const gone = [...new Set(live.map((row) => row.key))].filter((key) => !pointed.has(key)).sort();
   if (gone.length === 0) return [];
   const now = timestamp();
   for (const key of gone) {

@@ -20,6 +20,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { relative } from "node:path";
 import { createInMemoryDb } from "../src/db/memory";
+import { checkReferences } from "../src/serialise/referenceCheck";
 import { assertDistinctProjects, canonicalForms, importStore, parseStore, resolveStorePaths, storePathsIn, writeAtomic } from "../src/serialise/store";
 
 async function main(): Promise<void> {
@@ -66,6 +67,15 @@ async function main(): Promise<void> {
     );
     process.exit(1);
   }
+  // Source references (CTX-13): what loading let through, and what only a parse of the prose can see.
+  const references = stores.map(({ path, store }) => ({ path, ...checkReferences(store) }));
+  const referenceErrors = references.flatMap(({ path, errors }) => errors.map((error) => `${shown(path)}: ${error}`));
+  if (referenceErrors.length > 0) {
+    console.error(`store: REFERENCES\n${referenceErrors.map((line) => `  - ${line}`).join("\n")}`);
+    process.exit(1);
+  }
+  const changed = references.reduce((sum, { changed }) => sum + changed, 0);
+  if (changed > 0) console.log(`store: ${changed} source${changed === 1 ? "" : "s"} vouched for text that has changed since (advisory)`);
   const totals = stores
     .flatMap(({ store }) => store.projects)
     .map((p) => `${p.key}: ${p.items.length} items, ${p.areas.length} areas`)
