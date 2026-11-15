@@ -15,7 +15,7 @@ import { describe, expect, it } from "vitest";
 import { getTableColumns, is } from "drizzle-orm";
 import { PgTable } from "drizzle-orm/pg-core";
 import * as schema from "../db/schema";
-import { allowedEmails, areas, attachments, contextSections, dependencies, events, items, comments, layoutPositions, measurements, projectNext, projects, scopedDependencies, users } from "../db/schema";
+import { allowedEmails, areas, attachments, contextSections, dependencies, events, items, comments, layoutPositions, measurements, projectNext, projects, scopedDependencies, sourceReferences, users } from "../db/schema";
 
 interface Coverage {
   table: PgTable;
@@ -77,6 +77,13 @@ const COVERAGE: Record<string, Coverage> = {
     table: dependencies,
     exported: ["itemId", "dependsOnId"], // folded onto the dependent item as `deps: [ref, ...]`
     omitted: ["createdAt"], // regenerated on import; not user-facing, and not part of the round trip
+  },
+  sourceReferences: {
+    table: sourceReferences,
+    // Nested where the pointer is (`CTX-13`): under the item whose body holds it, or under its section's heading in
+    // `context_references`, keyed by the pointer's key - so the owner and the key are the nesting, not fields.
+    exported: ["id", "key", "itemId", "sectionId", "source", "detail", "quotedText", "actor", "recordedAt", "retiredAt"],
+    omitted: ["projectId"],
   },
   projectNext: {
     table: projectNext,

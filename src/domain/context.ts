@@ -11,6 +11,7 @@ import { maybeOne, one } from "../db/rows";
 import { contextSections } from "../db/schema";
 import type { OwnedProjectId } from "./owned";
 import { mutate, type Actor } from "./events";
+import { retireRemovedPointers } from "./references";
 
 export type ContextSection = typeof contextSections.$inferSelect;
 
@@ -102,6 +103,8 @@ export async function setSection(db: Database, input: SetSection, actor: Actor):
         })
         .returning(),
     );
+    // As for an item body (`CTX-13`): a reference whose pointer this content no longer carries is retired with it.
+    const retiredReferences = existing ? await retireRemovedPointers(tx, { sectionId: after.id }, input.content) : [];
     return {
       result: after,
       event: {
@@ -110,7 +113,7 @@ export async function setSection(db: Database, input: SetSection, actor: Actor):
         entityId: after.id,
         kind: existing ? "updated" : "created",
         before: existing ?? undefined,
-        after,
+        after: retiredReferences.length > 0 ? { ...after, retiredReferences } : after,
       },
     };
   });

@@ -14,6 +14,7 @@ import type { OwnedProjectId } from "./owned";
 import { mutate, type Actor } from "./events";
 import { dependencyRefs, setDependencies } from "./dependencies";
 import { listComments, type Comment } from "./comments";
+import { retireRemovedPointers } from "./references";
 import { areaOf, isCalendarDate, isRef, parentRef, STATUSES, type Status } from "../../scripts/tickets";
 
 export type Item = typeof items.$inferSelect;
@@ -319,6 +320,9 @@ export async function editItem(db: Database, input: EditItem, actor: Actor): Pro
     if (input.due !== undefined) changes.dueOn = input.due;
     assertDates(input.start === undefined ? before.startOn : input.start, input.due === undefined ? before.dueOn : input.due);
     const after = one(await tx.update(items).set(changes).where(eq(items.id, before.id)).returning());
+    // A body edit that removed a reference's pointer retires that reference with it (`CTX-13`), so the commit-time
+    // check is satisfied and the reference's history records when its claim went.
+    const retiredReferences = input.body === undefined ? [] : await retireRemovedPointers(tx, { itemId: before.id }, input.body);
     // Dep refs ride along in the event payload when they changed, because the item row does not carry them:
     // without this a deps-only edit logs a before and after that differ by nothing but `updated_at`.
     const beforeDeps = input.deps === undefined ? undefined : await dependencyRefs(tx, before.id);
@@ -331,7 +335,7 @@ export async function editItem(db: Database, input: EditItem, actor: Actor): Pro
         entityId: before.id,
         kind: "edited",
         before: { ...before, deps: beforeDeps },
-        after: { ...after, deps: afterDeps },
+        after: { ...after, deps: afterDeps, ...(retiredReferences.length > 0 ? { retiredReferences } : {}) },
       },
     };
   });

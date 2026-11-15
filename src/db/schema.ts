@@ -406,6 +406,48 @@ export const layoutPositions = pgTable(
   (t) => [primaryKey({ columns: [t.projectId, t.node] })],
 );
 
+/**
+ * Source references (`CTX-13`): where a claim in some prose came from. The text carries a pointer after the claim,
+ * `[ref r7k2]`, and this table carries everything else - one row per *source*, the rows sharing a `key` making one
+ * reference, so a claim gathers sources over time ("elevated whenever it has additional sources") without a
+ * second table holding what they share. Text with no pointer is the agent's own reasoning, and has no row.
+ *
+ * - **The owner is an item or a context section**, exactly one, by foreign key, so deleting either cascades its
+ *   references away. Repeated on each of a reference's rows, and kept to one owner per key by the trigger rather
+ *   than an index, since several rows share a key.
+ * - **`quoted_text` is the text this source vouched for when it was added**: a record of a moment, like an event
+ *   payload, never kept in sync, and how "text changed since" is told without storing a flag.
+ * - **`source` is an open vocabulary**, like every other one here (`user`, `test`, `search`, `docs` today), validated
+ *   by the domain layer rather than a database enum.
+ * - **Retired, never deleted**, so what a claim was once backed by stays legible.
+ *
+ * Not `references`: that is a reserved word in SQL.
+ */
+export const sourceReferences = pgTable(
+  "source_references",
+  {
+    id: text("id").primaryKey().$defaultFn(uuidv7),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    key: text("key").notNull(),
+    itemId: text("item_id").references(() => items.id, { onDelete: "cascade" }),
+    sectionId: text("section_id").references(() => contextSections.id, { onDelete: "cascade" }),
+    source: text("source").notNull(),
+    detail: text("detail").notNull(),
+    quotedText: text("quoted_text").notNull(),
+    actor: text("actor").notNull(),
+    recordedAt: text("recorded_at").notNull().$defaultFn(timestamp),
+    retiredAt: text("retired_at"),
+  },
+  (t) => [
+    check("source_references_one_owner", sql`(${t.itemId} IS NULL) <> (${t.sectionId} IS NULL)`),
+    index("source_references_project_key").on(t.projectId, t.key),
+    index("source_references_item").on(t.itemId),
+    index("source_references_section").on(t.sectionId),
+  ],
+);
+
 // Append-only audit over every mutation, written in the same transaction as the change it records. This is
 // what makes unattended agent edits reviewable and reversible. Locally these rows are flushed to a separate
 // `events.jsonl` (out of the human-readable plan YAML); see IMP-7.

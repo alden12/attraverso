@@ -6,11 +6,11 @@
  *
  * The two rules that make the YAML trustworthy are in `store.ts`'s header, and hold for every function here.
  */
-import { asc, eq, inArray } from "drizzle-orm";
+import { asc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { parse, stringify } from "yaml";
 import { clearAll, type Database, type Tx } from "../db/client";
-import { areas, attachments, comments, contextSections, dependencies, items, layoutPositions, projectNext, projects, scopedDependencies } from "../db/schema";
+import { areas, attachments, comments, contextSections, dependencies, items, layoutPositions, projectNext, projects, scopedDependencies, sourceReferences } from "../db/schema";
 import { ensureUserIn, LOCAL_IDENTITY } from "../domain/users";
 import { loadMeasurements, type MeasurementRecord } from "./measurementRecords";
 import { NOT_ACTIONABLE } from "../domain/next";
@@ -55,6 +55,24 @@ const attachmentSchema = z.object({
   actor: z.string(),
 });
 
+/**
+ * One source behind a source reference (`CTX-13`). References are written where their pointer is - under the item
+ * whose body holds it, keyed by the pointer's key - so reading the file shows a claim's sources beside the item,
+ * as comments are. The row's `id` rides along like a comment's, so a round trip keeps it and an edit can address it.
+ * `text` is the exact text this source vouched for; `retired` is set when its pointer was removed.
+ */
+const referenceSchema = z.object({
+  source: z.string(),
+  detail: z.string(),
+  text: z.string(),
+  id: z.string(),
+  at: z.string(),
+  actor: z.string(),
+  retired: z.string().optional(),
+});
+/** Pointer key -> its sources, oldest first. */
+const referencesSchema = z.record(z.string(), z.array(referenceSchema));
+
 /** One project's layout: node id -> "x,y", whole numbers on the layout's grid. */
 const layoutSchema = z.record(z.string(), z.string().regex(/^-?\d+,-?\d+$/, "a layout position is \"x,y\" in whole numbers"));
 
@@ -88,6 +106,7 @@ const itemSchema = z.object({
   /** Accepted for old plan files, never written: see `readComments` (CTX-2). */
   notes: z.array(commentSchema).optional(),
   attachments: z.array(attachmentSchema).optional(),
+  references: referencesSchema.optional(),
 });
 
 // Sessions were removed with the concept (CTX-10). The key stays *parseable* rather than being deleted,
@@ -117,6 +136,9 @@ const projectSchema = z.object({
   // no id or timestamps ride along - they read as prose and stay stable across a round trip. Insertion order
   // is the display order, which YAML preserves.
   context: z.record(z.string(), z.string()).optional(),
+  // Source references in context sections (`CTX-13`), keyed by the section's heading, since a heading is a
+  // section's identity here and its id is regenerated on every load. An item's own references nest under it.
+  context_references: z.record(z.string(), referencesSchema).optional(),
   areas: z.array(areaSchema),
   items: z.array(itemSchema),
   // Accepted and ignored, never written: see `retiredSessionSchema` (CTX-10).
@@ -297,6 +319,27 @@ export async function exportStore(db: Database, ownerId: string): Promise<Store>
 
     const layoutRows = await db.select().from(layoutPositions).where(eq(layoutPositions.projectId, p.id)).orderBy(asc(layoutPositions.node));
 
+    // Source references (`CTX-13`), grouped by owner and then by pointer key, keys sorted and each key's sources
+    // oldest first, so the file is deterministic and a new source is a few lines appended under its key.
+    const referenceRows = await db
+      .select()
+      .from(sourceReferences)
+      .where(eq(sourceReferences.projectId, p.id))
+      .orderBy(asc(sourceReferences.key), asc(sourceReferences.recordedAt), asc(sourceReferences.id));
+    const sectionHeading = new Map(sectionRows.map((s) => [s.id, s.heading]));
+    const referencesByItem = new Map<string, Record<string, z.infer<typeof referenceSchema>[]>>();
+    const referencesBySection = new Map<string, Record<string, z.infer<typeof referenceSchema>[]>>();
+    for (const r of referenceRows) {
+      const [owners, owner] = r.itemId !== null ? [referencesByItem, r.itemId] : [referencesBySection, sectionHeading.get(r.sectionId!)!];
+      const byKey = owners.get(owner) ?? owners.set(owner, {}).get(owner)!;
+      (byKey[r.key] ??= []).push({ source: r.source, detail: r.detail, text: r.quotedText, id: r.id, at: r.recordedAt, actor: r.actor, retired: opt(r.retiredAt) });
+    }
+    const contextReferences: Record<string, Record<string, z.infer<typeof referenceSchema>[]>> = {};
+    for (const s of sectionRows) {
+      const refs = referencesBySection.get(s.heading);
+      if (refs !== undefined) contextReferences[s.heading] = refs;
+    }
+
     const fmtComments = (rows: typeof commentRows) =>
       rows.length > 0 ? rows.map((n) => ({ body: n.body, audience: n.audience, id: n.id, at: n.createdAt, actor: n.actor })) : undefined;
 
@@ -312,6 +355,7 @@ export async function exportStore(db: Database, ownerId: string): Promise<Store>
       updated_at: p.updatedAt,
       archived_at: opt(p.archivedAt),
       context: sectionRows.length > 0 ? context : undefined,
+      context_references: Object.keys(contextReferences).length > 0 ? contextReferences : undefined,
       comments: fmtComments(projectComments),
       attachments: fmtAttachments(projectAttachments),
       areas: areaRows.map((a) => ({
@@ -344,6 +388,7 @@ export async function exportStore(db: Database, ownerId: string): Promise<Store>
           deleted_at: opt(i.deletedAt),
           comments: fmtComments(commentsByItem.get(i.id) ?? []),
           attachments: fmtAttachments(attachmentsByItem.get(i.id) ?? []),
+          references: referencesByItem.get(i.id),
         };
       }),
       layout: layoutRows.length > 0 ? Object.fromEntries(layoutRows.map((row) => [row.node, `${row.x},${row.y}`])) : undefined,
@@ -471,6 +516,10 @@ export async function replaceStore(db: Database, store: Store): Promise<void> {
 }
 
 async function insertStore(tx: Tx, store: Store, owner?: string): Promise<void> {
+  // A plan loads whatever state its source references are in (`CTX-13`): a hand edit that removed a pointer must
+  // still load, and `apm:check` is what reports it. The commit-time check in migration 0016 reads this setting and
+  // stands aside for this transaction only; every write after the load is checked as usual.
+  await tx.execute(sql`select set_config('attraverso.loading_plan', 'on', true)`);
   // Everything in a plan file belongs to one account, and never one named in the file: identity belongs to a
   // deployment, not to a plan, or a clone would import whoever committed it. File mode resolves the single
   // local account; `adoptStore` passes the caller's, which is the only difference between loading a store and
@@ -584,11 +633,41 @@ async function insertStore(tx: Tx, store: Store, owner?: string): Promise<void> 
     // Context sections: identity is the heading, so id/timestamps are regenerated ($defaultFn); the map's
     // order becomes the sort_order.
     const contextEntries = Object.entries(p.context ?? {});
+    const headingToId = new Map<string, string>();
     if (contextEntries.length > 0) {
-      await tx.insert(contextSections).values(
-        contextEntries.map(([heading, content], index) => ({ projectId: p.id, heading, content, sortOrder: index })),
-      );
+      const inserted = await tx
+        .insert(contextSections)
+        .values(contextEntries.map(([heading, content], index) => ({ projectId: p.id, heading, content, sortOrder: index })))
+        .returning({ id: contextSections.id, heading: contextSections.heading });
+      for (const row of inserted) headingToId.set(row.heading, row.id);
     }
+
+    // Source references (`CTX-13`), restored as rows. One naming an item or a heading this file does not have is
+    // skipped rather than refused, as `next` and `deps` treat the same hand edit: the plan file is a text file
+    // people merge.
+    const referenceValues = [
+      ...p.items.flatMap((i) => Object.entries(i.references ?? {}).map(([key, rows]) => ({ key, rows, itemId: refToId.get(i.ref) ?? null, sectionId: null as string | null }))),
+      ...Object.entries(p.context_references ?? {}).flatMap(([heading, refs]) =>
+        Object.entries(refs).map(([key, rows]) => ({ key, rows, itemId: null as string | null, sectionId: headingToId.get(heading) ?? null })),
+      ),
+    ].flatMap(({ key, rows, itemId, sectionId }) =>
+      itemId === null && sectionId === null
+        ? []
+        : rows.map((r) => ({
+            id: r.id,
+            projectId: p.id,
+            key,
+            itemId,
+            sectionId,
+            source: r.source,
+            detail: r.detail,
+            quotedText: r.text,
+            actor: r.actor,
+            recordedAt: r.at,
+            retiredAt: r.retired ?? null,
+          })),
+    );
+    if (referenceValues.length > 0) await tx.insert(sourceReferences).values(referenceValues);
 
     // Comments come from two places: the project's own list, and nested under each item. The attachment is
     // positional in the YAML rather than a ref field, so there is nothing to resolve and nothing that can
