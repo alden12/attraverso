@@ -271,7 +271,7 @@ export function createViewerHost(db: Database, sources: ViewerSources, store: St
 
     // One item's body, comments and attachments, when the pane opens it (VIEW-29). A read, open like `/api/store`.
     if (path === "/api/item") {
-      const found = await itemFeed(db, caller.ownerId, params.get("project") ?? "", params.get("ref") ?? "", (sources) => codeDrift(store.paths?.(), sources));
+      const found = await itemFeed(db, caller.ownerId, params.get("project") ?? "", params.get("ref") ?? "", (sources) => codeDrift(store.planFileOf?.(params.get("project") ?? ""), sources));
       return found === null ? json(404, { error: `no item "${params.get("ref") ?? ""}" in "${params.get("project") ?? ""}"` }) : json(200, found);
     }
 

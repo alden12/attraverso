@@ -9,6 +9,11 @@
  * source is simply not reported: unknown is not changed. The reference still says exactly what a claim rests on, so
  * an agent relying on it can run the `git show` itself.
  *
+ * **Moved is not changed.** The pinned lines are looked for anywhere in the file now, not only at their old line
+ * numbers, so an import added above them does not flag every reference below it. Only text that is no longer in the
+ * file at all reads as changed, which is the signal worth having; a reference whose line numbers drifted still
+ * names a commit where they were right.
+ *
  * Node-only, so it lives with the server rather than beside the shared parser.
  */
 import { execFile } from "node:child_process";
@@ -19,22 +24,34 @@ import { parseCodeRef, type CodeRef } from "../../scripts/references";
 /** Run git and take its output as bytes: `cat-file` sizes its objects in bytes, so a text decode would misalign. */
 const run = (args: string[], cwd: string, input?: string): Promise<Buffer> =>
   new Promise((resolve, reject) => {
-    const child = execFile("git", args, { cwd, encoding: "buffer", maxBuffer: 64 * 1024 * 1024, timeout: 5000 }, (error, stdout) =>
+    const child = execFile("git", args, { cwd, encoding: "buffer", maxBuffer: 64 * 1024 * 1024, timeout: 2000 }, (error, stdout) =>
       error ? reject(error) : resolve(stdout),
     );
     if (input !== undefined) child.stdin?.end(input);
   });
 
+/** Each plan file's checkout, looked up once a process: a plan file does not move between repos while it runs. */
+const checkouts = new Map<string, Promise<string | null>>();
+
 /** The checkout a plan file sits in, or null when it is not in one (or git is not there to ask). */
-async function checkoutOf(planPath: string): Promise<string | null> {
-  try {
-    return (await run(["rev-parse", "--show-toplevel"], dirname(planPath))).toString("utf8").trim() || null;
-  } catch {
-    return null;
+function checkoutOf(planPath: string): Promise<string | null> {
+  let found = checkouts.get(planPath);
+  if (found === undefined) {
+    found = run(["rev-parse", "--show-toplevel"], dirname(planPath)).then(
+      (out) => out.toString("utf8").trim() || null,
+      () => null,
+    );
+    checkouts.set(planPath, found);
   }
+  return found;
 }
 
-/** `git cat-file --batch` output for `commit:path` objects, by request, null for each one git does not have. */
+/**
+ * `git cat-file --batch` output for `commit:path` objects, by request: the file's text, or null for each one git
+ * does not have or that is not a file. Every object's bytes are stepped over whatever its type, since a `tree` or a
+ * `commit` is followed by its content just as a blob is, and losing count there would file every later blob under
+ * the wrong request.
+ */
 async function blobsAt(root: string, refs: CodeRef[]): Promise<(string | null)[]> {
   const requests = refs.map((ref) => `${ref.commit}:${ref.path}`);
   const out = await run(["cat-file", "--batch"], root, requests.join("\n") + "\n");
@@ -42,58 +59,64 @@ async function blobsAt(root: string, refs: CodeRef[]): Promise<(string | null)[]
   let at = 0;
   for (let i = 0; i < requests.length; i++) {
     const end = out.indexOf(10, at); // the header line
+    if (end === -1) break;
     const header = out.subarray(at, end).toString();
     at = end + 1;
-    const size = /^\S+ blob (\d+)$/.exec(header);
-    if (size === null) {
-      blobs.push(null); // "<request> missing", or not a file: unknown here
+    const object = /^\S+ (\S+) (\d+)$/.exec(header);
+    if (object === null) {
+      blobs.push(null); // "<request> missing", or ambiguous: no content follows
       continue;
     }
-    blobs.push(out.subarray(at, at + Number(size[1])).toString("utf8"));
-    at += Number(size[1]) + 1; // the blob, then its trailing newline
+    const size = Number(object[2]);
+    blobs.push(object[1] === "blob" ? out.subarray(at, at + size).toString("utf8") : null);
+    at += size + 1; // the object, then its trailing newline
   }
   return blobs;
 }
 
-/** Lines `from` to `to` (1-based, inclusive), trailing whitespace ignored, or null when the file is shorter. */
-function lines(text: string, from: number, to: number): string | null {
-  const all = text.split("\n");
-  if (to > all.length) return null;
-  return all
-    .slice(from - 1, to)
-    .map((line) => line.trimEnd())
-    .join("\n");
+/** A file's lines with trailing whitespace dropped, so a reformatted line end never reads as a change. A final
+ *  newline ends the last line rather than starting an empty one. */
+const linesOf = (text: string): string[] => text.replace(/\r\n/g, "\n").replace(/\n$/, "").split("\n").map((line) => line.trimEnd());
+
+/** Lines `from` to `to` (1-based, inclusive) of the file, or null when the file is shorter. */
+function pinned(all: string[], from: number, to: number): string[] | null {
+  return to > all.length ? null : all.slice(from - 1, to);
+}
+
+/** Whether `lines` appear, consecutively and in order, anywhere in `file`. */
+function contains(file: string[], lines: string[]): boolean {
+  for (let start = 0; start + lines.length <= file.length; start++) {
+    if (lines.every((line, offset) => file[start + offset] === line)) return true;
+  }
+  return false;
 }
 
 /**
- * The details of the `code` sources whose pinned lines differ from the file now, in the checkout holding
- * `planPaths[0]`. Empty when there is no checkout or no code source; never throws, since a read must not fail over
- * an optional check.
+ * The details of the `code` sources whose pinned lines are no longer in the file, in the checkout holding
+ * `planFile` - the plan file that owns what is being read, so a plan spread over several repos checks each against
+ * its own. Empty when there is no plan file (the hosted server passes none), no checkout or no code source; never
+ * throws, since a read must not fail over an optional check.
  */
-export async function codeDrift(planPaths: readonly string[] | undefined, sources: { source: string; detail: string }[]): Promise<Set<string>> {
+export async function codeDrift(planFile: string | undefined, sources: { source: string; detail: string }[]): Promise<Set<string>> {
   const changed = new Set<string>();
   const code = [...new Set(sources.filter((s) => s.source === "code").map((s) => s.detail))].flatMap((detail) => {
     const ref = parseCodeRef(detail);
     return ref === null ? [] : [{ detail, ref }];
   });
-  if (code.length === 0 || planPaths === undefined || planPaths.length === 0) return changed;
+  if (code.length === 0 || planFile === undefined) return changed;
   try {
-    const root = await checkoutOf(planPaths[0]!);
+    const root = await checkoutOf(planFile);
     if (root === null) return changed;
-    const pinned = await blobsAt(
+    const then = await blobsAt(
       root,
       code.map((c) => c.ref),
     );
     await Promise.all(
       code.map(async ({ detail, ref }, index) => {
-        const then = pinned[index];
-        if (then === null || then === undefined) return; // the commit is not in this checkout: unknown, not changed
-        const was = lines(then, ref.from, ref.to);
-        const now = await readFile(join(root, ref.path), "utf8").then(
-          (text) => lines(text, ref.from, ref.to),
-          () => null, // deleted or moved since: changed
-        );
-        if (was !== null && was !== now) changed.add(detail);
+        const was = then[index] === null || then[index] === undefined ? null : pinned(linesOf(then[index]!), ref.from, ref.to);
+        if (was === null) return; // the commit or the file is not in this checkout, or the lines are not: unknown, not changed
+        const now = await readFile(join(root, ref.path), "utf8").then(linesOf, () => null); // deleted or moved since: changed
+        if (now === null || !contains(now, was)) changed.add(detail);
       }),
     );
   } catch {

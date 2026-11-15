@@ -41,7 +41,7 @@ describe("apm:check's reference rules (CTX-13)", () => {
   it("reports a live reference whose pointer was removed by hand, which loading let through", async () => {
     const store = await plan();
     item(store).body = "The database runs Postgres 18.4.";
-    expect(checkReferences(store).errors).toEqual(["apm OPS-1: reference r7k2 is live but its pointer is not in the text"]);
+    expect(checkReferences(store).errors).toEqual(["apm OPS-1: reference r7k2 is live but its pointer is not in the text (removed by hand, or only inside code, where it does not count)"]);
   });
 
   it("reports a pointer with nothing behind it, and one whose reference was retired", async () => {

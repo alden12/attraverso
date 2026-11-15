@@ -1095,6 +1095,9 @@ test.describe("source references in the pane (CTX-13)", () => {
     await expect(panel).toContainText("package.json");
     await expect(panel.locator(".refs-panel__changed")).toHaveCount(0);
     expect(await highlighted()).toBe("A TypeScript project with vite, vitest and one verify");
+    // Focus moves into it, and the reference says it is open.
+    await expect(panel.locator(".refs-panel__close")).toBeFocused();
+    await expect(first).toHaveAttribute("aria-expanded", "true");
 
     // Beside the reference it explains, not at the end of the body: it opens just under the number's line.
     const link = (await first.boundingBox())!;
@@ -1118,6 +1121,8 @@ test.describe("source references in the pane (CTX-13)", () => {
     await first.click();
     await page.keyboard.press("Escape");
     await expect(page.locator(".refs-panel")).toHaveCount(0);
+    // Escape hands focus back to the reference that opened it, so the keyboard carries on from there.
+    await expect(first).toBeFocused();
   });
 
   test("shows a context section's references the same way", async ({ page }) => {

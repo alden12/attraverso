@@ -748,6 +748,12 @@ export interface StoreAccess {
   reloads?(): number;
   /** The plan files, for the viewer to watch (`VIEW-7`). Optional for the same reason as `reloads`. */
   paths?(): readonly string[];
+  /**
+   * The plan file a project lives in, so a `code` source is checked against that file's own checkout (`CTX-13`).
+   * **Absent on a host with no checkout, and that absence is what keeps git off the hosted server**: the code
+   * check runs only where this answers.
+   */
+  planFileOf?(projectKey: string): string;
   /** Append recorded measurements to their month files, without re-serialising the plan (`METRIC-2`). */
   appendMeasurements(records: MeasurementRecord[]): Promise<void>;
 }
@@ -757,5 +763,6 @@ export const accessTo = (store: StoreFile, db: Database): StoreAccess => ({
   refresh: () => store.refresh(db),
   reloads: () => store.reloads(),
   paths: () => store.paths,
+  planFileOf: (key) => store.fileOf(key),
   appendMeasurements: (records) => store.appendMeasurements(records),
 });

@@ -21,7 +21,8 @@ import { countItems, createItem, deleteItem, editItem, getItem, getItemDetail, l
 import { dependencyRefsByItem } from "../domain/dependencies";
 import { addComment, deleteComment, editComment, listComments, shortCommentId, AUDIENCES, MAX_BODY, SHORT_ID, type Comment } from "../domain/comments";
 import { deleteSection, getSection, listSections, setSection, PROTOCOL_HEADING } from "../domain/context";
-import { expandPointers, fmtReferenceChanges, liveSources, SOURCE_KINDS } from "../domain/references";
+import { expandPointers, liveSources, SOURCE_KINDS } from "../domain/references";
+import { fmtReferenceChanges, fmtSourcesWritten } from "./referenceReplies";
 import { codeDrift } from "./codeDrift";
 import { resumeProject, type ContextPack, type PackBoard } from "../domain/memory";
 import { setNext, type NextItem } from "../domain/next";
@@ -104,14 +105,24 @@ const SOURCE = z.object({
   source: z.enum(SOURCE_KINDS),
   detail: z
     .string()
+    .min(1)
+    .max(500)
     .describe("For user, their words verbatim; for test, the command; for search, the URL; for docs, the file or page; for code, path:line or path:from-to@commit (e.g. src/db/schema.ts:120-140@345a746)."),
 });
+/** Bounds on one write, so a reply that inlines every source stays readable and one call cannot insert thousands. */
+const MAX_KEYS = 20;
+const MAX_SOURCES_PER_KEY = 5;
 const SOURCES = z
-  .record(z.string(), z.union([SOURCE, z.array(SOURCE)]))
+  .record(
+    z.string().regex(/^[a-z0-9]{1,16}$/, "a key is 1 to 16 lowercase letters and digits"),
+    z.union([SOURCE, z.array(SOURCE).min(1).max(MAX_SOURCES_PER_KEY)]),
+  )
+  .refine((sources) => Object.keys(sources).length > 0, "name at least one key, or leave sources out")
+  .refine((sources) => Object.keys(sources).length <= MAX_KEYS, `at most ${MAX_KEYS} keys in one write`)
   .describe(
     "Where claims in this text came from, when it is more than your own reasoning. Write a pointer straight after the claim, like " +
       '"Postgres 18.4 runs in production [ref pg18].", and give its sources here keyed by it: {"pg18": {"source": "test", "detail": "yarn cloud:check"}}. ' +
-      "Keys are short lowercase letters and digits. A key already in the text gains another source. Unreferenced text is yours by default, so reference only claims with a real source - above all facts about systems outside the repo.",
+      "Keys are short lowercase letters and digits, unused elsewhere in the project. A key already sourced here gains another source. Unreferenced text is yours by default, so reference only claims with a real source.",
   )
   .optional();
 
@@ -778,7 +789,9 @@ export function registerTools(server: McpServer, db: Database, store: StoreAcces
         const p = await resolveProject(db, caller, project);
         const item = await createItem(db, { projectId: p.id, area, parent, ref, title, body, status, deps, start, due, sources }, ACTOR);
         await store.persist();
-        return text(`created ${fmtItem(item)}${deps?.length ? `\ndepends on: ${deps.join(", ")}` : ""}`);
+        return text(
+          `created ${fmtItem(item)}${deps?.length ? `\ndepends on: ${deps.join(", ")}` : ""}${fmtSourcesWritten(item.addedSources, item.body)}`,
+        );
       }),
   );
 
@@ -885,7 +898,7 @@ export function registerTools(server: McpServer, db: Database, store: StoreAcces
         const detail =
           found.item.body === null
             ? found
-            : { ...found, item: { ...found.item, body: expandPointers(found.item.body, sources, references === "full", await codeDrift(store.paths?.(), sources)) } };
+            : { ...found, item: { ...found.item, body: expandPointers(found.item.body, sources, references === "full", await codeDrift(store.planFileOf?.(p.key), sources)) } };
         // Prose, and deliberately **not** an `outputSchema` (`MCP-26`). One was tried here on 2026-09-01 and
         // reverted once the measurement came in: declaring a schema does not add structure alongside the text,
         // it *replaces* it, and this reply is a document rather than a record - a body of markdown, meant to be
@@ -946,7 +959,7 @@ export function registerTools(server: McpServer, db: Database, store: StoreAcces
         await store.persist();
         return text(
           `edited ${fmtItem(item)}${deps ? `\ndepends on: ${deps.length ? deps.join(", ") : "(nothing)"}` : ""}` +
-            `${sources ? `\nsources added to: ${Object.keys(sources).sort().join(", ")}` : ""}${fmtReferenceChanges(item.referenceChanges)}`,
+            `${fmtSourcesWritten(item.addedSources, body === undefined ? null : item.body)}${fmtReferenceChanges(item.referenceChanges)}`,
         );
       }),
   );
@@ -1103,16 +1116,21 @@ export function registerTools(server: McpServer, db: Database, store: StoreAcces
     {
       annotations: READ,
       description:
-        "Read one context section by its exact heading, so it can be revised from its current content. Use list_context to see the headings; get_project already returns `protocol` in full.",
-      inputSchema: { project: z.string(), heading: z.string() },
+        "Read one context section by its exact heading, so it can be revised from its current content. Use list_context to see the headings; get_project already returns `protocol` in full. " +
+        "A claim followed by [ref key: ...] has sources, named with their dates; \"text changed since\" means the claim was edited after its source vouched for it.",
+      inputSchema: {
+        project: z.string(),
+        heading: z.string(),
+        references: z.enum(["full"]).describe('"full" includes every source\'s detail, however long; otherwise only short ones are shown.').optional(),
+      },
     },
-    async ({ project, heading }): Promise<CallToolResult> =>
+    async ({ project, heading, references }): Promise<CallToolResult> =>
       guarded(async () => {
         const p = await resolveProject(db, caller, project);
         const section = await getSection(db, p.id, heading);
         if (section === null) throw await noSuchSection(db, p, heading);
         const sources = await liveSources(db, { sectionId: section.id });
-        return text(`### ${section.heading}\n${expandPointers(section.content, sources, false, await codeDrift(store.paths?.(), sources))}`);
+        return text(`### ${section.heading}\n${expandPointers(section.content, sources, references === "full", await codeDrift(store.planFileOf?.(p.key), sources))}`);
       }),
   );
 
@@ -1146,7 +1164,9 @@ export function registerTools(server: McpServer, db: Database, store: StoreAcces
         // Echo the resulting order, not just the heading: placement is derived state, and a reply that changes
         // it should state it (MCP-21).
         const order = (await listSections(db, p.id)).map((s) => s.heading);
-        return text(`set context section "${section.heading}"\norder: ${order.join(" -> ")}${fmtReferenceChanges(section.referenceChanges)}`);
+        return text(
+          `set context section "${section.heading}"\norder: ${order.join(" -> ")}${fmtSourcesWritten(section.addedSources, section.content)}${fmtReferenceChanges(section.referenceChanges)}`,
+        );
       }),
   );
 

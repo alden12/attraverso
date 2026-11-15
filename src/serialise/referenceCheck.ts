@@ -58,7 +58,7 @@ export function checkReferences(store: Store): ReferenceReport {
         changed += rows.filter((row) => normaliseClaim(row.text) !== p.covers).length;
       }
       for (const key of live.keys()) {
-        if (!pointed.has(key)) errors.push(`${label}: reference ${key} is live but its pointer is not in the text`);
+        if (!pointed.has(key)) errors.push(`${label}: reference ${key} is live but its pointer is not in the text (removed by hand, or only inside code, where it does not count)`);
         const elsewhere = ownerOfKey.get(key);
         if (elsewhere !== undefined && elsewhere !== label) errors.push(`${project.key}: reference ${key} is live in both ${elsewhere} and ${label}`);
         ownerOfKey.set(key, label);

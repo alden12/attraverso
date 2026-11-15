@@ -1462,6 +1462,16 @@ body {
   overflow-wrap: anywhere;
   color: #c3ccd8;
 }
+/* Portaled to the page body, so the pane's prose rules do not reach it: its own, matching them. */
+.refs-panel a {
+  color: #7fb2ff;
+}
+.refs-panel code {
+  background: #1b232e;
+  padding: 1px 4px;
+  border-radius: 4px;
+  font-size: 12px;
+}
 .refs-panel__changed,
 .refs-panel__none {
   flex-basis: 100%;

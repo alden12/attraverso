@@ -1426,7 +1426,7 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
             )}
             <div className="detail__doc">
               {loaded !== null ? (
-                <ReferencedBody body={loaded.body} references={loaded.references ?? []} />
+                <ReferencedBody body={loaded.body} references={loaded.references} />
               ) : (
                 <p className="detail__pending">
                   {detail !== null && "state" in detail && detail.state === "missing"

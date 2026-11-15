@@ -79,3 +79,46 @@ describe("code references (CTX-13)", () => {
     }
   });
 });
+
+describe("the review's edge cases (CTX-13)", () => {
+  it("keeps a stray backtick from hiding pointers, in its own paragraph or the next", () => {
+    expect(Object.keys(covers("A lone ` here [ref a1].\n\nNext para with `code` [ref b2]."))).toEqual(["a1", "b2"]);
+    expect(Object.keys(covers("The ` key works [ref a1]."))).toEqual(["a1"]);
+  });
+
+  it("never lets a code span cross a blank line", () => {
+    expect(Object.keys(covers("Open `span [ref a1].\n\nclose` here [ref b2]."))).toEqual(["a1", "b2"]);
+  });
+
+  it("does not read a link, a link definition or an escaped pointer as a pointer", () => {
+    expect(parsePointers("See the [ref docs](https://example.com).").pointers).toEqual([]);
+    expect(parsePointers("[ref a1]: https://example.com").pointers).toEqual([]);
+    expect(parsePointers("Literally \\[ref a1].").pointers).toEqual([]);
+    expect(problems("See the [ref docs](https://example.com).")).toEqual([]);
+  });
+
+  it("says when a pointer has nothing before it to stand behind", () => {
+    expect(problems("[ref a1] then the claim.")).toEqual(["[ref a1] has nothing before it to stand behind: put it straight after its claim"]);
+    expect(problems("## [ref a1] Title")).toHaveLength(1);
+  });
+
+  it("asks for a blank line between a list and a pointer under it", () => {
+    expect(problems("- a\n- b\n[ref a1]")).toContain("put a blank line between the list and [ref a1], or markdown reads it as part of the last item");
+    expect(problems("- a\n- b\n\n[ref a1]")).toEqual([]);
+  });
+
+  it("ignores a blockquote's markers, so rewrapping a quote is not a change", () => {
+    expect(covers("> quoted claim\n> more [ref a1]")).toEqual(covers("> quoted\n> claim more [ref a1]"));
+  });
+
+  it("says what a key is when a pointer is malformed", () => {
+    expect(problems("As in [ref CTX-13].")).toEqual(['"[ref CTX-13]." is not a pointer: write [ref <key>], where a key is lowercase letters and digits']);
+  });
+
+  it("reads CRLF text, and stays fast on a long run of unclosed pointers", () => {
+    expect(covers("A claim [ref a1].\r\n\r\nAnother [ref b2].")).toEqual({ a1: "A claim", b2: "Another" });
+    const started = Date.now();
+    parsePointers("[ref a1:".repeat(20_000));
+    expect(Date.now() - started).toBeLessThan(2000);
+  });
+});

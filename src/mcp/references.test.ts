@@ -11,13 +11,24 @@ import { freshDb } from "../db/testing";
 import type { Database } from "../db/client";
 import { getItem } from "../domain/items";
 import { createProjectWithDefaults } from "../domain/projects";
+import { z } from "zod";
+import { eq } from "drizzle-orm";
+import { events } from "../db/schema";
 import { registerTools } from "./tools";
 
 type Handler = (args: Record<string, unknown>) => Promise<CallToolResult>;
 
+/** Each tool's input schema, as the SDK validates a call against it before the handler runs. */
+const schemas = new Map<string, z.ZodRawShape>();
+
 function toolsOf(db: Database, ownerId: string): Map<string, Handler> {
   const handlers = new Map<string, Handler>();
-  const stub = { registerTool: (name: string, _config: unknown, handler: Handler) => handlers.set(name, handler) } as unknown as McpServer;
+  const stub = {
+    registerTool: (name: string, config: { inputSchema?: z.ZodRawShape }, handler: Handler) => {
+      schemas.set(name, config.inputSchema ?? {});
+      handlers.set(name, handler);
+    },
+  } as unknown as McpServer;
   registerTools(
     stub,
     db,
@@ -124,5 +135,59 @@ describe("source references through the tools (CTX-13)", () => {
     expect(said(await call("get_context", { heading: "Hosting" }))).toMatch(new RegExp(`One region only \\[ref reg1: docs ${DAY} infra/region\\.tf\\]`));
     const reply = said(await call("set_context", { heading: "Hosting", content: "Two regions [ref reg1]." }));
     expect(reply).toContain('"One region only" -> "Two regions"');
+  });
+
+  it("round-trips a body whose sources hold brackets, backticks and line breaks", async () => {
+    await call("create_item", {
+      area: "OPS",
+      title: "awkward",
+      body: "A claim here [ref h1]. Then `code` and another [ref h2].",
+      sources: {
+        h1: [
+          { source: "user", detail: "run `x` and see\nwhat [it] says" },
+          { source: "test", detail: "[ -f x ]" },
+        ],
+        h2: { source: "docs", detail: "app/[id]/page.tsx" },
+      },
+    });
+    for (const references of [undefined, "full"]) {
+      const read = said(await call("get_item", { ref: "OPS-2", references }));
+      const body = read.split("\n").find((line) => line.startsWith("A claim here"))!;
+      expect(said(await call("edit_item", { ref: "OPS-2", body }))).not.toContain("sourced claims you changed");
+      expect((await getItem(db, projectId as never, "OPS-2"))!.body).toBe("A claim here [ref h1]. Then `code` and another [ref h2].");
+    }
+  });
+
+  it("clears \"text changed since\" once a source is added for the new wording", async () => {
+    await call("edit_item", { ref: "OPS-1", body: "Postgres 18.6 runs in production [ref pg18]. We host on a VM [ref vm1]." });
+    expect(said(await call("get_item", { ref: "OPS-1" }))).toMatch(/\[ref pg18: [^\]]*text changed since\]/);
+    await call("edit_item", { ref: "OPS-1", sources: { pg18: { source: "test", detail: "yarn cloud:check" } } });
+    expect(said(await call("get_item", { ref: "OPS-1" }))).not.toContain("text changed since");
+  });
+
+  it("checks keys and empty sources before a write is attempted", async () => {
+    const valid = (sources: unknown) => z.object(schemas.get("edit_item")!).safeParse({ project: "apm", ref: "OPS-1", sources }).success;
+    expect(valid({ pg18: { source: "test", detail: "x" } })).toBe(true);
+    expect(valid({ PG18: { source: "test", detail: "x" } })).toBe(false);
+    expect(valid({ pg18: [] })).toBe(false);
+    expect(valid({})).toBe(false);
+    expect(valid({ pg18: { source: "test", detail: "" } })).toBe(false);
+    expect(valid({ pg18: { source: "test", detail: "x".repeat(501) } })).toBe(false);
+    expect(valid(Object.fromEntries(Array.from({ length: 21 }, (_, i) => [`k${i}`, { source: "test", detail: "x" }])))).toBe(false);
+  });
+
+  it("records the sources it added in the event log", async () => {
+    const created = await db.select({ after: events.after }).from(events).where(eq(events.kind, "created"));
+    const payloads = created.map((row) => JSON.parse(row.after ?? "{}") as { addedSources?: { key: string }[] });
+    expect(payloads.flatMap((p) => p.addedSources ?? []).map((a) => a.key)).toEqual(["pg18", "vm1"]);
+    await call("edit_item", { ref: "OPS-1", sources: { pg18: { source: "docs", detail: "README.md" } } });
+    const edited = await db.select({ after: events.after }).from(events).where(eq(events.kind, "edited"));
+    expect(JSON.parse(edited.at(-1)!.after!).addedSources).toEqual([{ key: "pg18", source: "docs", detail: "README.md" }]);
+  });
+
+  it("tells the writer about a malformed pointer in the same reply", async () => {
+    const reply = said(await call("edit_item", { ref: "OPS-1", body: "Postgres 18.4 runs in production [ref pg18]. We host on a VM [ref vm1]. See [ref CTX-13]." }));
+    expect(reply).toContain("pointer problems");
+    expect(reply).toContain("where a key is lowercase letters and digits");
   });
 });

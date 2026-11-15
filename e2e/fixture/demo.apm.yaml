@@ -162,11 +162,11 @@ projects:
         comments:
           - body: Moved to the pane so the graph stays readable.
             audience: user
-            id: 01a1e12c-1858-7099-a46c-d7957ae25f88
-            at: 2026-11-15T21:45:25.848Z
+            id: 019a7e10-0000-7000-8000-000000000001
+            at: 2026-11-01T10:00:00.000Z
             actor: fixture
           - body: Checked the markdown renders **bold**.
             audience: agent
-            id: 01a1e12c-185a-77da-b1d1-ad53234cd50b
-            at: 2026-11-15T21:45:25.850Z
+            id: 019a7e10-0000-7000-8000-000000000002
+            at: 2026-11-02T10:00:00.000Z
             actor: fixture

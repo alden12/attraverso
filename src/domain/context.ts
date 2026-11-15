@@ -8,10 +8,10 @@ import { and, asc, eq, sql } from "drizzle-orm";
 import type { Database, Tx } from "../db/client";
 import { timestamp } from "../db/ids";
 import { maybeOne, one } from "../db/rows";
-import { contextSections } from "../db/schema";
+import { contextSections, sourceReferences } from "../db/schema";
 import type { OwnedProjectId } from "./owned";
 import { mutate, type Actor } from "./events";
-import { addSources, liveSources, referenceChanges, retireRemovedPointers, type ReferenceChange, type SourcesInput } from "./references";
+import { addSources, liveSources, referenceChanges, retireRemovedPointers, type AddedSource, type ReferenceChange, type SourcesInput } from "./references";
 import { bareForm } from "../../scripts/references";
 
 export type ContextSection = typeof contextSections.$inferSelect;
@@ -42,7 +42,7 @@ export interface SetSection {
 }
 
 /** The section as written, and what the write did to its sourced claims (`CTX-13`). */
-export type SetSectionResult = ContextSection & { referenceChanges: ReferenceChange[] };
+export type SetSectionResult = ContextSection & { referenceChanges: ReferenceChange[]; addedSources: AddedSource[] };
 
 /**
  * The `sortOrder` that puts a section immediately after `heading` (or first, when `heading` is null).
@@ -114,16 +114,20 @@ export async function setSection(db: Database, input: SetSection, actor: Actor):
     // As for an item body (`CTX-13`): a reference whose pointer this content no longer carries is retired with it.
     const sourcesBefore = existing ? await liveSources(tx, { sectionId: after.id }) : [];
     const retiredReferences = existing ? await retireRemovedPointers(tx, { sectionId: after.id }, content) : [];
-    if (input.sources !== undefined) await addSources(tx, input.projectId, { sectionId: after.id }, content, input.sources, actor);
+    const addedSources = input.sources === undefined ? [] : await addSources(tx, input.projectId, { sectionId: after.id }, content, input.sources, actor);
     return {
-      result: { ...after, referenceChanges: existing ? referenceChanges(existing.content, content, sourcesBefore) : [] },
+      result: { ...after, referenceChanges: existing ? referenceChanges(existing.content, content, sourcesBefore) : [], addedSources },
       event: {
         projectId: input.projectId,
         entityType: "context_section",
         entityId: after.id,
         kind: existing ? "updated" : "created",
         before: existing ?? undefined,
-        after: retiredReferences.length > 0 ? { ...after, retiredReferences } : after,
+        after: {
+          ...after,
+          ...(retiredReferences.length > 0 ? { retiredReferences } : {}),
+          ...(addedSources.length > 0 ? { addedSources } : {}),
+        },
       },
     };
   });
@@ -152,7 +156,13 @@ export async function deleteSection(db: Database, projectId: OwnedProjectId, hea
       await tx.select().from(contextSections).where(and(eq(contextSections.projectId, projectId), eq(contextSections.heading, heading))),
     );
     if (existing === null) throw new Error(`no context section "${heading}"`);
+    // Its source references go with it (the cascade), so they ride in the event, live and retired alike: deleting a
+    // section is how a heading is renamed, and the audit trail is where a rename's sources can be recovered from.
+    const references = await tx.select().from(sourceReferences).where(eq(sourceReferences.sectionId, existing.id));
     await tx.delete(contextSections).where(eq(contextSections.id, existing.id));
-    return { result: existing, event: { projectId, entityType: "context_section", entityId: existing.id, kind: "deleted", before: existing } };
+    return {
+      result: existing,
+      event: { projectId, entityType: "context_section", entityId: existing.id, kind: "deleted", before: references.length > 0 ? { ...existing, references } : existing },
+    };
   });
 }

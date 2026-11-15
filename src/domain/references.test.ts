@@ -13,9 +13,10 @@ import { freshDb } from "../db/testing";
 import { events, sourceReferences } from "../db/schema";
 import { createProject } from "./projects";
 import { createItem, editItem } from "./items";
-import { setSection } from "./context";
+import { deleteSection, setSection } from "./context";
 import { hasPointer } from "./references";
-import { exportStore, importStore } from "../serialise/plan";
+import { exportStore, importStore, parseStore } from "../serialise/plan";
+import { stringify } from "yaml";
 
 const ACTOR = "test";
 
@@ -146,5 +147,40 @@ describe("loading a plan (CTX-13)", () => {
     expect(await live(next.db, "r7k2")).toHaveLength(0); // the next edit retires it rather than failing
     await close();
     await next.close();
+  });
+
+  it("stands the rule back up once the load is done", async () => {
+    const { db, project, item, ownerId, close } = await setup();
+    await db.insert(sourceReferences).values(reference(project.id, { itemId: item.id }));
+    const next = await freshDb();
+    await importStore(next.db, await exportStore(db, ownerId));
+    const loaded = (await (await import("./projects")).getProjectByKey(next.db, next.ownerId, "apm"))!;
+    const loadedItem = (await next.db.select().from((await import("../db/schema")).items))[0]!;
+    // A pointerless reference written after the load, outside it, is refused as ever.
+    expect(await refusal(next.db.insert(sourceReferences).values(reference(loaded.id, { itemId: loadedItem.id }, "zz99")))).toMatch(/pointer/i);
+    await close();
+    await next.close();
+  });
+});
+
+describe("deleting a context section (CTX-13)", () => {
+  it("keeps its references in the event, since the rows go with the section", async () => {
+    const { db, project, close } = await setup();
+    const section = await setSection(db, { projectId: project.id, heading: "Hosting", content: "A VM, not serverless [ref d4p1]." }, ACTOR);
+    await db.insert(sourceReferences).values({ ...reference(project.id, { sectionId: section.id }, "d4p1", "user"), quotedText: "A VM, not serverless" });
+    await deleteSection(db, project.id, "Hosting", ACTOR);
+    const deleted = (await db.select().from(events).where(eq(events.kind, "deleted"))).at(-1)!;
+    expect((JSON.parse(deleted.before!) as { references: { key: string }[] }).references.map((r) => r.key)).toEqual(["d4p1"]);
+    await close();
+  });
+
+  it("refuses a reference key the parser could never see, on load", async () => {
+    const { db, project, item, ownerId, close } = await setup();
+    await db.insert(sourceReferences).values(reference(project.id, { itemId: item.id }));
+    const exported = await exportStore(db, ownerId);
+    const references = exported.projects[0]!.items[0]!.references!;
+    references.R7K2 = references.r7k2!;
+    expect(() => parseStore(stringify(exported))).toThrow(/lowercase letters and digits/);
+    await close();
   });
 });

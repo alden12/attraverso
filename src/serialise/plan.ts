@@ -71,7 +71,8 @@ const referenceSchema = z.object({
   retired: z.string().optional(),
 });
 /** Pointer key -> its sources, oldest first. */
-const referencesSchema = z.record(z.string(), z.array(referenceSchema));
+// The key grammar the parser reads (`scripts/references.ts`): a key it cannot see would sit there with no pointer.
+const referencesSchema = z.record(z.string().regex(/^[a-z0-9]+$/, "a reference key is lowercase letters and digits"), z.array(referenceSchema));
 
 /** One project's layout: node id -> "x,y", whole numbers on the layout's grid. */
 const layoutSchema = z.record(z.string(), z.string().regex(/^-?\d+,-?\d+$/, "a layout position is \"x,y\" in whole numbers"));

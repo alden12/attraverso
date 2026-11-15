@@ -17,6 +17,8 @@ import { createInMemoryDb } from "../../src/db/memory";
 import { createItem, deleteItem, editItem, getItem, setStatus } from "../../src/domain/items";
 import type { SourcesInput } from "../../src/domain/references";
 import { addComment } from "../../src/domain/comments";
+import { comments } from "../../src/db/schema";
+import { eq } from "drizzle-orm";
 import { createProject } from "../../src/domain/projects";
 import { setSection } from "../../src/domain/context";
 import { ensureUser, LOCAL_IDENTITY } from "../../src/domain/users";
@@ -75,8 +77,15 @@ await deleteItem(db, { projectId: demo.id, ref: "DATA-6" }, ACTOR);
 
 // Two comments on one item (VIEW-5), one of them Claude's own, so the pane shows one and folds the other.
 const prose = await getItem(db, demo.id, "VIEW-1.2");
-await addComment(db, { projectId: demo.id, itemId: prose!.id, body: "Moved to the pane so the graph stays readable." }, ACTOR);
-await addComment(db, { projectId: demo.id, itemId: prose!.id, body: "Checked the markdown renders **bold**.", audience: "agent" }, ACTOR);
+const pinned = [
+  { body: "Moved to the pane so the graph stays readable.", id: "019a7e10-0000-7000-8000-000000000001", at: "2026-11-01T10:00:00.000Z" },
+  { body: "Checked the markdown renders **bold**.", audience: "agent" as const, id: "019a7e10-0000-7000-8000-000000000002", at: "2026-11-02T10:00:00.000Z" },
+];
+// Pinned ids and a day apart, so a rebuild leaves them as they were and their order never rests on milliseconds.
+for (const { id, at, ...comment } of pinned) {
+  const added = await addComment(db, { projectId: demo.id, itemId: prose!.id, ...comment }, ACTOR);
+  await db.update(comments).set({ id, createdAt: at }).where(eq(comments.id, added.id));
+}
 
 // Two context sections (VIEW-30), `protocol` written second so the suite can see the viewer lists it first.
 await setSection(

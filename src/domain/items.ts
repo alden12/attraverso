@@ -14,7 +14,7 @@ import type { OwnedProjectId } from "./owned";
 import { mutate, type Actor } from "./events";
 import { dependencyRefs, setDependencies } from "./dependencies";
 import { listComments, type Comment } from "./comments";
-import { addSources, liveSources, referenceChanges, retireRemovedPointers, type ReferenceChange, type SourcesInput } from "./references";
+import { addSources, liveSources, referenceChanges, retireRemovedPointers, type AddedSource, type ReferenceChange, type SourcesInput } from "./references";
 import { bareForm } from "../../scripts/references";
 import { areaOf, isCalendarDate, isRef, parentRef, STATUSES, type Status } from "../../scripts/tickets";
 
@@ -143,7 +143,7 @@ export interface NewItem {
   sources?: SourcesInput;
 }
 
-export async function createItem(db: Database, input: NewItem, actor: Actor): Promise<Item> {
+export async function createItem(db: Database, input: NewItem, actor: Actor): Promise<Item & { addedSources: AddedSource[] }> {
   const status = input.status ?? "to-do";
   assertStatus(status);
   const startOn = input.start ?? null;
@@ -161,8 +161,12 @@ export async function createItem(db: Database, input: NewItem, actor: Actor): Pr
     // After the insert, so a pair of tickets created together can reference each other and so the cycle check
     // sees the finished row rather than a graph the new item is not in yet.
     if (input.deps && input.deps.length > 0) await setDependencies(tx, item, input.deps);
-    if (input.sources !== undefined) await addSources(tx, input.projectId, { itemId: item.id }, item.body ?? "", input.sources, actor);
-    return { result: item, event: { projectId: input.projectId, entityType: "item", entityId: item.id, kind: "created", after: item } };
+    const addedSources = input.sources === undefined ? [] : await addSources(tx, input.projectId, { itemId: item.id }, item.body ?? "", input.sources, actor);
+    // The sources ride in the event, as `retiredReferences` does on an edit, so the audit trail has them (`CTX-13`).
+    return {
+      result: { ...item, addedSources },
+      event: { projectId: input.projectId, entityType: "item", entityId: item.id, kind: "created", after: addedSources.length > 0 ? { ...item, addedSources } : item },
+    };
   });
 }
 
@@ -311,7 +315,7 @@ export interface EditItem {
 }
 
 /** The edited item, and what the edit did to its sourced claims, for the writer's reply (`CTX-13`). */
-export type EditedItem = Item & { referenceChanges: ReferenceChange[] };
+export type EditedItem = Item & { referenceChanges: ReferenceChange[]; addedSources: AddedSource[] };
 
 /** Revise a ticket's title, body, dependencies and/or planned dates. Status has its own path (`setStatus`), so this never
  *  touches it; at least one field must be given. The whole before/after is logged, so the edit is auditable
@@ -334,21 +338,21 @@ export async function editItem(db: Database, input: EditItem, actor: Actor): Pro
     // check is satisfied and the reference's history records when its claim went.
     const sourcesBefore = input.body === undefined ? [] : await liveSources(tx, { itemId: before.id });
     const retiredReferences = input.body === undefined ? [] : await retireRemovedPointers(tx, { itemId: before.id }, after.body ?? "");
-    if (input.sources !== undefined) await addSources(tx, input.projectId, { itemId: before.id }, after.body ?? "", input.sources, actor);
+    const addedSources = input.sources === undefined ? [] : await addSources(tx, input.projectId, { itemId: before.id }, after.body ?? "", input.sources, actor);
     const changedReferences = input.body === undefined ? [] : referenceChanges(before.body ?? "", after.body ?? "", sourcesBefore);
     // Dep refs ride along in the event payload when they changed, because the item row does not carry them:
     // without this a deps-only edit logs a before and after that differ by nothing but `updated_at`.
     const beforeDeps = input.deps === undefined ? undefined : await dependencyRefs(tx, before.id);
     const afterDeps = input.deps === undefined ? undefined : await setDependencies(tx, before, input.deps);
     return {
-      result: { ...after, referenceChanges: changedReferences },
+      result: { ...after, referenceChanges: changedReferences, addedSources },
       event: {
         projectId: input.projectId,
         entityType: "item",
         entityId: before.id,
         kind: "edited",
         before: { ...before, deps: beforeDeps },
-        after: { ...after, deps: afterDeps, ...(retiredReferences.length > 0 ? { retiredReferences } : {}) },
+        after: { ...after, deps: afterDeps, ...(retiredReferences.length > 0 ? { retiredReferences } : {}), ...(addedSources.length > 0 ? { addedSources } : {}) },
       },
     };
   });

@@ -73,6 +73,13 @@ export interface ReferenceSource {
   recordedAt: string;
 }
 
+/** One source as `addSources` recorded it, for the writing event's payload and the writer's reply. */
+export interface AddedSource {
+  key: string;
+  source: string;
+  detail: string;
+}
+
 /** A different advisory-lock namespace from ref allocation's, so the two never queue behind each other. */
 const REFERENCE_LOCK = 7_172_013;
 
@@ -93,7 +100,7 @@ export async function addSources(
   text: string,
   sources: SourcesInput,
   actor: string,
-): Promise<string[]> {
+): Promise<AddedSource[]> {
   const keys = Object.keys(sources);
   if (keys.length === 0) return [];
   await tx.execute(sql`SELECT pg_advisory_xact_lock(${REFERENCE_LOCK}, hashtext(${projectId}))`);
@@ -131,8 +138,9 @@ export async function addSources(
       });
     }
   }
+  if (rows.length === 0) return [];
   await tx.insert(sourceReferences).values(rows);
-  return keys.sort();
+  return rows.map((row) => ({ key: row.key, source: row.source, detail: row.detail })).sort((a, b) => a.key.localeCompare(b.key));
 }
 
 /** The live sources behind an owner's references, oldest first within each key. */
@@ -155,6 +163,14 @@ export async function liveSources(db: Database | Tx, owner: ReferenceOwner): Pro
 const SHORT_DETAIL = 40;
 
 /**
+ * A detail as an expanded pointer shows it. Display only, so it is made safe for the round trip rather than kept
+ * exact: an agent sends a body it read straight back, and `bareForm` must find where each expansion ends. A `]` or
+ * a line break would end it early, and a backtick would open a code span that hides what follows; brackets become
+ * parentheses, backticks quotes, and line breaks spaces. The stored detail is untouched.
+ */
+const shown = (detail: string): string => detail.replace(/\s*[\r\n]+\s*/g, " ").replace(/\[/g, "(").replace(/\]/g, ")").replace(/`/g, "'");
+
+/**
  * The text a reader is given: every pointer expanded in place with its sources, so an agent sees where a claim
  * came from beside the claim, at the moment it reads it, without another call. Never stored - writing reduces it
  * back with `bareForm` - and in the reply only.
@@ -173,11 +189,12 @@ export function expandPointers(text: string, sources: ReferenceSource[], full = 
   for (const p of pointers.sort((a, b) => a.at - b.at)) {
     const behind = byKey.get(p.key) ?? [];
     const parts = behind.map((s) => {
-      const detail = s.source === "user" ? `"${s.detail}"` : s.detail;
+      const detail = s.source === "user" ? `"${shown(s.detail)}"` : shown(s.detail);
       return full || detail.length <= SHORT_DETAIL ? `${s.source} ${s.recordedAt.slice(0, 10)} ${detail}` : `${s.source} ${s.recordedAt.slice(0, 10)}`;
     });
     if (behind.length === 0) parts.push("no reference behind it");
-    else if (behind.some((s) => normaliseClaim(s.quotedText) !== p.covers)) parts.push("text changed since");
+    // Against the newest source only: adding a source for the claim's new wording is what clears it.
+    else if (normaliseClaim(behind[behind.length - 1]!.quotedText) !== p.covers) parts.push("text changed since");
     // Only where a checkout could tell (see `mcp/codeDrift.ts`): the lines a `code` source pinned differ from the file now.
     if (behind.some((s) => s.source === "code" && codeChanged.has(s.detail))) parts.push("code changed since");
     out += text.slice(last, p.at) + `[ref ${p.key}: ${parts.join(", ")}]`;
@@ -210,15 +227,4 @@ export function referenceChanges(before: string, after: string, sources: Referen
     const after = now.get(key)!;
     return before !== undefined && before !== after ? [{ key, kind: "changed", sources: summary, before, after }] : [];
   });
-}
-
-/** The changes as lines for a tool reply. Empty when nothing sourced was touched, so a reply stays as it was. */
-export function fmtReferenceChanges(changes: ReferenceChange[]): string {
-  if (changes.length === 0) return "";
-  const lines = changes.map((c) =>
-    c.kind === "retired"
-      ? `- ${c.key} (${c.sources}): pointer removed, so its sources were retired`
-      : `- ${c.key} (${c.sources}): "${c.before}" -> "${c.after}". Kept; reads "text changed since" until a source is added for the new text`,
-  );
-  return `\nsourced claims you changed:\n${lines.join("\n")}`;
 }

@@ -35,7 +35,7 @@ describe("code changed since (CTX-13)", () => {
   const code = (detail: string) => ({ source: "code", detail });
 
   it("reports the lines that changed since the pinned commit, and not the ones that did not", async () => {
-    const changed = await codeDrift([plan], [code(`lib.ts:2@${commit}`), code(`lib.ts:1@${commit}`), code(`lib.ts:3-4@${commit}`)]);
+    const changed = await codeDrift(plan, [code(`lib.ts:2@${commit}`), code(`lib.ts:1@${commit}`), code(`lib.ts:3-4@${commit}`)]);
     expect([...changed]).toEqual([`lib.ts:2@${commit}`]);
   });
 
@@ -45,13 +45,32 @@ describe("code changed since (CTX-13)", () => {
     git(repo, "commit", "-q", "-m", "add");
     const added = git(repo, "rev-parse", "--short", "HEAD");
     git(repo, "rm", "-q", "gone.ts");
-    expect([...(await codeDrift([plan], [code(`gone.ts:1@${added}`)]))]).toEqual([`gone.ts:1@${added}`]);
+    expect([...(await codeDrift(plan, [code(`gone.ts:1@${added}`)]))]).toEqual([`gone.ts:1@${added}`]);
   });
 
   it("reports nothing it cannot check: a commit the checkout lacks, other kinds of source, or no checkout", async () => {
-    expect((await codeDrift([plan], [code("lib.ts:2@deadbee")])).size).toBe(0);
-    expect((await codeDrift([plan], [{ source: "docs", detail: "lib.ts" }])).size).toBe(0);
+    expect((await codeDrift(plan, [code("lib.ts:2@deadbee")])).size).toBe(0);
+    expect((await codeDrift(plan, [{ source: "docs", detail: "lib.ts" }])).size).toBe(0);
     expect((await codeDrift(undefined, [code(`lib.ts:2@${commit}`)])).size).toBe(0);
-    expect((await codeDrift([join(tmpdir(), "nowhere", "attraverso.yaml")], [code(`lib.ts:2@${commit}`)])).size).toBe(0);
+    expect((await codeDrift(join(tmpdir(), "nowhere", "attraverso.yaml"), [code(`lib.ts:2@${commit}`)])).size).toBe(0);
+  });
+
+  it("does not flag lines that only moved, as when an import is added above them", async () => {
+    await writeFile(join(repo, "lib.ts"), "import x from 'x';\nexport const one = 1;\nexport const two = 22;\n// naïve café\nexport const three = 3;\n");
+    expect((await codeDrift(plan, [code(`lib.ts:1@${commit}`), code(`lib.ts:3-4@${commit}`)])).size).toBe(0);
+    expect([...(await codeDrift(plan, [code(`lib.ts:2@${commit}`)]))]).toEqual([`lib.ts:2@${commit}`]);
+  });
+
+  it("keeps its place in git's output past a directory, a missing file and an unknown commit", async () => {
+    const batch = [code(`.:1@${commit}`), code(`nope.ts:1@${commit}`), code("lib.ts:2@deadbee"), code(`lib.ts:2@${commit}`), code(`lib.ts:1@${commit}`)];
+    expect([...(await codeDrift(plan, batch))]).toEqual([`lib.ts:2@${commit}`]);
+  });
+
+  it("is refused at write for a path outside the repo, so it can never spoil a batch", async () => {
+    const { parseCodeRef } = await import("../../scripts/references");
+    expect(parseCodeRef(`../x.ts:1@${commit}`)).toBeNull();
+    expect(parseCodeRef(`/etc/passwd:1@${commit}`)).toBeNull();
+    expect(parseCodeRef(`src\\x.ts:1@${commit}`)).toBeNull();
+    expect(parseCodeRef(`app/[id]/page.tsx:1@${commit}`)).not.toBeNull();
   });
 });

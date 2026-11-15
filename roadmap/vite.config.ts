@@ -99,7 +99,16 @@ function servePlan(): Plugin {
         try {
           const { db, ownerId, itemFeed, codeDrift } = await searchable();
           const params = new URL(request.url ?? "/", "http://localhost").searchParams;
-          const found = await itemFeed(db, ownerId, params.get("project") ?? "", params.get("ref") ?? "", (sources) => codeDrift(storePaths, sources));
+          const key = params.get("project") ?? "";
+          // The plan file holding this project, so a `code` source is checked against that file's own checkout.
+          const holding = async () => {
+            for (const path of storePaths) {
+              const store = parse(await readFile(path, "utf8")) as Store;
+              if ((store.projects ?? []).some((project) => project.key === key)) return path;
+            }
+            return storePaths[0];
+          };
+          const found = await itemFeed(db, ownerId, key, params.get("ref") ?? "", async (sources) => codeDrift(await holding(), sources));
           if (found === null) response.statusCode = 404;
           response.end(JSON.stringify(found ?? { error: `no item "${params.get("ref") ?? ""}"` }));
         } catch (error) {
