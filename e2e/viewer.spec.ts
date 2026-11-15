@@ -1080,23 +1080,44 @@ test.describe("source references in the pane (CTX-13)", () => {
     await expect(doc.locator('.ref-link[data-doubt="true"]')).toHaveAttribute("title", /changed since its source/);
     await expect(doc).not.toContainText("[ref ");
 
-    // The first still reads as its source vouched for: the source, and no "changed" note.
-    await doc.locator(".ref-link", { hasText: "[1]" }).click();
+    // The words a reference stands behind, as the page has highlighted them (the CSS Custom Highlight API).
+    const highlighted = () =>
+      page.evaluate(() => {
+        const highlight = CSS.highlights.get("ref-claim");
+        return highlight === undefined ? null : [...highlight].map((range) => range.toString()).join("");
+      });
+
+    // The first still reads as its source vouched for: the source, no "changed" note, and exactly its own words lit.
+    const first = doc.locator(".ref-link", { hasText: "[1]" });
+    await first.click();
     const panel = page.locator(".refs-panel");
     await expect(panel).toContainText("docs");
     await expect(panel).toContainText("package.json");
     await expect(panel.locator(".refs-panel__changed")).toHaveCount(0);
-    await expect(doc.locator(".ref-highlight")).toHaveCount(1);
+    expect(await highlighted()).toBe("A TypeScript project with vite, vitest and one verify");
 
-    // The second was edited after its source: it says so, quoting what the source vouched for.
+    // Beside the reference it explains, not at the end of the body: it opens just under the number's line.
+    const link = (await first.boundingBox())!;
+    const box = (await panel.boundingBox())!;
+    expect(box.y).toBeGreaterThan(link.y);
+    expect(box.y - (link.y + link.height)).toBeLessThan(24);
+
+    // The second was edited after its source: it says so, quoting what the source vouched for, and its highlight
+    // starts after the first reference rather than at the paragraph's start. Escape first: an open popover covers
+    // the line beneath its reference, as a popover does.
+    await page.keyboard.press("Escape");
     await doc.locator(".ref-link", { hasText: "[2?]" }).click();
     await expect(panel).toContainText("we are on node 20");
     await expect(panel.locator(".refs-panel__changed")).toContainText("The node version is 20");
+    expect(await highlighted()).toBe("The node version is 22");
 
-    // And closes again, taking the highlight with it.
+    // And closes again, on its button or on Escape, taking the highlight with it.
     await panel.locator(".refs-panel__close").click();
     await expect(page.locator(".refs-panel")).toHaveCount(0);
-    await expect(doc.locator(".ref-highlight")).toHaveCount(0);
+    expect(await highlighted()).toBeNull();
+    await first.click();
+    await page.keyboard.press("Escape");
+    await expect(page.locator(".refs-panel")).toHaveCount(0);
   });
 
   test("shows a context section's references the same way", async ({ page }) => {

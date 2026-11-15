@@ -1398,12 +1398,25 @@ body {
   box-shadow: 0 0 0 3px rgba(250, 204, 21, 0.12);
   border-radius: 3px;
 }
+/* The claim a reference stands behind, painted as a range (CSS Custom Highlight API) rather than by wrapping it. */
+::highlight(ref-claim) {
+  background-color: rgba(250, 204, 21, 0.28);
+}
+.refs-body {
+  position: relative;
+}
+/* A popover beside the reference it explains, placed by the component above or below its line. */
 .refs-panel {
-  margin: 12px 0 4px;
+  position: fixed;
+  z-index: 60;
+  box-sizing: border-box;
+  max-height: 60vh;
+  overflow-y: auto;
   padding: 10px 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--panel-2);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
   font-size: 12px;
 }
 .refs-panel__head {

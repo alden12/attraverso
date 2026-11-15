@@ -92,6 +92,24 @@ command finds the plan the way the server does (or takes `--store <path>`), prin
 `--open`. `--project <key>` picks which project it lands on. It can edit the plan as the agent's viewer can, and
 is safe to run beside a connected server on the same file. Ctrl+C stops it.
 
+### Where a claim came from
+
+When something in the plan rests on more than the agent's own reasoning, it can say so. A claim is followed by a
+short pointer, and the agent records what stands behind it:
+
+```markdown
+The production database runs Postgres 18.4 [ref pg18].
+```
+
+A source is one of `user` (your words, verbatim), `test` (the command that checks it), `search` (the URL), `docs`
+(the file or page) or `code` (lines of a file at a commit, `src/db/schema.ts:120-140@345a746`). A claim can gather
+several over time. It is all optional: anything without a pointer is simply the agent's own reasoning.
+
+When the agent reads the item, each pointer comes back with its sources beside the claim. If the claim has been
+edited since a source vouched for it, or the code a `code` source points at has changed, it says so. In the viewer,
+references show as numbers - **[1]**, or **[2?]** when one deserves a second look - and clicking one highlights the
+claim and shows where it came from. Nothing is ever refused over a reference; it is there to help, not to gate.
+
 ### Where the plan lives
 
 In order of precedence:
