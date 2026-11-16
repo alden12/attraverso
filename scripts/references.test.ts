@@ -98,8 +98,8 @@ describe("the review's edge cases (CTX-13)", () => {
   });
 
   it("reads a pointer before a colon mid-sentence, and only refuses one starting its line (CTX-17.3)", () => {
-    expect(Object.keys(covers("Linked from the guide [ref onb4]: the setup page."))).toEqual(["onb4"]);
-    expect(Object.keys(covers("First line.\nLinked from the guide [ref onb4]: there."))).toEqual(["onb4"]);
+    expect(Object.keys(covers("Linked from the guide [ref setup1]: the setup page."))).toEqual(["setup1"]);
+    expect(Object.keys(covers("First line.\nLinked from the guide [ref setup1]: there."))).toEqual(["setup1"]);
     expect(parsePointers("Intro.\n\n   [ref a1]: https://example.com").pointers).toEqual([]);
     expect(parsePointers("Intro.\n\n[ref a1: docs 2026-11-16]: https://example.com").pointers).toEqual([]);
   });

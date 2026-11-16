@@ -32,7 +32,7 @@ const EXPANSION = "[^\\]\\n]{0,3000}";
 /** `[ref key]`, or the expanded `[ref key: ...]` that `get_item` returns and an agent may send straight back. Not
  *  escaped, not followed by `(`, which makes it a link, and not followed by `:` when it starts its line (up to three
  *  spaces in), which makes it a link definition. A `]:` mid-sentence is prose (`CTX-17.3`: "linked from the guide
- *  [ref onb4]: ..." was refused as missing), so the colon only counts where markdown would read a definition. */
+ *  [ref setup1]: ..." was refused as missing), so the colon only counts where markdown would read a definition. */
 const POINTER = new RegExp(
   `(?<!\\\\)\\[ref (${KEY})(?::${EXPANSION})?\\](?!\\()(?!:(?<=^ {0,3}\\[ref ${KEY}(?::${EXPANSION})?\\]:))`,
   "gm",

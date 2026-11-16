@@ -103,7 +103,7 @@ function contains(file: string[], lines: string[]): boolean {
 /**
  * The repo a code source's file is in, and the path within it: the deepest directory along the path, below `base`,
  * that holds a `.git` (a directory, or a file for a worktree or submodule), and otherwise `base` itself when it is a
- * checkout. A plan at the top of a folder of repos (`~/code`, with `rb-api/` and `iPhone/` cloned inside it) cites
+ * checkout. A plan at the top of a folder of repos (with `api/` and `app/` cloned inside it) cites
  * commits that only those nested repos have, so asking the outer checkout always answered "unknown" and a change there
  * was never reported (`CTX-17.6`). A few `stat`s a source, not cached, so a repo cloned while the server runs is
  * found on the next read.
