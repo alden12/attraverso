@@ -115,14 +115,15 @@ const MAX_SOURCES_PER_KEY = 5;
 const SOURCES = z
   .record(
     z.string().regex(/^[a-z0-9]{1,16}$/, "a key is 1 to 16 lowercase letters and digits"),
-    z.union([SOURCE, z.array(SOURCE).min(1).max(MAX_SOURCES_PER_KEY)]),
+    z.union([SOURCE, z.array(SOURCE).min(1).max(MAX_SOURCES_PER_KEY), z.null()]),
   )
   .refine((sources) => Object.keys(sources).length > 0, "name at least one key, or leave sources out")
   .refine((sources) => Object.keys(sources).length <= MAX_KEYS, `at most ${MAX_KEYS} keys in one write`)
   .describe(
     "Where claims in this text came from, when it is more than your own reasoning. Write a pointer straight after the claim, like " +
       '"Postgres 18.4 runs in production [ref pg18].", and give its sources here keyed by it: {"pg18": {"source": "test", "detail": "yarn cloud:check"}}. ' +
-      "Keys are short lowercase letters and digits, unused elsewhere in the project. A key already sourced here gains another source. Unreferenced text is yours by default, so reference only claims with a real source.",
+      "Keys are short lowercase letters and digits, unused elsewhere in the project, one claim each. A source is its kind and detail, so the same page or command behind many claims is one source: give it under each claim's key. " +
+      "Giving a key a source it already has re-checks it (the claim's current text and today's date replace the old); a different source is added beside it; null clears a key's sources. Unreferenced text is yours by default, so reference only claims with a real source.",
   )
   .optional();
 
@@ -790,7 +791,7 @@ export function registerTools(server: McpServer, db: Database, store: StoreAcces
         const item = await createItem(db, { projectId: p.id, area, parent, ref, title, body, status, deps, start, due, sources }, ACTOR);
         await store.persist();
         return text(
-          `created ${fmtItem(item)}${deps?.length ? `\ndepends on: ${deps.join(", ")}` : ""}${fmtSourcesWritten(item.addedSources, item.body)}`,
+          `created ${fmtItem(item)}${deps?.length ? `\ndepends on: ${deps.join(", ")}` : ""}${fmtSourcesWritten(item.addedSources, item.body, item.clearedSources)}`,
         );
       }),
   );
@@ -959,7 +960,7 @@ export function registerTools(server: McpServer, db: Database, store: StoreAcces
         await store.persist();
         return text(
           `edited ${fmtItem(item)}${deps ? `\ndepends on: ${deps.length ? deps.join(", ") : "(nothing)"}` : ""}` +
-            `${fmtSourcesWritten(item.addedSources, body === undefined ? null : item.body)}${fmtReferenceChanges(item.referenceChanges)}`,
+            `${fmtSourcesWritten(item.addedSources, body === undefined ? null : item.body, item.clearedSources)}${fmtReferenceChanges(item.referenceChanges)}`,
         );
       }),
   );
@@ -1165,7 +1166,7 @@ export function registerTools(server: McpServer, db: Database, store: StoreAcces
         // it should state it (MCP-21).
         const order = (await listSections(db, p.id)).map((s) => s.heading);
         return text(
-          `set context section "${section.heading}"\norder: ${order.join(" -> ")}${fmtSourcesWritten(section.addedSources, section.content)}${fmtReferenceChanges(section.referenceChanges)}`,
+          `set context section "${section.heading}"\norder: ${order.join(" -> ")}${fmtSourcesWritten(section.addedSources, section.content, section.clearedSources)}${fmtReferenceChanges(section.referenceChanges)}`,
         );
       }),
   );

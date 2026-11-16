@@ -11,7 +11,7 @@ import { maybeOne, one } from "../db/rows";
 import { contextSections, sourceReferences } from "../db/schema";
 import type { OwnedProjectId } from "./owned";
 import { mutate, type Actor } from "./events";
-import { addSources, liveSources, referenceChanges, retireRemovedPointers, type AddedSource, type ReferenceChange, type SourcesInput } from "./references";
+import { addSources, liveSources, NO_SOURCES, referenceChanges, retireRemovedPointers, type AddedSource, type ReferenceChange, type SourcesInput } from "./references";
 import { bareForm } from "../../scripts/references";
 
 export type ContextSection = typeof contextSections.$inferSelect;
@@ -42,7 +42,7 @@ export interface SetSection {
 }
 
 /** The section as written, and what the write did to its sourced claims (`CTX-13`). */
-export type SetSectionResult = ContextSection & { referenceChanges: ReferenceChange[]; addedSources: AddedSource[] };
+export type SetSectionResult = ContextSection & { referenceChanges: ReferenceChange[]; addedSources: AddedSource[]; clearedSources: string[] };
 
 /**
  * The `sortOrder` that puts a section immediately after `heading` (or first, when `heading` is null).
@@ -114,9 +114,10 @@ export async function setSection(db: Database, input: SetSection, actor: Actor):
     // As for an item body (`CTX-13`): a reference whose pointer this content no longer carries is retired with it.
     const sourcesBefore = existing ? await liveSources(tx, { sectionId: after.id }) : [];
     const retiredReferences = existing ? await retireRemovedPointers(tx, { sectionId: after.id }, content) : [];
-    const addedSources = input.sources === undefined ? [] : await addSources(tx, input.projectId, { sectionId: after.id }, content, input.sources, actor);
+    const { added: addedSources, cleared: clearedSources } =
+      input.sources === undefined ? NO_SOURCES : await addSources(tx, input.projectId, { sectionId: after.id }, content, input.sources, actor);
     return {
-      result: { ...after, referenceChanges: existing ? referenceChanges(existing.content, content, sourcesBefore) : [], addedSources },
+      result: { ...after, referenceChanges: existing ? referenceChanges(existing.content, content, sourcesBefore) : [], addedSources, clearedSources },
       event: {
         projectId: input.projectId,
         entityType: "context_section",
@@ -127,6 +128,7 @@ export async function setSection(db: Database, input: SetSection, actor: Actor):
           ...after,
           ...(retiredReferences.length > 0 ? { retiredReferences } : {}),
           ...(addedSources.length > 0 ? { addedSources } : {}),
+          ...(clearedSources.length > 0 ? { clearedSources } : {}),
         },
       },
     };

@@ -13,7 +13,7 @@ import { getItem } from "../domain/items";
 import { createProjectWithDefaults } from "../domain/projects";
 import { z } from "zod";
 import { eq } from "drizzle-orm";
-import { events } from "../db/schema";
+import { events, sourceReferences } from "../db/schema";
 import { registerTools } from "./tools";
 
 type Handler = (args: Record<string, unknown>) => Promise<CallToolResult>;
@@ -139,6 +139,51 @@ describe("source references through the tools (CTX-13)", () => {
     expect(reply).toContain('pg18 (test');
     expect(reply).toContain('the pointer now sits on a different claim, "We host on a VM"');
     expect(reply).not.toContain('"Postgres 18.4 runs in production" -> ');
+  });
+
+  describe("one source behind many claims, re-checked and cleared (CTX-17.2, CTX-17.5)", () => {
+    const rows = () => db.select().from(sourceReferences).orderBy(sourceReferences.recordedAt);
+
+    it("replaces a key's citation when the same source is given again, rather than piling up", async () => {
+      await call("edit_item", { ref: "OPS-1", body: "Postgres 18.6 runs in production [ref pg18]. We host on a VM [ref vm1]." });
+      const reply = said(await call("edit_item", { ref: "OPS-1", sources: { pg18: { source: "test", detail: "yarn cloud:check" } } }));
+      expect(reply).toContain("sources re-checked (the claim's current text and today's date replace the old): pg18");
+      const pg18 = (await rows()).filter((r) => r.key === "pg18");
+      // The old citation is retired, not deleted, and the new one records the claim as it reads now.
+      expect(pg18.map((r) => [r.quotedText, r.retiredAt !== null])).toEqual([
+        ["Postgres 18.4 runs in production", true],
+        ["Postgres 18.6 runs in production", false],
+      ]);
+      const read = said(await call("get_item", { ref: "OPS-1" }));
+      expect(read).toMatch(new RegExp(`\\[ref pg18: test ${DAY} yarn cloud:check\\]`));
+    });
+
+    it("adds a different source beside the one a key has", async () => {
+      await call("edit_item", { ref: "OPS-1", sources: { pg18: { source: "docs", detail: "README.md" } } });
+      expect((await rows()).filter((r) => r.key === "pg18" && r.retiredAt === null)).toHaveLength(2);
+    });
+
+    it("clears a key's sources with null, and refuses to clear a key with none", async () => {
+      const reply = said(await call("edit_item", { ref: "OPS-1", sources: { vm1: null } }));
+      expect(reply).toContain("sources cleared from: vm1");
+      expect(said(await call("get_item", { ref: "OPS-1" }))).toContain("[ref vm1: no reference behind it]");
+      const again = await call("edit_item", { ref: "OPS-1", sources: { vm1: null } });
+      expect(again.isError).toBe(true);
+      expect(said(again)).toContain("[ref vm1] has no sources here to clear");
+    });
+
+    it("says a source was reused, and shows a claim when its source was cited again since", async () => {
+      // The first citation of the guide is old; citing it for another claim today says the guide was read again.
+      await call("edit_item", { ref: "OPS-1", sources: { pg18: { source: "docs", detail: "https://example.com/guide" } } });
+      await db.update(sourceReferences).set({ recordedAt: "2026-01-01T00:00:00.000Z" }).where(eq(sourceReferences.detail, "https://example.com/guide"));
+      const reply = said(
+        await call("create_item", { area: "OPS", title: "setup", body: "The guide covers setup [ref setup1].", sources: { setup1: { source: "docs", detail: "https://example.com/guide" } } }),
+      );
+      expect(reply).toContain("reused sources: setup1 (docs, also behind 1 other claim)");
+      const today = new Date().toISOString().slice(0, 10);
+      expect(said(await call("get_item", { ref: "OPS-1" }))).toContain(`docs 2026-01-01 https://example.com/guide (source rechecked ${today})`);
+      expect(said(await call("get_item", { ref: "OPS-2" }))).not.toContain("source rechecked");
+    });
   });
 
   it("refuses a key that already stands behind a claim in another item", async () => {

@@ -61,8 +61,8 @@ export interface NewSource {
   detail: string;
 }
 
-/** Sources to add, keyed by the pointer the writer put after each claim. */
-export type SourcesInput = Record<string, NewSource | NewSource[]>;
+/** Sources to add, keyed by the pointer the writer put after each claim; `null` clears a key's sources (`CTX-17.2`). */
+export type SourcesInput = Record<string, NewSource | NewSource[] | null>;
 
 /** One source as a reader needs it. */
 export interface ReferenceSource {
@@ -71,6 +71,13 @@ export interface ReferenceSource {
   detail: string;
   quotedText: string;
   recordedAt: string;
+  /**
+   * The last time anyone in the project cited this same source (kind and detail) for any claim, retired ones
+   * included (`CTX-17.5`). A source is its kind and detail, so this is derived from the rows rather than stored on a
+   * source of its own: citing a guide for a new claim says the guide still exists and was read then. It is **not**
+   * a re-check of this claim, which is `recordedAt`'s; a reader is shown both when they differ.
+   */
+  checkedAt: string;
 }
 
 /** One source as `addSources` recorded it, for the writing event's payload and the writer's reply. */
@@ -78,7 +85,20 @@ export interface AddedSource {
   key: string;
   source: string;
   detail: string;
+  /** This key already had this very source, so the new citation replaced it: a re-check (`CTX-17.2`). */
+  replaced?: true;
+  /** How many other live claims in the project cite the same source: reuse, which the reply names (`CTX-17.5`). */
+  alsoBehind?: number;
 }
+
+/** What `addSources` did: the sources it recorded, and the keys whose sources it cleared. */
+export interface SourcesWritten {
+  added: AddedSource[];
+  cleared: string[];
+}
+
+/** A write that gave no sources. */
+export const NO_SOURCES: SourcesWritten = Object.freeze({ added: [], cleared: [] }) as SourcesWritten;
 
 /** A different advisory-lock namespace from ref allocation's, so the two never queue behind each other. */
 const REFERENCE_LOCK = 7_172_013;
@@ -86,12 +106,18 @@ const REFERENCE_LOCK = 7_172_013;
 /**
  * Add sources to the references in `text`, after it has been written, inside the writing transaction.
  *
- * Each key must have its pointer in the text - the source stands behind *that* claim, and records the text it
+ * Each key must have its pointer in the text, once - the source stands behind *that* claim, and records the text it
  * covers now as what it vouched for - and must not be live under another owner. Serialised per project by an
  * advisory lock, because "one key, one owner" is a read-then-write: under READ COMMITTED two writers giving one
  * key to different items at once would both pass the check (found in the `CTX-13` spike, the same race `OPS-2`
  * fixed for ref allocation). The commit-time trigger would still refuse the second, but as a bare failure; the
  * lock turns it into a named one.
+ *
+ * **A source is its kind and its detail** (`CTX-17.5`), so the same guide cited behind fifty claims is one source:
+ * nothing to declare first, and each claim still records its own text and date, so "text changed since" stays per
+ * claim. Two consequences (`CTX-17.2`): citing a source a key already has **replaces** that citation (the old row is
+ * retired, the new one records the claim as it reads now), so a re-check never piles up beside the stale one; and
+ * `null` for a key **clears** its sources, retiring every live one, so a source that turned out wrong can go.
  */
 export async function addSources(
   tx: Tx,
@@ -100,15 +126,29 @@ export async function addSources(
   text: string,
   sources: SourcesInput,
   actor: string,
-): Promise<AddedSource[]> {
+): Promise<SourcesWritten> {
   const keys = Object.keys(sources);
-  if (keys.length === 0) return [];
+  if (keys.length === 0) return { added: [], cleared: [] };
   await tx.execute(sql`SELECT pg_advisory_xact_lock(${REFERENCE_LOCK}, hashtext(${projectId}))`);
   const { pointers } = parsePointers(text);
   const covers = new Map(pointers.map((p) => [p.key, p.covers]));
   const ownerId = "itemId" in owner ? owner.itemId : owner.sectionId;
-  const rows: (typeof sourceReferences.$inferInsert)[] = [];
+  const ownedBy = "itemId" in owner ? eq(sourceReferences.itemId, owner.itemId) : eq(sourceReferences.sectionId, owner.sectionId);
+  const now = timestamp();
+  const rows: (typeof sourceReferences.$inferInsert & { replaced?: true })[] = [];
+  const cleared: string[] = [];
   for (const key of keys) {
+    const given = sources[key];
+    if (given === null || given === undefined) {
+      const gone = await tx
+        .update(sourceReferences)
+        .set({ retiredAt: now })
+        .where(and(ownedBy, eq(sourceReferences.key, key), isNull(sourceReferences.retiredAt)))
+        .returning({ id: sourceReferences.id });
+      if (gone.length === 0) throw new Error(`[ref ${key}] has no sources here to clear`);
+      cleared.push(key);
+      continue;
+    }
     const claim = covers.get(key);
     if (claim === undefined) {
       // Written but not read as a pointer is a different mistake from not written, and saying "not in the text" about
@@ -134,29 +174,55 @@ export async function addSources(
     if (elsewhere.some((row) => (row.itemId ?? row.sectionId) !== ownerId)) {
       throw new Error(`reference ${key} already stands behind a claim elsewhere in this project: choose another key`);
     }
-    for (const source of [sources[key]!].flat()) {
+    for (const source of [given].flat()) {
       if (!(SOURCE_KINDS as readonly string[]).includes(source.source)) {
         throw new Error(`"${source.source}" is not a source: use one of ${SOURCE_KINDS.join(", ")} (unreferenced text is your own reasoning)`);
       }
-      if (source.detail.trim() === "") throw new Error(`a ${source.source} source needs its detail: the command, URL or file, or the user's words verbatim`);
-      if (source.source === "code" && parseCodeRef(source.detail) === null) {
-        throw new Error(`"${source.detail}" is not a code reference: write path:line or path:from-to, optionally :column, then @commit, e.g. src/db/schema.ts:120-140@345a746`);
+      const detail = source.detail.trim();
+      if (detail === "") throw new Error(`a ${source.source} source needs its detail: the command, URL or file, or the user's words verbatim`);
+      if (source.source === "code" && parseCodeRef(detail) === null) {
+        throw new Error(`"${detail}" is not a code reference: write path:line or path:from-to, optionally :column, then @commit, e.g. src/db/schema.ts:120-140@345a746`);
       }
+      // The same source given twice in one call is one citation, not two.
+      if (rows.some((row) => row.key === key && row.source === source.source && row.detail === detail)) continue;
+      const replaced = await tx
+        .update(sourceReferences)
+        .set({ retiredAt: now })
+        .where(and(ownedBy, eq(sourceReferences.key, key), eq(sourceReferences.source, source.source), eq(sourceReferences.detail, detail), isNull(sourceReferences.retiredAt)))
+        .returning({ id: sourceReferences.id });
       rows.push({
         projectId,
         key,
         itemId: "itemId" in owner ? owner.itemId : null,
         sectionId: "sectionId" in owner ? owner.sectionId : null,
         source: source.source,
-        detail: source.detail.trim(),
+        detail,
         quotedText: claim,
         actor,
+        recordedAt: now,
+        ...(replaced.length > 0 ? { replaced: true as const } : {}),
       });
     }
   }
-  if (rows.length === 0) return [];
-  await tx.insert(sourceReferences).values(rows);
-  return rows.map((row) => ({ key: row.key, source: row.source, detail: row.detail })).sort((a, b) => a.key.localeCompare(b.key));
+  if (rows.length > 0) await tx.insert(sourceReferences).values(rows.map(({ replaced: _replaced, ...row }) => row));
+  const added: AddedSource[] = [];
+  for (const row of rows) {
+    // Other live claims citing this same source, so the reply can say it was reused rather than new.
+    const [{ n }] = (await tx
+      .select({ n: sql<number>`count(*)::int` })
+      .from(sourceReferences)
+      .where(
+        and(
+          eq(sourceReferences.projectId, projectId),
+          eq(sourceReferences.source, row.source),
+          eq(sourceReferences.detail, row.detail),
+          isNull(sourceReferences.retiredAt),
+          sql`${sourceReferences.key} <> ${row.key}`,
+        ),
+      )) as [{ n: number }];
+    added.push({ key: row.key, source: row.source, detail: row.detail, ...(row.replaced ? { replaced: true as const } : {}), ...(n > 0 ? { alsoBehind: n } : {}) });
+  }
+  return { added: added.sort((a, b) => a.key.localeCompare(b.key)), cleared: cleared.sort() };
 }
 
 /** The live sources behind an owner's references, oldest first within each key. */
@@ -169,6 +235,9 @@ export async function liveSources(db: Database | Tx, owner: ReferenceOwner): Pro
       detail: sourceReferences.detail,
       quotedText: sourceReferences.quotedText,
       recordedAt: sourceReferences.recordedAt,
+      // Correlated, and only over this owner's few rows: the last citation of the same source anywhere in the project.
+      // Qualified by hand, since drizzle leaves a one-table select's columns bare and they would bind to `cited`.
+      checkedAt: sql<string>`(SELECT max(cited.recorded_at) FROM source_references cited WHERE cited.project_id = source_references.project_id AND cited.source = source_references.source AND cited.detail = source_references.detail)`,
     })
     .from(sourceReferences)
     .where(and(ownedBy, isNull(sourceReferences.retiredAt)))
@@ -225,7 +294,11 @@ export function expandPointers(text: string, sources: ReferenceSource[], full = 
     const behind = byKey.get(p.key) ?? [];
     const parts = behind.map((s) => {
       const detail = full ? (s.source === "user" ? `"${shown(s.detail)}"` : shown(s.detail)) : detailShown(s.source, shown(s.detail));
-      return detail === null ? `${s.source} ${s.recordedAt.slice(0, 10)}` : `${s.source} ${s.recordedAt.slice(0, 10)} ${detail}`;
+      const head = detail === null ? `${s.source} ${s.recordedAt.slice(0, 10)}` : `${s.source} ${s.recordedAt.slice(0, 10)} ${detail}`;
+      // Cited again since, for another claim (`CTX-17.5`): the source is alive and was read then, but this claim was
+      // not re-checked, so both dates show and an agent can tell a quick look would bring this one level.
+      const rechecked = s.checkedAt.slice(0, 10);
+      return rechecked > s.recordedAt.slice(0, 10) ? `${head} (source rechecked ${rechecked})` : head;
     });
     if (behind.length === 0) parts.push("no reference behind it");
     // Against the newest source only: adding a source for the claim's new wording is what clears it.
