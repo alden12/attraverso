@@ -15,8 +15,9 @@
  *   Pointer-only lines in between are skipped, so two sources can stand behind one table.
  *
  * **What is not a pointer:** anything inside a code span or a fenced block, so documentation of this syntax never
- * trips it; an escaped `\[ref`; one followed by `(` or `:`, which markdown reads as a link or a link definition
- * (`[ref docs](https://...)`); and only `[ref ` followed by a key opens one, so task boxes and footnotes never do.
+ * trips it; an escaped `\[ref`; one followed by `(`, which markdown reads as a link (`[ref docs](https://...)`), or
+ * by `:` at the start of a line, a link definition; and only `[ref ` followed by a key opens one, so task boxes and
+ * footnotes never do.
  * Indented code is not masked, deliberately: four-space list continuations are far commoner in these bodies.
  *
  * Deliberately a small line scanner rather than a markdown parser: the server has no markdown dependency at
@@ -29,8 +30,13 @@ const KEY = "[a-z0-9]+";
  *  run of unclosed `[ref k:` from costing quadratic time on hostile input. */
 const EXPANSION = "[^\\]\\n]{0,3000}";
 /** `[ref key]`, or the expanded `[ref key: ...]` that `get_item` returns and an agent may send straight back. Not
- *  escaped, and not followed by `(` or `:`, which would make it a link or a link definition. */
-const POINTER = new RegExp(`(?<!\\\\)\\[ref (${KEY})(?::${EXPANSION})?\\](?![(:])`, "g");
+ *  escaped, not followed by `(`, which makes it a link, and not followed by `:` when it starts its line (up to three
+ *  spaces in), which makes it a link definition. A `]:` mid-sentence is prose (`CTX-17.3`: "linked from the guide
+ *  [ref onb4]: ..." was refused as missing), so the colon only counts where markdown would read a definition. */
+const POINTER = new RegExp(
+  `(?<!\\\\)\\[ref (${KEY})(?::${EXPANSION})?\\](?!\\()(?!:(?<=^ {0,3}\\[ref ${KEY}(?::${EXPANSION})?\\]:))`,
+  "gm",
+);
 /** `[ref ` not followed by a well-formed key and its close: a pointer someone meant to write and got wrong. */
 const MALFORMED = new RegExp(`(?<!\\\\)\\[ref (?!${KEY}(?:\\]|:${EXPANSION}\\]))`, "g");
 

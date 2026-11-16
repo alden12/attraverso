@@ -5,7 +5,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { execFileSync } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { codeDrift, MAX_CODE_CHECKS } from "./codeDrift";
@@ -72,6 +72,29 @@ describe("code changed since (CTX-13)", () => {
     expect(parseCodeRef(`/etc/passwd:1@${commit}`)).toBeNull();
     expect(parseCodeRef(`src\\x.ts:1@${commit}`)).toBeNull();
     expect(parseCodeRef(`app/[id]/page.tsx:1@${commit}`)).not.toBeNull();
+  });
+
+  it("checks a source in a repo nested inside the plan's folder against that repo (CTX-17.6)", async () => {
+    // A plan at the top of a folder of repos: the outer one ignores the inner, whose commit it has never seen.
+    const inner = join(repo, "inner");
+    await mkdir(inner);
+    git(inner, "init", "-q");
+    await writeFile(join(inner, "v.txt"), "1.0\n");
+    git(inner, "add", ".");
+    git(inner, "commit", "-q", "-m", "inner");
+    const innerCommit = git(inner, "rev-parse", "--short", "HEAD");
+    await writeFile(join(inner, "v.txt"), "2.0\n");
+    const nested = code(`inner/v.txt:1@${innerCommit}`);
+    expect([...(await codeDrift(plan, [nested, code(`lib.ts:2@${commit}`)]))].sort()).toEqual([`inner/v.txt:1@${innerCommit}`, `lib.ts:2@${commit}`].sort());
+
+    // And with the plan in a folder that is no repo at all, beside the repos it cites.
+    const folder = await mkdtemp(join(tmpdir(), "attraverso-folder-"));
+    try {
+      await rename(inner, join(folder, "inner"));
+      expect([...(await codeDrift(join(folder, "attraverso.yaml"), [nested]))]).toEqual([`inner/v.txt:1@${innerCommit}`]);
+    } finally {
+      await rm(folder, { recursive: true, force: true });
+    }
   });
 
   it("checks at most MAX_CODE_CHECKS sources on one read", async () => {

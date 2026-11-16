@@ -120,6 +120,27 @@ describe("source references through the tools (CTX-13)", () => {
     expect(said(result)).toContain("no [ref nope] in the text: write it straight after the claim it stands behind");
   });
 
+  it("says a pointer is written but not read, rather than missing, when it is in code (CTX-17.3)", async () => {
+    const result = await call("edit_item", { ref: "OPS-1", body: "Run `[ref c1]` here.", sources: { c1: { source: "docs", detail: "README.md" } } });
+    expect(result.isError).toBe(true);
+    expect(said(result)).toContain("[ref c1] is in the text but is not read as a pointer");
+  });
+
+  it("refuses sources for a key written twice, rather than binding them to the last claim (CTX-17.1)", async () => {
+    const body = "The guide covers setup [ref dup]. It also covers troubleshooting [ref dup].";
+    const result = await call("edit_item", { ref: "OPS-1", body, sources: { dup: { source: "docs", detail: "README.md" } } });
+    expect(result.isError).toBe(true);
+    expect(said(result)).toContain("[ref dup] appears more than once: a key stands behind one claim");
+    expect((await getItem(db, projectId as never, "OPS-1"))!.body).not.toContain("dup");
+  });
+
+  it("says a pointer moved, rather than that its claim was rewritten, when the old claim is still there (CTX-17.4)", async () => {
+    const reply = said(await call("edit_item", { ref: "OPS-1", body: "Postgres 18.4 runs in production.\n\nWe host on a VM [ref pg18]." }));
+    expect(reply).toContain('pg18 (test');
+    expect(reply).toContain('the pointer now sits on a different claim, "We host on a VM"');
+    expect(reply).not.toContain('"Postgres 18.4 runs in production" -> ');
+  });
+
   it("refuses a key that already stands behind a claim in another item", async () => {
     const result = await call("create_item", { area: "OPS", title: "other", body: "Also 18.4 [ref pg18].", sources: { pg18: { source: "docs", detail: "x" } } });
     expect(result.isError).toBe(true);

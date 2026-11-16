@@ -18,7 +18,7 @@
  * Node-only, so it lives with the server rather than beside the shared parser.
  */
 import { execFile } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { parseCodeRef, type CodeRef } from "../../scripts/references";
 
@@ -101,10 +101,28 @@ function contains(file: string[], lines: string[]): boolean {
 }
 
 /**
+ * The repo a code source's file is in, and the path within it: the deepest directory along the path, below `base`,
+ * that holds a `.git` (a directory, or a file for a worktree or submodule), and otherwise `base` itself when it is a
+ * checkout. A plan at the top of a folder of repos (`~/code`, with `rb-api/` and `iPhone/` cloned inside it) cites
+ * commits that only those nested repos have, so asking the outer checkout always answered "unknown" and a change there
+ * was never reported (`CTX-17.6`). A few `stat`s a source, not cached, so a repo cloned while the server runs is
+ * found on the next read.
+ */
+async function repoOf(base: string, root: string | null, path: string): Promise<{ repo: string; path: string } | null> {
+  const steps = path.split("/");
+  for (let depth = steps.length - 1; depth >= 1; depth--) {
+    const dir = join(base, ...steps.slice(0, depth));
+    if (await stat(join(dir, ".git")).then(() => true, () => false)) return { repo: dir, path: steps.slice(depth).join("/") };
+  }
+  return root === null ? null : { repo: root, path };
+}
+
+/**
  * The details of the `code` sources whose pinned lines are no longer in the file, in the checkout holding
  * `planFile` - the plan file that owns what is being read, so a plan spread over several repos checks each against
- * its own. Empty when there is no plan file (the hosted server passes none), no checkout or no code source; never
- * throws, since a read must not fail over an optional check.
+ * its own - or in a repo nested inside it where the path leads into one (`repoOf`). Empty when there is no plan file
+ * (the hosted server passes none), no checkout or no code source; never throws, since a read must not fail over an
+ * optional check.
  */
 export async function codeDrift(planFile: string | undefined, sources: { source: string; detail: string }[]): Promise<Set<string>> {
   const changed = new Set<string>();
@@ -117,17 +135,31 @@ export async function codeDrift(planFile: string | undefined, sources: { source:
   if (code.length === 0 || planFile === undefined) return changed;
   try {
     const root = await checkoutOf(planFile);
-    if (root === null) return changed;
-    const then = await blobsAt(
-      root,
-      code.map((c) => c.ref),
-    );
+    // Paths are relative to the plan's checkout, or to the plan's own folder when that is not one: a folder of repos
+    // need not be a repo itself for the repos inside it to be checked.
+    const base = root ?? dirname(planFile);
+    const byRepo = new Map<string, { detail: string; ref: CodeRef }[]>();
+    for (const { detail, ref } of code) {
+      const found = await repoOf(base, root, ref.path);
+      if (found === null) continue;
+      byRepo.set(found.repo, [...(byRepo.get(found.repo) ?? []), { detail, ref: { ...ref, path: found.path } }]);
+    }
+    // One batch per repo, all at once: still one git process a repo rather than one a source.
     await Promise.all(
-      code.map(async ({ detail, ref }, index) => {
-        const was = then[index] === null || then[index] === undefined ? null : pinned(linesOf(then[index]!), ref.from, ref.to);
-        if (was === null) return; // the commit or the file is not in this checkout, or the lines are not: unknown, not changed
-        const now = await readFile(join(root, ref.path), "utf8").then(linesOf, () => null); // deleted or moved since: changed
-        if (now === null || !contains(now, was)) changed.add(detail);
+      [...byRepo].map(async ([repo, inRepo]) => {
+        const then = await blobsAt(
+          repo,
+          inRepo.map((c) => c.ref),
+        ).catch(() => null); // one repo in an odd state costs its own sources their answer, not the others'
+        if (then === null) return;
+        await Promise.all(
+          inRepo.map(async ({ detail, ref }, index) => {
+            const was = then[index] === null || then[index] === undefined ? null : pinned(linesOf(then[index]!), ref.from, ref.to);
+            if (was === null) return; // the commit or the file is not in this repo, or the lines are not: unknown, not changed
+            const now = await readFile(join(repo, ref.path), "utf8").then(linesOf, () => null); // deleted or moved since: changed
+            if (now === null || !contains(now, was)) changed.add(detail);
+          }),
+        );
       }),
     );
   } catch {

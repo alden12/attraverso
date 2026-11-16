@@ -97,6 +97,13 @@ describe("the review's edge cases (CTX-13)", () => {
     expect(problems("See the [ref docs](https://example.com).")).toEqual([]);
   });
 
+  it("reads a pointer before a colon mid-sentence, and only refuses one starting its line (CTX-17.3)", () => {
+    expect(Object.keys(covers("Linked from the guide [ref onb4]: the setup page."))).toEqual(["onb4"]);
+    expect(Object.keys(covers("First line.\nLinked from the guide [ref onb4]: there."))).toEqual(["onb4"]);
+    expect(parsePointers("Intro.\n\n   [ref a1]: https://example.com").pointers).toEqual([]);
+    expect(parsePointers("Intro.\n\n[ref a1: docs 2026-11-16]: https://example.com").pointers).toEqual([]);
+  });
+
   it("says when a pointer has nothing before it to stand behind", () => {
     expect(problems("[ref a1] then the claim.")).toEqual(["[ref a1] has nothing before it to stand behind: put it straight after its claim"]);
     expect(problems("## [ref a1] Title")).toHaveLength(1);

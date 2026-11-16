@@ -62,8 +62,9 @@ interface MdNode {
   children?: MdNode[];
 }
 
-/** The pointer syntax as it appears in a rendered text node: the parser's, less the code it has already skipped. */
-const IN_TEXT = /\[ref ([a-z0-9]+)(?::[^\]\n]{0,3000})?\](?![(:])/g;
+/** The pointer syntax as it appears in a rendered text node: the parser's, less the code it has already skipped. A
+ *  link definition never reaches a text node, so only the link case needs refusing here. */
+const IN_TEXT = /\[ref ([a-z0-9]+)(?::[^\]\n]{0,3000})?\](?!\()/g;
 
 /**
  * A remark plugin turning each pointer into a link the `a` renderer makes a reference button of, `#ref-<key>-<n>`

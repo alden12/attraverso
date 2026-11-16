@@ -104,12 +104,28 @@ export async function addSources(
   const keys = Object.keys(sources);
   if (keys.length === 0) return [];
   await tx.execute(sql`SELECT pg_advisory_xact_lock(${REFERENCE_LOCK}, hashtext(${projectId}))`);
-  const covers = new Map(parsePointers(text).pointers.map((p) => [p.key, p.covers]));
+  const { pointers } = parsePointers(text);
+  const covers = new Map(pointers.map((p) => [p.key, p.covers]));
   const ownerId = "itemId" in owner ? owner.itemId : owner.sectionId;
   const rows: (typeof sourceReferences.$inferInsert)[] = [];
   for (const key of keys) {
     const claim = covers.get(key);
-    if (claim === undefined) throw new Error(`no [ref ${key}] in the text: write it straight after the claim it stands behind, as [ref ${key}]`);
+    if (claim === undefined) {
+      // Written but not read as a pointer is a different mistake from not written, and saying "not in the text" about
+      // text that plainly holds it sends the writer looking in the wrong place (`CTX-17.3`).
+      if (hasPointer(text, key)) {
+        throw new Error(
+          `[ref ${key}] is in the text but is not read as a pointer: it is inside code, escaped, or followed by "(" (a link) or, at the start of a line, ":" (a link definition)`,
+        );
+      }
+      throw new Error(`no [ref ${key}] in the text: write it straight after the claim it stands behind, as [ref ${key}]`);
+    }
+    // Twice in one text, a source could only vouch for one of the claims, and which one would be an accident of the
+    // parser's order: it bound to the last, so the first, usually the one meant, read "text changed since" at once
+    // (`CTX-17.1`). Refused rather than warned, like a missing pointer, because the source would record the wrong claim.
+    if (pointers.filter((p) => p.key === key).length > 1) {
+      throw new Error(`[ref ${key}] appears more than once: a key stands behind one claim, so give each claim its own key (${key}a, ${key}b, ...)`);
+    }
     if (claim === "") throw new Error(`[ref ${key}] has no claim before it: put it straight after the sentence it stands behind`);
     const elsewhere = await tx
       .select({ itemId: sourceReferences.itemId, sectionId: sourceReferences.sectionId })
@@ -224,7 +240,7 @@ export function expandPointers(text: string, sources: ReferenceSource[], full = 
 
 /** What an edit did to one sourced claim, for the writer's reply. */
 export type ReferenceChange =
-  | { key: string; kind: "changed"; sources: string; before: string; after: string }
+  | { key: string; kind: "changed"; sources: string; before: string; after: string; moved?: true }
   | { key: string; kind: "retired"; sources: string };
 
 /**
@@ -234,7 +250,18 @@ export type ReferenceChange =
  */
 export function referenceChanges(before: string, after: string, sources: ReferenceSource[]): ReferenceChange[] {
   const was = new Map(parsePointers(before).pointers.map((p) => [p.key, p.covers]));
-  const now = new Map(parsePointers(after).pointers.map((p) => [p.key, p.covers]));
+  const { pointers } = parsePointers(after);
+  const now = new Map(pointers.map((p) => [p.key, p.covers]));
+  // The new text with its pointers taken out, to tell a moved pointer from a rewritten claim (`CTX-17.4`): when the
+  // words the key used to cover are still there, only the pointer went somewhere else. Unless the new claim holds the
+  // old one, which is a claim that grew, and reads as the change it is.
+  let stripped = "";
+  let last = 0;
+  for (const p of [...pointers].sort((a, b) => a.at - b.at)) {
+    stripped += after.slice(last, p.at) + " ";
+    last = p.at + p.written.length;
+  }
+  stripped = normaliseClaim(stripped + after.slice(last));
   const keys = [...new Set(sources.map((s) => s.key))].sort();
   return keys.flatMap((key): ReferenceChange[] => {
     const summary = sources
@@ -244,6 +271,8 @@ export function referenceChanges(before: string, after: string, sources: Referen
     if (!now.has(key)) return was.has(key) ? [{ key, kind: "retired", sources: summary }] : [];
     const before = was.get(key);
     const after = now.get(key)!;
-    return before !== undefined && before !== after ? [{ key, kind: "changed", sources: summary, before, after }] : [];
+    if (before === undefined || before === after) return [];
+    const moved = before !== "" && after !== "" && stripped.includes(before) && !after.includes(before);
+    return [{ key, kind: "changed", sources: summary, before, after, ...(moved ? { moved: true as const } : {}) }];
   });
 }
