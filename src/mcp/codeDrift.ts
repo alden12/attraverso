@@ -4,7 +4,7 @@
  *
  * **Only where it is cheap and possible, and only when one item or section is read** - `get_item`, `get_context`
  * and the pane opening an item; never a listing, a search or `get_project`, and at most `MAX_CODE_CHECKS` a read. The pinned lines are fetched for every
- * source in one `git cat-file --batch` process (measured 2026-11-15: about 0.25 ms a file batched, 2 ms spawning git
+ * source in one `git cat-file --batch` process a repo (measured 2026-11-15: about 0.25 ms a file batched, 2 ms spawning git
  * per file), so a read with a few code references pays a few milliseconds. A host with no checkout - the hosted
  * server - never calls this, and in a checkout without the pinned commit (a shallow clone: CI, a cloud session) the
  * source is simply not reported: unknown is not changed. The reference still says exactly what a claim rests on, so
