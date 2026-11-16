@@ -884,7 +884,7 @@ export function registerTools(server: McpServer, db: Database, store: StoreAcces
       inputSchema: {
         project: z.string(),
         ref: z.string(),
-        references: z.enum(["full"]).describe('"full" includes every source\'s detail, however long; otherwise only short ones are shown.').optional(),
+        references: z.enum(["full"]).describe('"full" includes every source\'s detail in full; otherwise a code location always shows, a quote up to about 100 characters, and other details only when short.').optional(),
       },
     },
     async ({ project, ref, references }): Promise<CallToolResult> =>
@@ -1121,7 +1121,7 @@ export function registerTools(server: McpServer, db: Database, store: StoreAcces
       inputSchema: {
         project: z.string(),
         heading: z.string(),
-        references: z.enum(["full"]).describe('"full" includes every source\'s detail, however long; otherwise only short ones are shown.').optional(),
+        references: z.enum(["full"]).describe('"full" includes every source\'s detail in full; otherwise a code location always shows, a quote up to about 100 characters, and other details only when short.').optional(),
       },
     },
     async ({ project, heading, references }): Promise<CallToolResult> =>

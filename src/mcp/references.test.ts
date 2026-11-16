@@ -74,6 +74,17 @@ describe("source references through the tools (CTX-13)", () => {
     expect(body).toMatch(new RegExp(`We host on a VM \\[ref vm1: user ${DAY} "let's stay on the VM"\\]`));
   });
 
+  it("always shows a code location, and the user's words up to a length, cut at a word (CTX-16)", async () => {
+    const code = "packages/core/src/domain/references.ts:160-200@250c0d6";
+    const quote = "Can we also add a ticket to drag and drop items between statuses in the board view, and keep the agreed order while we are at it?";
+    await call("edit_item", { ref: "OPS-1", sources: { pg18: { source: "code", detail: code }, vm1: { source: "user", detail: quote } } });
+    const read = said(await call("get_item", { ref: "OPS-1" }));
+    expect(read).toContain(code);
+    expect(read).toContain('"Can we also add a ticket to drag and drop items between statuses in the board view, and keep the..."');
+    expect(read).not.toContain("agreed order");
+    expect(said(await call("get_item", { ref: "OPS-1", references: "full" }))).toContain(`"${quote}"`);
+  });
+
   it("leaves a long detail out unless asked for in full", async () => {
     const url = "https://example.com/a/very/long/path/to/the/release/notes/page";
     await call("edit_item", { ref: "OPS-1", sources: { pg18: { source: "search", detail: url } } });

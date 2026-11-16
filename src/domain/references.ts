@@ -159,8 +159,27 @@ export async function liveSources(db: Database | Tx, owner: ReferenceOwner): Pro
     .orderBy(asc(sourceReferences.key), asc(sourceReferences.recordedAt), asc(sourceReferences.id));
 }
 
-/** Details longer than this are left out of an expanded pointer: a command or a file fits, a URL cut short is noise. */
+/** A command, a file or a URL longer than this is left out of an expanded pointer: a cut one is noise. */
 const SHORT_DETAIL = 40;
+/** A user's words past this are cut, with an ellipsis, rather than dropped: the quote is the evidence. */
+const QUOTE_SHOWN = 100;
+
+/**
+ * How much of a source's detail an expanded pointer shows by default, by kind (`CTX-16`). One length for all of
+ * them hid what made a source useful: every `code` location (45 to 60 characters below `packages/`) and most of
+ * the user's words, so a reader saw "code 2026-11-16" and not which file. So a code location always shows, being
+ * short enough and the most checkable detail there is; a quote shows up to `QUOTE_SHOWN`, cut at a word; anything
+ * else only when it fits whole. `references: "full"` shows every detail in full.
+ */
+function detailShown(source: string, detail: string): string | null {
+  if (source === "code") return detail;
+  if (source === "user") {
+    if (detail.length <= QUOTE_SHOWN) return `"${detail}"`;
+    const cut = detail.slice(0, QUOTE_SHOWN);
+    return `"${cut.slice(0, Math.max(cut.lastIndexOf(" "), QUOTE_SHOWN / 2)).trimEnd()}..."`;
+  }
+  return detail.length <= SHORT_DETAIL ? detail : null;
+}
 
 /**
  * A detail as an expanded pointer shows it. Display only, so it is made safe for the round trip rather than kept
@@ -176,7 +195,7 @@ const shown = (detail: string): string => detail.replace(/\s*[\r\n]+\s*/g, " ").
  * back with `bareForm` - and in the reply only.
  *
  * `[ref r7k2: search 2026-08-10, test 2026-08-13 yarn cloud:check, text changed since]` - each source's kind and
- * date, its detail when short (or always, with `full`), `text changed since` when a source vouched for words the
+ * date, as much of its detail as `detailShown` gives its kind (all of it, with `full`), `text changed since` when a source vouched for words the
  * claim no longer says, and `code changed since` when a `code` source's lines are in `codeChanged`. A pointer with
  * nothing behind it says so, rather than passing as backed.
  */
@@ -189,8 +208,8 @@ export function expandPointers(text: string, sources: ReferenceSource[], full = 
   for (const p of [...pointers].sort((a, b) => a.at - b.at)) {
     const behind = byKey.get(p.key) ?? [];
     const parts = behind.map((s) => {
-      const detail = s.source === "user" ? `"${shown(s.detail)}"` : shown(s.detail);
-      return full || detail.length <= SHORT_DETAIL ? `${s.source} ${s.recordedAt.slice(0, 10)} ${detail}` : `${s.source} ${s.recordedAt.slice(0, 10)}`;
+      const detail = full ? (s.source === "user" ? `"${shown(s.detail)}"` : shown(s.detail)) : detailShown(s.source, shown(s.detail));
+      return detail === null ? `${s.source} ${s.recordedAt.slice(0, 10)}` : `${s.source} ${s.recordedAt.slice(0, 10)} ${detail}`;
     });
     if (behind.length === 0) parts.push("no reference behind it");
     // Against the newest source only: adding a source for the claim's new wording is what clears it.
