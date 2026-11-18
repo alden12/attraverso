@@ -1,145 +1,89 @@
 /**
- * The folder page's schedule (`DIST-9.1`), against a fake clock: fast while things move, slower when quiet, nothing
- * while hidden, and stopped after long inactivity until someone comes back, which checks at once.
+ * The folder page's schedule (`DIST-9.1`), on vitest's fake clock: 2s, then 10s when quiet, nothing while hidden,
+ * and paused after long inactivity until someone comes back, which checks at once.
  */
-import { describe, expect, it } from "vitest";
-import { follow, type FollowEnvironment } from "./follow";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { follow, type Page } from "./follow";
 
-/** A fake browser: a clock you advance, timers that fire as it passes them, and events you fire by hand. */
-function fakeBrowser() {
-  let time = 0;
-  let visible = true;
-  let timers: { at: number; run: () => void; id: number }[] = [];
-  let nextId = 1;
-  const listeners = { activity: [] as (() => void)[], visibility: [] as (() => void)[] };
-  const env: FollowEnvironment = {
-    now: () => time,
-    setTimer: (run, ms) => {
-      const id = nextId++;
-      timers.push({ at: time + ms, run, id });
-      return id;
-    },
-    clearTimer: (id) => (timers = timers.filter((t) => t.id !== id)),
-    visible: () => visible,
-    on: (event, run) => {
-      listeners[event].push(run);
-      return () => (listeners[event] = listeners[event].filter((r) => r !== run));
-    },
-  };
-  /** Move the clock on, firing each timer due on the way and letting its check settle. */
-  const advance = async (ms: number) => {
-    const end = time + ms;
-    for (;;) {
-      const due = timers.filter((t) => t.at <= end).sort((a, b) => a.at - b.at)[0];
-      if (due === undefined) break;
-      timers = timers.filter((t) => t !== due);
-      time = due.at;
-      due.run();
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    }
-    time = end;
-  };
-  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
-  return {
-    env,
-    advance,
-    settle,
-    pending: () => timers.length,
-    fire: (event: "activity" | "visibility") => listeners[event].forEach((run) => run()),
-    setVisible: (v: boolean) => (visible = v),
-  };
-}
+beforeEach(() => vi.useFakeTimers());
+afterEach(() => vi.useRealTimers());
 
-function setup(changes: () => boolean = () => false) {
-  const browser = fakeBrowser();
-  const log: string[] = [];
-  let checks = 0;
-  const stop = follow(
-    {
-      check: async () => {
-        checks++;
-        return changes();
-      },
-      onPause: () => log.push("paused"),
-      onResume: () => log.push("resumed"),
-    },
-    browser.env,
-  );
-  return { browser, log, stop, checks: () => checks };
+function setup() {
+  const page: Page = { window: new EventTarget(), document: Object.assign(new EventTarget(), { visibilityState: "visible" }) };
+  const check = vi.fn(async () => {});
+  const paused: boolean[] = [];
+  const stop = follow(check, (p) => paused.push(p), page);
+  const fire = (name: string) => page.window.dispatchEvent(new Event(name));
+  const show = async (visible: boolean) => {
+    page.document.visibilityState = visible ? "visible" : "hidden";
+    page.document.dispatchEvent(new Event("visibilitychange"));
+    await vi.advanceTimersByTimeAsync(0);
+  };
+  return { check, paused, stop, fire, show, wait: (ms: number) => vi.advanceTimersByTimeAsync(ms) };
 }
 
 describe("following the plan folder (DIST-9.1)", () => {
-  it("checks every 2s, then every 10s once nothing has changed and nobody has been active for 5 minutes", async () => {
-    const { browser, checks } = setup();
-    await browser.advance(10_000);
-    expect(checks()).toBe(5);
-    await browser.advance(5 * 60_000 - 10_000); // five quiet minutes
-    const atFive = checks();
-    await browser.advance(60_000);
-    expect(checks() - atFive).toBe(6); // one a 10s
+  it("checks every 2s, then every 10s once nobody has been active for 5 minutes", async () => {
+    const { check, wait } = setup();
+    await wait(10_000);
+    expect(check).toHaveBeenCalledTimes(5);
+    await wait(5 * 60_000);
+    const atFive = check.mock.calls.length;
+    await wait(60_000);
+    expect(check.mock.calls.length - atFive).toBe(6);
   });
 
-  it("goes back to every 2s as soon as someone is active again", async () => {
-    const { browser, checks } = setup();
-    await browser.advance(6 * 60_000);
-    browser.fire("activity");
-    const before = checks();
-    await browser.advance(10_000);
-    expect(checks() - before).toBe(5);
+  it("checks at once and goes back to 2s when someone is active after a quiet spell", async () => {
+    const { check, fire, wait } = setup();
+    await wait(6 * 60_000);
+    const before = check.mock.calls.length;
+    fire("keydown");
+    await wait(10_000);
+    expect(check.mock.calls.length - before).toBe(6); // one straight away, then one a 2s
   });
 
-  it("keeps the fast pace while files keep changing, with nobody active", async () => {
-    let n = 0;
-    const { browser, checks } = setup(() => ++n % 10 === 0); // a change every tenth check
-    await browser.advance(10 * 60_000);
-    expect(checks()).toBeGreaterThan(250); // close to one a 2s for ten minutes, never slowed
+  it("runs no timer while the tab is hidden, and checks at once when it is shown", async () => {
+    const { check, show, wait } = setup();
+    await wait(4_000);
+    await show(false);
+    expect(vi.getTimerCount()).toBe(0);
+    await wait(60 * 60_000);
+    expect(check).toHaveBeenCalledTimes(2);
+    await show(true);
+    expect(check).toHaveBeenCalledTimes(3);
   });
 
-  it("runs no timer at all while the tab is hidden, and checks at once when it is shown", async () => {
-    const { browser, checks } = setup();
-    await browser.advance(4_000);
-    browser.setVisible(false);
-    browser.fire("visibility");
-    expect(browser.pending()).toBe(0);
-    await browser.advance(60 * 60_000);
-    expect(checks()).toBe(2);
-    browser.setVisible(true);
-    browser.fire("visibility");
-    await browser.settle();
-    expect(checks()).toBe(3);
+  it("pauses after 15 minutes without activity, and resumes with a check the moment someone is back", async () => {
+    const { check, paused, fire, wait } = setup();
+    await wait(15 * 60_000 + 10_000);
+    expect(paused).toEqual([true]);
+    expect(vi.getTimerCount()).toBe(0);
+    const atPause = check.mock.calls.length;
+    await wait(60 * 60_000);
+    expect(check.mock.calls.length).toBe(atPause);
+    fire("pointermove");
+    await wait(0);
+    expect(paused).toEqual([true, false]);
+    expect(check.mock.calls.length).toBe(atPause + 1);
+    await wait(4_000);
+    expect(check.mock.calls.length).toBe(atPause + 3);
   });
 
-  it("stops after 15 minutes without activity, says so, and resumes with a check the moment someone is back", async () => {
-    const { browser, log, checks } = setup();
-    await browser.advance(15 * 60_000 + 10_000);
-    expect(log).toEqual(["paused"]);
-    expect(browser.pending()).toBe(0); // nothing left running
-    const atPause = checks();
-    await browser.advance(60 * 60_000);
-    expect(checks()).toBe(atPause);
-    browser.fire("activity");
-    await browser.settle();
-    expect(log).toEqual(["paused", "resumed"]);
-    expect(checks()).toBe(atPause + 1);
-    await browser.advance(4_000);
-    expect(checks()).toBe(atPause + 3); // fast again
-  });
-
-  it("does not pause someone who keeps using the page, however long", async () => {
-    const { browser, log } = setup();
+  it("never pauses someone who keeps using the page", async () => {
+    const { paused, fire, wait } = setup();
     for (let minute = 0; minute < 60; minute++) {
-      await browser.advance(60_000);
-      browser.fire("activity");
+      await wait(60_000);
+      fire("pointerdown");
     }
-    expect(log).toEqual([]);
+    expect(paused).toEqual([]);
   });
 
   it("stops for good when told to", async () => {
-    const { browser, stop, checks } = setup();
+    const { check, stop, fire, wait } = setup();
     stop();
-    expect(browser.pending()).toBe(0);
-    browser.fire("activity");
-    await browser.advance(60_000);
-    expect(checks()).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
+    fire("keydown");
+    await wait(60_000);
+    expect(check).not.toHaveBeenCalled();
   });
 });

@@ -13,19 +13,6 @@ import "./open.css";
 
 let picker: Root | null = null;
 
-/** The notice that live updates stopped, shown over the viewer and gone the moment someone is back. */
-function pausedNotice(show: boolean): void {
-  let notice = document.getElementById("paused");
-  if (!show) return notice?.remove();
-  if (notice !== null) return;
-  notice = document.createElement("div");
-  notice.id = "paused";
-  notice.className = "paused";
-  notice.setAttribute("role", "status");
-  notice.textContent = "Live updates paused after 15 minutes without activity. Move the mouse or press a key to pick up any changes.";
-  document.body.append(notice);
-}
-
 async function open(dir: DirectoryHandle): Promise<void> {
   let read = await readFolder(dir);
   if (read.plans.length === 0) throw new Error(`no plan in "${dir.name}": pick the folder holding attraverso.yaml (or a *.apm.yaml)`);
@@ -34,20 +21,14 @@ async function open(dir: DirectoryHandle): Promise<void> {
   document.getElementById("picker")?.remove();
   mountViewer({
     liveRefresh: false,
-    // When to look is `follow.ts`'s business: often while things move, less when quiet, never while hidden, and
-    // not at all after a long spell with nobody at the page, which the notice says until someone is back.
-    watch: (changed) =>
-      follow({
-        check: async () => {
-          if (!(await changedSince(dir, read))) return false;
-          read = await readFolder(dir);
-          await host.reload(read);
-          changed();
-          return true;
-        },
-        onPause: () => pausedNotice(true),
-        onResume: () => pausedNotice(false),
-      }),
+    // When to look is `follow.ts`'s business; the viewer shows the notice while it has paused.
+    watch: (changed, paused) =>
+      follow(async () => {
+        if (!(await changedSince(dir, read))) return;
+        read = await readFolder(dir);
+        await host.reload(read);
+        changed();
+      }, paused),
   });
 }
 

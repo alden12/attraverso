@@ -1,129 +1,81 @@
 /**
- * When `/open` looks at the plan folder for a change (`DIST-9.1`): often while someone is there and things are
- * moving, less often when nothing has changed for a while, never while the tab is hidden, and **not at all once
- * nobody has touched the page for a long time**, so there is no timer that runs for ever. Agreed with Alden,
- * 2026-11-18: a sensible stop condition rather than a cheap check repeated indefinitely.
+ * When `/open` looks at the plan folder for a change (`DIST-9.1`), with a stop condition rather than a timer that
+ * runs for ever (agreed with Alden, 2026-11-18):
  *
- * - **Every `fast` ms** while a file changed or someone was active in the last `slowAfter` ms; **every `slow` ms**
- *   after that.
- * - **Hidden tab: no timer at all.** Showing it again checks at once.
- * - **`pauseAfter` ms without activity: stopped**, and `onPause` shows the user it is. Any activity checks at once,
- *   calls `onResume`, and starts again at `fast`.
+ * - **every 2s**, or **every 10s** once nobody has touched the page for 5 minutes;
+ * - **nothing while the tab is hidden**, and a check the moment it is shown;
+ * - **paused after 15 minutes without activity**, which `onPaused(true)` shows; the next pointer, key, scroll or
+ *   focus checks at once, clears it, and starts again at 2s.
  *
- * Activity is a pointer, a key, a scroll or the window gaining focus: what someone looking at the page does. Timers
- * are chained (`setTimeout`, never an interval), so a slow check can never overlap the next. Everything the browser
- * provides is passed in, so the schedule is tested with a fake clock rather than by waiting fifteen minutes.
+ * A chained `setTimeout` rather than an interval, so a slow check can never overlap the next one.
  */
 
-export interface FollowOptions {
-  /** Look at the files; true when something changed (and has been loaded). */
-  check: () => Promise<boolean>;
-  onPause: () => void;
-  onResume: () => void;
-  fast?: number;
-  slow?: number;
-  slowAfter?: number;
-  pauseAfter?: number;
+export const FOLLOW = { fast: 2_000, slow: 10_000, slowAfter: 5 * 60_000, pauseAfter: 15 * 60_000 };
+
+/** What someone looking at the page does. */
+const ACTIVITY = ["pointerdown", "pointermove", "keydown", "wheel", "scroll", "focus"];
+
+/** The two things events come from, passed in so a test can use plain `EventTarget`s. */
+export interface Page {
+  window: EventTarget;
+  document: EventTarget & { visibilityState: string };
 }
 
-/** What the schedule needs from the browser, so a test can stand in for it. */
-export interface FollowEnvironment {
-  now: () => number;
-  setTimer: (run: () => void, ms: number) => unknown;
-  clearTimer: (timer: unknown) => void;
-  visible: () => boolean;
-  /** Listen for an event on the window or the document; returns how to stop. */
-  on: (event: "activity" | "visibility", run: () => void) => () => void;
-}
-
-export const FOLLOW_DEFAULTS = { fast: 2_000, slow: 10_000, slowAfter: 5 * 60_000, pauseAfter: 15 * 60_000 };
-
-/** What someone at the page does: each is activity, and keeps the page following. */
-const ACTIVITY = ["pointerdown", "pointermove", "keydown", "wheel", "scroll", "focus"] as const;
-
-export const browserEnvironment = (): FollowEnvironment => ({
-  now: () => Date.now(),
-  setTimer: (run, ms) => window.setTimeout(run, ms),
-  clearTimer: (timer) => window.clearTimeout(timer as number),
-  visible: () => document.visibilityState === "visible",
-  on: (event, run) => {
-    if (event === "visibility") {
-      document.addEventListener("visibilitychange", run);
-      return () => document.removeEventListener("visibilitychange", run);
-    }
-    for (const name of ACTIVITY) window.addEventListener(name, run, { passive: true, capture: true });
-    return () => ACTIVITY.forEach((name) => window.removeEventListener(name, run, { capture: true }));
-  },
-});
-
-/** Start following; returns how to stop for good. */
-export function follow(options: FollowOptions, env: FollowEnvironment = browserEnvironment()): () => void {
-  const { fast, slow, slowAfter, pauseAfter } = { ...FOLLOW_DEFAULTS, ...options };
-  let lastActivity = env.now();
-  let lastChange = env.now();
-  let timer: unknown = null;
-  let checking = false;
+/** Start following; returns how to stop. */
+export function follow(check: () => Promise<unknown>, onPaused: (paused: boolean) => void, page: Page = { window, document }): () => void {
+  let lastActive = Date.now();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let running = false;
   let paused = false;
   let stopped = false;
-
+  const hidden = () => page.document.visibilityState === "hidden";
   const clear = () => {
-    if (timer !== null) env.clearTimer(timer);
-    timer = null;
+    clearTimeout(timer);
+    timer = undefined;
   };
-  const schedule = () => {
-    clear();
-    if (stopped || paused || !env.visible()) return; // hidden: no timer until it is shown again
-    const quietFor = env.now() - Math.max(lastActivity, lastChange);
-    timer = env.setTimer(tick, quietFor >= slowAfter ? slow : fast);
-  };
+
   async function tick() {
-    timer = null;
-    if (stopped || paused || checking || !env.visible()) return;
-    if (env.now() - lastActivity >= pauseAfter) {
+    clear();
+    if (stopped || running || hidden()) return;
+    const idle = Date.now() - lastActive;
+    if (idle >= FOLLOW.pauseAfter) {
       paused = true;
-      options.onPause();
-      return; // nothing scheduled: it waits for someone to come back
+      return onPaused(true);
     }
-    checking = true;
+    running = true;
     try {
-      if (await options.check()) lastChange = env.now();
+      await check();
     } catch {
       // A file mid-write, or the permission withdrawn: try again next time.
     } finally {
-      checking = false;
+      running = false;
     }
-    schedule();
+    if (!stopped && !hidden() && timer === undefined) timer = setTimeout(tick, idle >= FOLLOW.slowAfter ? FOLLOW.slow : FOLLOW.fast);
   }
-  /** Check now rather than at the next tick: someone came back, or the tab was shown. */
-  const now = () => {
-    clear();
-    void tick();
+
+  /** Someone is here: note it, and check now if the schedule had paused or slowed. */
+  const active = () => {
+    const wasSlow = Date.now() - lastActive >= FOLLOW.slowAfter;
+    lastActive = Date.now();
+    if (paused) {
+      paused = false;
+      onPaused(false);
+    }
+    if (wasSlow) void tick();
+  };
+  const visibility = () => {
+    if (hidden()) return clear();
+    lastActive = 0; // coming back to the tab counts as activity, and always checks at once
+    active();
   };
 
-  const offActivity = env.on("activity", () => {
-    const wasQuiet = env.now() - lastActivity >= slowAfter;
-    lastActivity = env.now();
-    if (paused) {
-      paused = false;
-      options.onResume();
-      now();
-    } else if (wasQuiet) schedule(); // back from slow to fast without waiting out the slow tick
-  });
-  const offVisibility = env.on("visibility", () => {
-    if (!env.visible()) return clear();
-    lastActivity = env.now();
-    if (paused) {
-      paused = false;
-      options.onResume();
-    }
-    now();
-  });
-
-  schedule();
+  for (const name of ACTIVITY) page.window.addEventListener(name, active, { passive: true, capture: true });
+  page.document.addEventListener("visibilitychange", visibility);
+  timer = setTimeout(tick, FOLLOW.fast);
   return () => {
     stopped = true;
     clear();
-    offActivity();
-    offVisibility();
+    for (const name of ACTIVITY) page.window.removeEventListener(name, active, { capture: true });
+    page.document.removeEventListener("visibilitychange", visibility);
   };
 }

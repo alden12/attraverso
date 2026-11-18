@@ -27,9 +27,10 @@ export interface ViewerExtensions {
   /**
    * How this host says the plan changed, when it is not the `/api/changes` stream: called once with the viewer's
    * refresh, returning how to stop. The folder page on the Pages site (`DIST-9.1`) has no server to push, so it
-   * checks the files itself and calls this. Given, it replaces the stream.
+   * checks the files itself and calls this. Given, it replaces the stream. `paused` says the host has stopped
+   * looking for now (after long inactivity), which the viewer shows until the host says it has started again.
    */
-  watch?: (changed: () => void) => () => void;
+  watch?: (changed: () => void, paused: (paused: boolean) => void) => () => void;
 }
 
 export const ExtensionsContext = createContext<ViewerExtensions>({});

@@ -2241,3 +2241,21 @@ body {
     height: 30px;
   }
 }
+
+/* A host's `watch` has paused (the Pages folder page, after long inactivity): over the graph, clear of the toolbar. */
+.paused {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  z-index: 100;
+  max-width: calc(100vw - 32px);
+  box-sizing: border-box;
+  padding: 10px 16px;
+  border: 1px solid #3a4656;
+  border-radius: 10px;
+  background: #1b2330;
+  color: #d8e0ea;
+  font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
+}

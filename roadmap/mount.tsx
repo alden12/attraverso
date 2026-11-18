@@ -43,7 +43,8 @@ function Root({ extensions }: { extensions: ViewerExtensions }) {
   }, []);
   useLiveRefresh(plan !== null && extensions.liveRefresh !== false && extensions.watch === undefined, refresh);
   const watch = extensions.watch;
-  useEffect(() => (plan !== null && watch !== undefined ? watch(refresh) : undefined), [plan !== null, watch, refresh]);
+  const [paused, setPaused] = useState(false);
+  useEffect(() => (plan !== null && watch !== undefined ? watch(refresh, setPaused) : undefined), [plan !== null, watch, refresh]);
   // Deliberately after the session resolves. Fetching first would send a request with no token, get a 401, and
   // show "could not load the plan" to someone whose only problem is not having signed in yet.
   useEffect(() => {
@@ -84,6 +85,11 @@ function Root({ extensions }: { extensions: ViewerExtensions }) {
   return (
     <ExtensionsContext.Provider value={extensions}>
       <App key={selection.project?.key ?? "none"} plan={plan} selection={selection} focus={requested.item} reload={load} />
+      {paused && (
+        <div className="paused" role="status">
+          Live updates paused after a while without activity. Move the mouse or press a key to pick up any changes.
+        </div>
+      )}
     </ExtensionsContext.Provider>
   );
 }
