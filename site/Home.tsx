@@ -42,7 +42,7 @@ export function Home() {
       <p>
         <a href={REPO}>attraverso on GitHub</a> · <a href="https://www.npmjs.com/package/attraverso">on npm</a> ·{" "}
         {/* Relative, so it works under `/attraverso/` on Pages and at the root of the dev server alike. */}
-        <a href="./open/">open a plan folder in this browser</a>
+        <a href="./xlsx-bridge/">xlsx bridge</a> (a spreadsheet plan, for assistants that cannot use MCP)
       </p>
     </main>
   );

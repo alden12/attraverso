@@ -1,0 +1,97 @@
+/* The bridge's opening page, before the viewer takes the page over: in the viewer's dark palette, so the switch is quiet. */
+.bridge {
+  box-sizing: border-box;
+  max-width: 560px;
+  margin: 12vh auto 0;
+  padding: 0 16px;
+  color: #d8e0ea;
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+body:has(.bridge) {
+  margin: 0;
+  background: #0f141b;
+}
+.bridge h1 {
+  font-size: 22px;
+  margin: 0 0 12px;
+}
+.bridge code {
+  font-size: 13px;
+}
+.bridge__note {
+  color: #9aa7b8;
+  font-size: 13px;
+}
+.bridge__error {
+  color: #ff8a80;
+}
+.bridge__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 20px 0;
+}
+.bridge button {
+  padding: 9px 16px;
+  border: 1px solid #4f9dff;
+  border-radius: 8px;
+  background: #1f6feb;
+  color: #fff;
+  font: inherit;
+  cursor: pointer;
+}
+.bridge button.secondary {
+  background: transparent;
+  color: #d8e0ea;
+  border-color: #3a4656;
+}
+.bridge button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.bridge ol {
+  padding-left: 20px;
+}
+.bridge li {
+  margin: 6px 0;
+}
+.bridge button.link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: #6cb6ff;
+  text-decoration: underline;
+}
+
+/* What is wrong with the spreadsheet: a count over the graph, bottom left, that opens into the list. */
+.problems {
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  z-index: 100;
+  max-width: min(560px, calc(100vw - 32px));
+  font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: #d8e0ea;
+}
+.problems__toggle {
+  padding: 7px 12px;
+  border: 1px solid #8a6d1f;
+  border-radius: 8px;
+  background: #2a2412;
+  color: #f2d27a;
+  font: inherit;
+  cursor: pointer;
+}
+.problems__list {
+  max-height: 40vh;
+  overflow: auto;
+  margin: 8px 0 0;
+  padding: 10px 14px 10px 28px;
+  border: 1px solid #3a4656;
+  border-radius: 10px;
+  background: #1b2330;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
+}
+.problems__list li {
+  margin: 4px 0;
+}

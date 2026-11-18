@@ -1,50 +1,54 @@
 /**
- * The viewer's server, in the page (`DIST-9.1`): the plan from a folder loaded into an in-browser Postgres
- * (PGlite, as everywhere else), and the viewer's `/api` reads answered from it by the same feed functions the
- * loopback host and the hosted server use, so this is a third host that cannot drift from the other two.
+ * The viewer's server, in the page (`DIST-9.1`): the plan read from the spreadsheet loaded into an in-browser
+ * Postgres (PGlite, as everywhere else), and the viewer's `/api` reads answered from it by the same feed functions
+ * the loopback host and the hosted server use, so this is a third host that cannot drift from the other two.
  *
  * **Read only.** Every write route is refused with a reason, and the viewer, finding no write credential
  * (`canWrite`), does not offer them. A layout dragged here stays in this browser, as on any host that cannot write.
  *
  * Answered by wrapping `fetch` for `/api/` paths rather than by a service worker: the plan lives in this page's
  * memory, and a worker would need its own copy. The viewer's requests are same-origin and path-absolute, so they
- * are recognised by path wherever the site is served from (`/attraverso/open/` on Pages).
+ * are recognised by path wherever the site is served from (`/attraverso/xlsx-bridge/` on Pages).
  */
 import { createInMemoryDb } from "../../src/db/memory";
 import type { Database } from "../../src/db/client";
-import { asPlan, importStore, mergeLayout, mergeReferences, parseLayout, parseReferences, parseStore, replaceStore, type Store } from "../../src/serialise/plan";
+import { asPlan, importStore, replaceStore, type Store } from "../../src/serialise/plan";
+import { uuidv7 } from "../../src/db/ids";
 import { ensureUser, LOCAL_IDENTITY } from "../../src/domain/users";
 import { storeFeed } from "../../src/mcp/storeFeed";
 import { itemFeed } from "../../src/mcp/itemFeed";
 import { searchFeed } from "../../src/mcp/searchFeed";
-import type { FolderRead } from "./folder";
+import { readPlan, type Problem } from "../workbook/model";
+import { readWorkbook } from "../workbook/xlsx";
+import type { SheetRead } from "./file";
 
-export const READ_ONLY = "This page opens the plan read-only: edit it with your agent, and the page follows.";
+export const READ_ONLY = "This page only reads the spreadsheet and never changes it: edit the spreadsheet, and the page follows.";
 
-/** The folder's plans as one store, each with its layout and references laid back over it, as the server reads it. */
-export function storeOf(read: FolderRead): Store {
-  return {
-    projects: read.plans.flatMap((files) => {
-      let store = parseStore(files.plan);
-      if (files.layout !== null) store = mergeLayout(store, parseLayout(files.layout));
-      if (files.references !== null) store = mergeReferences(store, parseReferences(files.references));
-      return store.projects;
-    }),
-  };
+/** The same id for the same ref on every read, so a reload changes items rather than replacing them. */
+const ids = new Map<string, string>();
+const idOf = (key: string): string => {
+  if (!ids.has(key)) ids.set(key, uuidv7());
+  return ids.get(key)!;
+};
+
+/** The plan and its problems, from the file's bytes. */
+export async function planOf(read: SheetRead): Promise<{ store: Store; problems: Problem[] }> {
+  return readPlan(await readWorkbook(read.bytes), read.name, new Date(read.modified).toISOString(), idOf);
 }
 
 export interface PageHost {
-  /** Load a newer read of the folder in place: the same database, its contents replaced. */
-  reload(read: FolderRead): Promise<void>;
+  /** Load a newer read of the file in place: the same database, its contents replaced. Returns its problems. */
+  reload(read: SheetRead): Promise<Problem[]>;
+  problems: Problem[];
 }
 
-/** Load the folder's plan and start answering the viewer's requests from it. */
-export async function startHost(first: FolderRead): Promise<PageHost> {
+/** Load the spreadsheet's plan and start answering the viewer's requests from it. */
+export async function startHost(first: SheetRead): Promise<PageHost> {
   const { db } = await createInMemoryDb();
-  await importStore(db, storeOf(first));
-  const { id: ownerId } = await ensureUser(db, LOCAL_IDENTITY);
   let read = first;
-  let store = storeOf(first);
+  let { store, problems } = await planOf(first);
+  await importStore(db, store);
+  const { id: ownerId } = await ensureUser(db, LOCAL_IDENTITY);
 
   const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
   const answer = async (url: URL, method: string): Promise<Response> => {
@@ -52,8 +56,8 @@ export async function startHost(first: FolderRead): Promise<PageHost> {
     const param = (name: string) => url.searchParams.get(name) ?? "";
     switch (url.pathname.replace(/^.*(?=\/api\/)/, "")) {
       case "/api/store": {
-        const files = Object.fromEntries(read.plans.flatMap((p) => parseStore(p.plan).projects.map((project) => [project.key, `${read.folder}/${p.name}`])));
-        return json(await storeFeed(db as Database, ownerId, { store: asPlan(store), path: read.folder, uploadsDisabled: READ_ONLY, files }));
+        const files = Object.fromEntries(store.projects.map((project) => [project.key, `${read.name}.xlsx`]));
+        return json(await storeFeed(db as Database, ownerId, { store: asPlan(store), path: `${read.name}.xlsx`, uploadsDisabled: READ_ONLY, files }));
       }
       case "/api/item": {
         const found = await itemFeed(db as Database, ownerId, param("project"), param("ref"));
@@ -82,11 +86,15 @@ export async function startHost(first: FolderRead): Promise<PageHost> {
     return network(input, init);
   };
 
-  return {
+  const host: PageHost = {
+    problems,
     reload: async (next) => {
       read = next;
-      store = storeOf(next);
+      ({ store, problems } = await planOf(next));
       await replaceStore(db, store);
+      host.problems = problems;
+      return problems;
     },
   };
+  return host;
 }

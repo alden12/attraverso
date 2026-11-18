@@ -23,7 +23,7 @@ import { delimiter } from "node:path";
  */
 const PORT = Number(process.env.E2E_PORT ?? 5188);
 /**
- * The Pages site's dev server, for `/open` (`DIST-9.1`): a hundred up, so `E2E_PORT` moves both together, and the
+ * The Pages site's dev server, for the xlsx bridge (`DIST-9.1`): a hundred up, so `E2E_PORT` moves both together, and the
  * local checks' run on 5189 (`scripts/checks/steps.ts`) beside an ordinary one on 5188 does not collide with it.
  */
 export const SITE_PORT = PORT + 100;
@@ -54,7 +54,7 @@ export default defineConfig({
     },
     {
       command: `yarn site --port ${SITE_PORT} --strictPort`,
-      url: `http://localhost:${SITE_PORT}/open/`,
+      url: `http://localhost:${SITE_PORT}/xlsx-bridge/`,
       reuseExistingServer: false,
       timeout: 60_000,
     },

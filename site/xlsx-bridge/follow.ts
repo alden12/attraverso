@@ -1,5 +1,5 @@
 /**
- * When `/open` looks at the plan folder for a change (`DIST-9.1`), with a stop condition rather than a timer that
+ * When the xlsx bridge looks at the spreadsheet for a change (`DIST-9.1`), with a stop condition rather than a timer that
  * runs for ever (agreed with Alden, 2026-11-18):
  *
  * - **every 2s**, or **every 10s** once nobody has touched the page for 5 minutes;
