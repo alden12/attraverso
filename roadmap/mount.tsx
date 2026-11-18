@@ -41,7 +41,9 @@ function Root({ extensions }: { extensions: ViewerExtensions }) {
   const refresh = useCallback(() => {
     fetchPlan().then(setPlan, () => {});
   }, []);
-  useLiveRefresh(plan !== null && extensions.liveRefresh !== false, refresh);
+  useLiveRefresh(plan !== null && extensions.liveRefresh !== false && extensions.watch === undefined, refresh);
+  const watch = extensions.watch;
+  useEffect(() => (plan !== null && watch !== undefined ? watch(refresh) : undefined), [plan !== null, watch, refresh]);
   // Deliberately after the session resolves. Fetching first would send a request with no token, get a 401, and
   // show "could not load the plan" to someone whose only problem is not having signed in yet.
   useEffect(() => {

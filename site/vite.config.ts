@@ -1,4 +1,4 @@
-import { defineConfig } from "vite";
+import { defineConfig, searchForWorkspaceRoot } from "vite";
 import react from "@vitejs/plugin-react";
 import { fileURLToPath } from "node:url";
 
@@ -14,7 +14,16 @@ export default defineConfig({
   root: siteRoot,
   base: "./",
   plugins: [react()],
-  // The README and the images it shows live at the repo root, outside this folder.
-  server: { fs: { allow: [repoRoot] } },
-  build: { outDir: "dist", emptyOutDir: true },
+  // The README and the images it shows live at the package root, outside this folder; PGlite's WebAssembly is in
+  // the workspace's hoisted node_modules, above that, and without it the dev server answers `/open`'s database with
+  // an error page.
+  server: { fs: { allow: [repoRoot, searchForWorkspaceRoot(process.cwd())] } },
+  build: {
+    outDir: "dist",
+    emptyOutDir: true,
+    // Two pages: the home page, and `/open`, the viewer on a plan folder (`DIST-9.1`), which alone loads PGlite.
+    rollupOptions: { input: { index: `${siteRoot}index.html`, open: `${siteRoot}open/index.html` } },
+  },
+  // PGlite fetches its own WebAssembly and data bundle beside its module, which pre-bundling would break.
+  optimizeDeps: { exclude: ["@electric-sql/pglite"] },
 });

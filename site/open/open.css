@@ -1,0 +1,51 @@
+/* The folder picker, before the viewer takes the page over: in the viewer's dark palette, so the switch is quiet. */
+.open {
+  box-sizing: border-box;
+  max-width: 560px;
+  margin: 12vh auto 0;
+  padding: 0 16px;
+  color: #d8e0ea;
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+body:has(.open) {
+  margin: 0;
+  background: #0f141b;
+}
+.open h1 {
+  font-size: 22px;
+  margin: 0 0 12px;
+}
+.open code {
+  font-size: 13px;
+}
+.open__note {
+  color: #9aa7b8;
+  font-size: 13px;
+}
+.open__error {
+  color: #ff8a80;
+}
+.open__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 20px 0;
+}
+.open button {
+  padding: 9px 16px;
+  border: 1px solid #4f9dff;
+  border-radius: 8px;
+  background: #1f6feb;
+  color: #fff;
+  font: inherit;
+  cursor: pointer;
+}
+.open button.secondary {
+  background: transparent;
+  color: #d8e0ea;
+  border-color: #3a4656;
+}
+.open button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}

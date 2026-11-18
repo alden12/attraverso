@@ -24,6 +24,12 @@ export interface ViewerExtensions {
    * a 404, which would be one needless error in the console on every page load.
    */
   liveRefresh?: boolean;
+  /**
+   * How this host says the plan changed, when it is not the `/api/changes` stream: called once with the viewer's
+   * refresh, returning how to stop. The folder page on the Pages site (`DIST-9.1`) has no server to push, so it
+   * checks the files itself and calls this. Given, it replaces the stream.
+   */
+  watch?: (changed: () => void) => () => void;
 }
 
 export const ExtensionsContext = createContext<ViewerExtensions>({});

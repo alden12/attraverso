@@ -22,6 +22,11 @@ import { delimiter } from "node:path";
  * `E2E_PORT` overrides it, for a second run beside the first - a background check in another worktree, say.
  */
 const PORT = Number(process.env.E2E_PORT ?? 5188);
+/**
+ * The Pages site's dev server, for `/open` (`DIST-9.1`): a hundred up, so `E2E_PORT` moves both together, and the
+ * local checks' run on 5189 (`scripts/checks/steps.ts`) beside an ordinary one on 5188 does not collide with it.
+ */
+export const SITE_PORT = PORT + 100;
 
 export default defineConfig({
   testDir: "./e2e",
@@ -33,17 +38,25 @@ export default defineConfig({
     trace: "retain-on-failure",
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
-  webServer: {
-    command: `yarn viewer --port ${PORT}`,
-    // The fixture store, not whatever the dev server would discover: in the development workspace that is this
-    // repo's own (private) plan, and in a checkout of the public repo it is nothing at all (DIST-3).
-    //
-    // `demo` last on purpose: the subtitle names only the last of a multi-file store's paths (VIEW-32), and the
-    // suite asserts it names the file of the project on screen. This repo's plan passed by the same accident,
-    // with `roadmap.apm.yaml` sorting after `cloud.apm.yaml`.
-    env: { APM_STORE_PATH: ["e2e/fixture/other.apm.yaml", "e2e/fixture/demo.apm.yaml"].join(delimiter) },
-    url: `http://localhost:${PORT}`,
-    reuseExistingServer: false,
-    timeout: 60_000,
-  },
+  webServer: [
+    {
+      command: `yarn viewer --port ${PORT}`,
+      // The fixture store, not whatever the dev server would discover: in the development workspace that is this
+      // repo's own (private) plan, and in a checkout of the public repo it is nothing at all (DIST-3).
+      //
+      // `demo` last on purpose: the subtitle names only the last of a multi-file store's paths (VIEW-32), and the
+      // suite asserts it names the file of the project on screen. This repo's plan passed by the same accident,
+      // with `roadmap.apm.yaml` sorting after `cloud.apm.yaml`.
+      env: { APM_STORE_PATH: ["e2e/fixture/other.apm.yaml", "e2e/fixture/demo.apm.yaml"].join(delimiter) },
+      url: `http://localhost:${PORT}`,
+      reuseExistingServer: false,
+      timeout: 60_000,
+    },
+    {
+      command: `yarn site --port ${SITE_PORT} --strictPort`,
+      url: `http://localhost:${SITE_PORT}/open/`,
+      reuseExistingServer: false,
+      timeout: 60_000,
+    },
+  ],
 });
