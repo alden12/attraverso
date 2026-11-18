@@ -1,6 +1,6 @@
 {
   "name": "attraverso",
-  "version": "0.8.1",
+  "version": "0.9.0",
   "private": true,
   "description": "Durable, structured project memory that Claude reads and writes over MCP, stored as version-controlled YAML.",
   "license": "Apache-2.0",
@@ -39,6 +39,7 @@
     "pg:down": "docker compose -f docker-compose.test.yml down -v",
     "typecheck": "tsc --noEmit",
     "apm:check": "vite-node scripts/checkStore.ts",
+    "workbook": "vite-node site/workbook/cli.ts",
     "layout:history": "vite-node scripts/layoutHistory.ts",
     "setup:desktop": "vite-node scripts/setupDesktop.ts",
     "verify": "yarn typecheck && yarn viewer:build && yarn test",
@@ -71,6 +72,7 @@
     "@vitejs/plugin-react": "^6.3.0",
     "@xyflow/react": "^12.3.0",
     "drizzle-kit": "^0.31.10",
+    "exceljs": "4.4.0",
     "github-markdown-css": "5.8.1",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",

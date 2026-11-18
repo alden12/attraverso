@@ -6,6 +6,7 @@ import type { Database } from "../db/client";
 import type { OwnedProject } from "../domain/projects";
 import { createItem, editItem, getItem, getItemDetail, listItems, setStatus } from "../domain/items";
 import { addComment, listComments } from "../domain/comments";
+import { getNext, setNext } from "../domain/next";
 import { getSection, setSection } from "../domain/context";
 import { search, DEFAULT_LIMIT } from "../domain/search";
 import type { PlanProject } from "./index";
@@ -39,6 +40,8 @@ export function projectHandle({ db, project, actor, writing }: HandleContext): P
     createItem: (input) => writing(async () => itemOf(await createItem(db, { projectId, ...input }, actor))),
     editItem: (ref, changes) => writing(async () => itemOf(await editItem(db, { projectId, ref, ...changes }, actor))),
     setStatus: (ref, status) => writing(async () => itemOf(await setStatus(db, { projectId, ref, status }, actor))),
+    getNext: async () => (await getNext(db, projectId)).map((n) => n.ref),
+    setNext: (refs) => writing(async () => (await setNext(db, projectId, refs, actor)).map((n) => n.ref)),
     addComment: (ref, body, { audience } = {}) =>
       writing(async () => {
         const itemId = await itemIdOf(ref);

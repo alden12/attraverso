@@ -62,6 +62,21 @@ describe("openPlan (DIST-6)", () => {
     expect(hits[0]).toMatchObject({ source: "item", ref: "NPC-1", title: "The ferryman" });
   });
 
+  it("sets planned dates and the Next order (DIST-6.3, DIST-9.2)", async () => {
+    const plan = await opened();
+    await plan.createProject({ key: "world", name: "A world", type: "world" });
+    const world = await plan.project("world");
+    expect(await world.createItem({ area: "NPC", title: "The ferryman", start: "2026-11-02", due: "2026-11-09" })).toMatchObject({ start: "2026-11-02", due: "2026-11-09" });
+    await world.createItem({ area: "NPC", title: "The keeper" });
+    expect(await world.editItem("NPC-1", { due: null })).toMatchObject({ start: "2026-11-02", due: null });
+    expect(await world.editItem("NPC-2", { start: "2026-12-01" })).toMatchObject({ start: "2026-12-01", due: null });
+
+    expect(await world.getNext()).toEqual([]);
+    expect(await world.setNext(["NPC-2", "NPC-1"])).toEqual(["NPC-2", "NPC-1"]);
+    await world.setStatus("NPC-2", "done");
+    expect(await world.getNext()).toEqual(["NPC-1"]);
+  });
+
   it("names what is missing, rather than failing somewhere downstream", async () => {
     const plan = await opened();
     await expect(plan.project("nope")).rejects.toThrow('no project with key "nope"');

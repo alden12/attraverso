@@ -57,9 +57,16 @@ export interface PlanProject {
   /** One item with its body, dependency refs and comments (newest first), or null when no item has that ref. */
   getItem(ref: string): Promise<ItemDetail | null>;
   createItem(input: NewItem): Promise<Item>;
-  /** Revise the title, body or dependencies (`deps` replaces the whole set). At least one must be given. */
+  /** Revise the title, body, dependencies or planned dates (`deps` replaces the whole set). At least one must be given. */
   editItem(ref: string, changes: ItemChanges): Promise<Item>;
   setStatus(ref: string, status: string): Promise<Item>;
+  /** The agreed order of what to do next, most important first: open items only, as `get_project` shows it. */
+  getNext(): Promise<string[]>;
+  /**
+   * Replace the order with these refs. A done item is accepted and filtered on read, as `set_next` does; an item
+   * whose dependencies are unmet is accepted too, since wanting it next is a reason to go unblock it.
+   */
+  setNext(refs: string[]): Promise<string[]>;
   /** Comment on an item. Capped at 800 characters, as the tool is; a comment is always about an item (`CTX-15`). */
   addComment(ref: string, body: string, options?: { audience?: "user" | "agent" }): Promise<Comment>;
   /** Newest first. `ref` narrows to one item's comments; `null` to the older ones left on the project itself. */
@@ -132,12 +139,18 @@ export interface NewItem {
   /** Defaults to `to-do`. */
   status?: string;
   deps?: string[];
+  /** Planned days, `YYYY-MM-DD` (`DIST-6.3`): calendar days, not instants. Most items have neither. */
+  start?: string;
+  due?: string;
 }
 
 export interface ItemChanges {
   title?: string;
   body?: string;
   deps?: string[];
+  /** Planned days, `YYYY-MM-DD`; `null` clears one, absent leaves it alone (`DIST-6.3`). */
+  start?: string | null;
+  due?: string | null;
 }
 
 export interface Comment {

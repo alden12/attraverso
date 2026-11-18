@@ -35,7 +35,7 @@ export default defineConfig({
     environment: "node",
     // roadmap/ is a browser app, but the pieces worth testing there are pure functions over the fetched store
     // (which project to render, VIEW-4), so they run here under node rather than needing a DOM.
-    include: ["src/**/*.test.ts", "scripts/**/*.test.ts", "roadmap/**/*.test.ts"],
+    include: ["src/**/*.test.ts", "scripts/**/*.test.ts", "roadmap/**/*.test.ts", "site/**/*.test.ts"],
     // Drops the throwaway databases the Postgres target creates, before and after the run. A no-op for the
     // default PGlite run. It lives here rather than in a test hook because it has to hold whatever an
     // interrupted run left behind, which no per-test cleanup can (OPS-2).
