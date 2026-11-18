@@ -1,0 +1,24 @@
+:root {
+  color-scheme: light dark;
+  --bg: #ffffff;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117;
+  }
+}
+body {
+  margin: 0;
+  background: var(--bg);
+}
+.markdown-body {
+  box-sizing: border-box;
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 32px 16px 64px;
+  background: var(--bg);
+}
+.markdown-body img {
+  max-width: 100%;
+  height: auto;
+}
