@@ -834,7 +834,7 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
             const file = project?.file ?? (plan.storePath === null ? null : plan.storePath.split(",")[0]!.split("/").pop()!);
             const caption = file !== null && (
               <span className="picker__file" title={plan.storePath ?? undefined}>
-                {file}
+                <bdi>{file}</bdi>
               </span>
             );
             if (plan.projects.length <= 1) {
