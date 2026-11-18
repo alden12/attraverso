@@ -38,10 +38,12 @@ describe("a spreadsheet as the plan (DIST-9.2)", () => {
     const { store, problems } = await read(await writeWorkbook());
     expect(problems).toEqual([]);
     expect(store.projects[0]).toMatchObject({ key: "demo-plan", name: "Demo plan", items: [], next: [] });
+    expect(store.projects[0]!.direction).toBeUndefined();
+    expect(store.projects[0]!.context).toBeUndefined();
   });
 
   it("reads items, nesting, dependencies, dates and the Next order, and the plan loads", async () => {
-    const { store, problems } = await read(await writeWorkbook(ROWS, ["VIEW-1", "DATA-2"]));
+    const { store, problems } = await read(await writeWorkbook({ items: ROWS, next: ["VIEW-1", "DATA-2"] }));
     expect(problems).toEqual([]);
     const project = store.projects[0]!;
     expect(project.items.map((i) => [i.ref, i.status, i.parent ?? null, i.deps ?? []])).toEqual([
@@ -58,7 +60,7 @@ describe("a spreadsheet as the plan (DIST-9.2)", () => {
   });
 
   it("reads rows an assistant added, fixing case and separators, and orders Next by rank, not row", async () => {
-    const bytes = await withRows(await writeWorkbook(ROWS), [["data-3", "Migrations", "In Progress", "data-1; DATA-2"]], [
+    const bytes = await withRows(await writeWorkbook({ items: ROWS }), [["data-3", "Migrations", "In Progress", "data-1; DATA-2"]], [
       [2, "DATA-3"],
       [1, "DATA-1"],
     ]);
@@ -69,7 +71,7 @@ describe("a spreadsheet as the plan (DIST-9.2)", () => {
   });
 
   it("shows what it can of a bad row and names each problem against its row", async () => {
-    const bytes = await withRows(await writeWorkbook(ROWS), [
+    const bytes = await withRows(await writeWorkbook({ items: ROWS }), [
       ["", "A row with no ref"],
       ["DATA 4", "A malformed ref"],
       ["DATA-1", "A second DATA-1"],
@@ -107,9 +109,58 @@ describe("a spreadsheet as the plan (DIST-9.2)", () => {
   it("gives the same ref the same id on every read", async () => {
     const ids = new Map<string, string>();
     const stable = (key: string) => ids.get(key) ?? (ids.set(key, idOf()), ids.get(key)!);
-    const bytes = await writeWorkbook(ROWS);
+    const bytes = await writeWorkbook({ items: ROWS });
     const first = readPlan(await readWorkbook(bytes), "Demo", AT, stable).store.projects[0]!.items.map((i) => i.id);
     const again = readPlan(await readWorkbook(bytes), "Demo", AT, stable).store.projects[0]!.items.map((i) => i.id);
     expect(again).toEqual(first);
+  });
+
+  it("reads the project's name and direction, comments on items, and context sections joined across rows", async () => {
+    const bytes = await writeWorkbook({
+      name: "Storage work",
+      direction: "One engine everywhere.",
+      items: ROWS,
+      comments: [
+        { ref: "DATA-2", comment: "Diffs must stay small.", date: "2026-11-10" },
+        { ref: "DATA-2", comment: "Checked with the team." },
+      ],
+      context: { "The storage model": "In-memory Postgres." },
+    });
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(bytes as unknown as ArrayBuffer);
+    wb.getWorksheet("Context")!.addRow(["The storage model", "Rebuilt from the file on load."]);
+    const { store, problems } = await read(new Uint8Array(await wb.xlsx.writeBuffer()));
+    expect(problems).toEqual([]);
+    const project = store.projects[0]!;
+    expect(project).toMatchObject({ key: "demo-plan", name: "Storage work", direction: "One engine everywhere." });
+    expect(project.context).toEqual({ "The storage model": "In-memory Postgres.\n\nRebuilt from the file on load." });
+    expect(project.items.find((i) => i.ref === "DATA-2")!.comments!.map((c) => [c.body, c.at])).toEqual([
+      ["Diffs must stay small.", "2026-11-10T00:00:00.000Z"],
+      ["Checked with the team.", AT],
+    ]);
+    const { db } = await createInMemoryDb();
+    await importStore(db, store);
+  });
+
+  it("names what is wrong on the Project, Comments and Context sheets", async () => {
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load((await writeWorkbook({ items: ROWS })) as unknown as ArrayBuffer);
+    wb.getWorksheet("Project")!.addRow(["Owner", "Alden"]);
+    const comments = wb.getWorksheet("Comments")!;
+    comments.addRow(["", "About nothing"]);
+    comments.addRow(["DATA-9", "About something missing"]);
+    comments.addRow(["DATA-1", "x".repeat(801), "last week"]);
+    wb.getWorksheet("Context")!.addRow(["", "Text with no heading"]);
+    const { store, problems } = await read(new Uint8Array(await wb.xlsx.writeBuffer()));
+    expect(problems.map((p) => `${p.at}: ${p.message}`)).toEqual([
+      'Project row 4: "Owner" is not a field this page reads (Name, Direction), so it is left out',
+      "Comments row 3: a comment with no Ref, so it is left out: say which item it is about",
+      "Comments row 4: a comment on DATA-9, which is not on the Items sheet, so it is left out",
+      "Comments row 5: the comment on DATA-1 is 801 characters, over the 800 a comment should be: move the detail into DATA-1's Body",
+      'Comments row 5: the comment\'s date "last week" is not a date as YYYY-MM-DD, so it is dated by the file instead',
+      "Context row 3: text with no Heading, so it is left out: give it one, or the Heading of the section it continues",
+    ]);
+    // The long comment is still shown: the cap is advice here, as it is on import.
+    expect(store.projects[0]!.items.find((i) => i.ref === "DATA-1")!.comments).toHaveLength(1);
   });
 });

@@ -12,7 +12,9 @@
  * server never import (`site/boundary.test.ts` holds that).
  *
  * **Pure, and Node-free**: no file, no spreadsheet library and no database here. `xlsx.ts` turns a file into a
- * `Grid` and rows into a file.
+ * `Grid` and rows into a file. Six sheets: Read me, Project (name and direction), Items, Next, Comments and Context;
+ * source references are left out on purpose, since keeping a marker in a body in step with its source row on another
+ * sheet is the edit an assistant in Excel would most often get wrong.
  *
  * **Show what can be shown, and say what is wrong.** The page cannot fix the file, so a bad row is never a reason
  * to show nothing: a mistyped status shows as `to-do`, an unknown dependency is dropped, and each is listed as a
@@ -25,7 +27,13 @@ import type { Store } from "../../src/serialise/plan";
 
 export const ITEM_COLUMNS = ["Ref", "Title", "Status", "Depends on", "Start", "Due", "Body"] as const;
 export const NEXT_COLUMNS = ["Rank", "Ref", "Title"] as const;
-export const SHEETS = { readme: "Read me", items: "Items", next: "Next" } as const;
+export const PROJECT_COLUMNS = ["Field", "Value"] as const;
+export const COMMENT_COLUMNS = ["Ref", "Comment", "Date"] as const;
+export const CONTEXT_COLUMNS = ["Heading", "Text"] as const;
+export const SHEETS = { readme: "Read me", project: "Project", items: "Items", next: "Next", comments: "Comments", context: "Context" } as const;
+
+/** A comment's cap (`MAX_BODY` in `src/domain/comments.ts`, `CTX-2`), restated so this file stays free of the domain. */
+export const COMMENT_LIMIT = 800;
 
 /**
  * The Read me sheet: the only instructions an assistant in Excel gets, since there is no server to give it a
@@ -36,7 +44,9 @@ export function readmeLines(): string[] {
   return [
     "How to edit this plan",
     "",
-    "This workbook is a project plan. A web page shows it as a graph and lists any problems it finds in it.",
+    "This workbook is a project plan. A web page shows it as a graph and lists any problems it finds in it, by sheet and row.",
+    "",
+    "Project sheet: the plan's Name, and its Direction (a short statement of what the project is for and where it is heading).",
     "",
     "Items sheet: one row per item (a task, a goal, anything to work on).",
     "- Ref is the item's id: a group prefix in capitals, a dash and a number, e.g. DATA-1. Refs must be unique.",
@@ -52,6 +62,13 @@ export function readmeLines(): string[] {
     "- The Rank column is what counts (1 is first): to reorder, change the Rank numbers. Moving rows without changing Rank does nothing.",
     "- To add an item to the list, add a row with its Ref and a Rank. To take one off, clear its Rank.",
     "- Title is shown for reference only.",
+    "",
+    "Comments sheet: short remarks about an item, one per row.",
+    `- Ref is the item the comment is about; Date is YYYY-MM-DD, or empty. Keep a comment under ${COMMENT_LIMIT} characters: anything longer belongs in the item's Body.`,
+    "",
+    "Context sheet: the project's settled background, one section per row: decisions made, how things work, what was learned.",
+    "- Heading names the section; Text is its content.",
+    "- A cell holds at most about 32,000 characters. For a longer section, split the text at a paragraph break and continue it on the next row with the same Heading: rows with the same Heading are joined in order.",
   ];
 }
 
@@ -83,6 +100,24 @@ export interface ItemRow {
   body?: string;
 }
 
+/** A comment's row, as the writer takes it. */
+export interface CommentRow {
+  ref: string;
+  comment: string;
+  date?: string;
+}
+
+/** What a workbook holds besides its items, as the writer takes it. */
+export interface WorkbookContent {
+  name?: string;
+  direction?: string;
+  items?: ItemRow[];
+  next?: string[];
+  comments?: CommentRow[];
+  /** Heading to text, in order. */
+  context?: Record<string, string>;
+}
+
 export interface Read {
   store: Store;
   problems: Problem[];
@@ -96,8 +131,8 @@ const splitRefs = (text: string): string[] =>
     .map((r) => r.toUpperCase());
 
 /**
- * The plan a workbook holds, as a one-project store, and what is wrong with it. `name` is the project's name (the
- * file's), `at` the time every row is stamped with (the file's last change), and `idOf` gives each ref the same id
+ * The plan a workbook holds, as a one-project store, and what is wrong with it. `name` is the file's name, which keys the
+ * project and names it unless the Project sheet does, `at` the time every row is stamped with (the file's last change), and `idOf` gives each ref the same id
  * on every read, so a reload is the same items rather than new ones.
  */
 export function readPlan(grid: Grid, name: string, at: string, idOf: (key: string) => string): Read {
@@ -179,6 +214,69 @@ export function readPlan(grid: Grid, name: string, at: string, idOf: (key: strin
     for (const { ref } of ranked.sort((a, b) => a.rank - b.rank || a.row - b.row)) if (!next.includes(ref)) next.push(ref);
   }
 
+  // ---- Project: a sheet of fields, so a name and a direction are two cells rather than a layout to learn.
+  let projectName = name;
+  let direction: string | undefined;
+  const projectSheet = sheet(SHEETS.project);
+  if (projectSheet !== undefined) {
+    const col = columnsOf(projectSheet, PROJECT_COLUMNS, say);
+    for (const { row, cells } of projectSheet.rows) {
+      const field = (col.Field === undefined ? "" : (cells[col.Field] ?? "")).trim();
+      const value = (col.Value === undefined ? "" : (cells[col.Value] ?? "")).replace(/\r\n/g, "\n").trim();
+      if (field.toLowerCase() === "name") projectName = value || name;
+      else if (field.toLowerCase() === "direction") direction = value || undefined;
+      else if (field !== "") say(`${SHEETS.project} row ${row}`, `"${field}" is not a field this page reads (Name, Direction), so it is left out`);
+    }
+  }
+
+  // ---- Comments, about an item each.
+  type Comment = { body: string; audience: string; id: string; at: string; actor: string };
+  const comments = new Map<string, Comment[]>();
+  const commentSheet = sheet(SHEETS.comments);
+  if (commentSheet !== undefined) {
+    const col = columnsOf(commentSheet, COMMENT_COLUMNS, say);
+    for (const { row, cells } of commentSheet.rows) {
+      const where = `${SHEETS.comments} row ${row}`;
+      const cell = (c: (typeof COMMENT_COLUMNS)[number]) => (col[c] === undefined ? "" : (cells[col[c]!] ?? "")).replace(/\r\n/g, "\n").trim();
+      const ref = cell("Ref").toUpperCase();
+      const body = cell("Comment");
+      if (body === "") {
+        say(where, `the comment${ref === "" ? "" : ` on ${ref}`} is empty, so it is left out`);
+        continue;
+      }
+      if (ref === "") {
+        say(where, "a comment with no Ref, so it is left out: say which item it is about");
+        continue;
+      }
+      if (!known.has(ref)) {
+        say(where, `a comment on ${ref}, which is not on the Items sheet, so it is left out`);
+        continue;
+      }
+      if (body.length > COMMENT_LIMIT) say(where, `the comment on ${ref} is ${body.length} characters, over the ${COMMENT_LIMIT} a comment should be: move the detail into ${ref}'s Body`);
+      let when = at;
+      const date = cell("Date");
+      if (date !== "") {
+        if (isCalendarDate(date)) when = `${date}T00:00:00.000Z`;
+        else say(where, `the comment's date "${date}" is not a date as YYYY-MM-DD, so it is dated by the file instead`);
+      }
+      comments.set(ref, [...(comments.get(ref) ?? []), { body, audience: "user", id: idOf(`comment:${row}`), at: when, actor: "spreadsheet" }]);
+    }
+  }
+
+  // ---- Context: a section per heading, and rows sharing a heading joined in order, which is how a section too
+  // long for one cell (Excel's limit is 32,767 characters) carries on.
+  const context: Record<string, string> = {};
+  const contextSheet = sheet(SHEETS.context);
+  if (contextSheet !== undefined) {
+    const col = columnsOf(contextSheet, CONTEXT_COLUMNS, say);
+    for (const { row, cells } of contextSheet.rows) {
+      const heading = (col.Heading === undefined ? "" : (cells[col.Heading] ?? "")).trim();
+      const text = (col.Text === undefined ? "" : (cells[col.Text] ?? "")).replace(/\r\n/g, "\n").trim();
+      if (heading === "") say(`${SHEETS.context} row ${row}`, "text with no Heading, so it is left out: give it one, or the Heading of the section it continues");
+      else if (text !== "") context[heading] = context[heading] === undefined ? text : `${context[heading]}\n\n${text}`;
+    }
+  }
+
   const key = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "plan";
   return {
     problems,
@@ -186,7 +284,9 @@ export function readPlan(grid: Grid, name: string, at: string, idOf: (key: strin
       projects: [
         {
           key,
-          name,
+          name: projectName,
+          ...(direction === undefined ? {} : { direction }),
+          ...(Object.keys(context).length > 0 ? { context } : {}),
           type: "software",
           status: "active",
           id: idOf(`project:${key}`),
@@ -209,6 +309,7 @@ export function readPlan(grid: Grid, name: string, at: string, idOf: (key: strin
             created_at: at,
             updated_at: at,
             ...(r.status === "done" ? { closed_at: at } : {}),
+            ...(comments.has(r.ref) ? { comments: comments.get(r.ref)! } : {}),
           })),
         },
       ],

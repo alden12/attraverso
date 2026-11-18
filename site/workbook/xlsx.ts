@@ -12,10 +12,32 @@
  */
 import ExcelJS from "exceljs";
 import { STATUS_VALUES } from "../../scripts/tickets";
-import { ITEM_COLUMNS, NEXT_COLUMNS, readmeLines, SHEETS, type Grid, type ItemRow } from "./model";
+import { COMMENT_COLUMNS, CONTEXT_COLUMNS, ITEM_COLUMNS, NEXT_COLUMNS, PROJECT_COLUMNS, readmeLines, SHEETS, type Grid, type WorkbookContent } from "./model";
 
-/** A workbook of these items and Next list, as `.xlsx` bytes: with none, the blank template. */
-export async function writeWorkbook(items: ItemRow[] = [], next: string[] = []): Promise<Uint8Array> {
+/** One sheet holding one table, with a frozen header and these column widths. A table needs at least one row, so an
+ *  empty one gets a blank row, which reads back as nothing. */
+function tableSheet(wb: ExcelJS.Workbook, name: string, columns: readonly string[], rows: (string | number)[][], widths: number[]): ExcelJS.Worksheet {
+  const sheet = wb.addWorksheet(name, { views: [{ state: "frozen", ySplit: 1 }] });
+  sheet.addTable({
+    name: name.replace(/\W/g, ""),
+    ref: "A1",
+    headerRow: true,
+    style: { theme: "TableStyleLight9", showRowStripes: true },
+    columns: columns.map((c) => ({ name: c, filterButton: true })),
+    rows: rows.length > 0 ? rows : [columns.map(() => "")],
+  });
+  widths.forEach((width, n) => (sheet.getColumn(n + 1).width = width));
+  return sheet;
+}
+
+/** Long text wraps and sits at the top of its cell, in these columns of every row so far (and the blank one). */
+function wrap(sheet: ExcelJS.Worksheet, column: number, rows: number) {
+  for (let row = 2; row <= Math.max(rows, 1) + 1; row++) sheet.getCell(row, column).alignment = { wrapText: true, vertical: "top" };
+}
+
+/** A workbook of this content, as `.xlsx` bytes: with none, the blank template. */
+export async function writeWorkbook(content: WorkbookContent = {}): Promise<Uint8Array> {
+  const { items = [], next = [], comments = [], context = {} } = content;
   const wb = new ExcelJS.Workbook();
   wb.creator = "attraverso";
 
@@ -24,35 +46,25 @@ export async function writeWorkbook(items: ItemRow[] = [], next: string[] = []):
   readme.getColumn(1).width = 140;
   readme.getCell(1, 1).font = { bold: true, size: 14 };
 
-  const sheet = wb.addWorksheet(SHEETS.items, { views: [{ state: "frozen", ySplit: 1 }] });
-  sheet.addTable({
-    name: "Items",
-    ref: "A1",
-    headerRow: true,
-    style: { theme: "TableStyleLight9", showRowStripes: true },
-    columns: ITEM_COLUMNS.map((name) => ({ name, filterButton: true })),
-    // A table needs at least one row; an empty plan gets a blank one, which reads back as nothing.
-    rows: items.length > 0 ? items.map((i) => [i.ref, i.title, i.status, i.deps.join(", "), i.start ?? "", i.due ?? "", i.body ?? ""]) : [ITEM_COLUMNS.map(() => "")],
-  });
-  [12, 60, 13, 22, 12, 12, 100].forEach((width, n) => (sheet.getColumn(n + 1).width = width));
+  const project = tableSheet(wb, SHEETS.project, PROJECT_COLUMNS, [["Name", content.name ?? ""], ["Direction", content.direction ?? ""]], [14, 120]);
+  wrap(project, 2, 2);
+
+  const sheet = tableSheet(wb, SHEETS.items, ITEM_COLUMNS, items.map((i) => [i.ref, i.title, i.status, i.deps.join(", "), i.start ?? "", i.due ?? "", i.body ?? ""]), [12, 60, 13, 22, 12, 12, 100]);
   const statusColumn = ITEM_COLUMNS.indexOf("Status") + 1;
-  const bodyColumn = ITEM_COLUMNS.indexOf("Body") + 1;
   for (let row = 2; row <= Math.max(items.length, 1) + 1; row++) {
     sheet.getCell(row, statusColumn).dataValidation = { type: "list", allowBlank: true, formulae: [`"${STATUS_VALUES.join(",")}"`] };
-    sheet.getCell(row, bodyColumn).alignment = { wrapText: true, vertical: "top" };
   }
+  wrap(sheet, ITEM_COLUMNS.indexOf("Body") + 1, items.length);
 
-  const nextSheet = wb.addWorksheet(SHEETS.next, { views: [{ state: "frozen", ySplit: 1 }] });
   const titles = new Map(items.map((i) => [i.ref, i.title]));
-  nextSheet.addTable({
-    name: "Next",
-    ref: "A1",
-    headerRow: true,
-    style: { theme: "TableStyleLight9", showRowStripes: true },
-    columns: NEXT_COLUMNS.map((name) => ({ name, filterButton: true })),
-    rows: next.length > 0 ? next.map((ref, n) => [n + 1, ref, titles.get(ref) ?? ""]) : [NEXT_COLUMNS.map(() => "")],
-  });
-  [8, 12, 80].forEach((width, n) => (nextSheet.getColumn(n + 1).width = width));
+  tableSheet(wb, SHEETS.next, NEXT_COLUMNS, next.map((ref, n) => [n + 1, ref, titles.get(ref) ?? ""]), [8, 12, 80]);
+
+  const commentSheet = tableSheet(wb, SHEETS.comments, COMMENT_COLUMNS, comments.map((c) => [c.ref, c.comment, c.date ?? ""]), [12, 100, 12]);
+  wrap(commentSheet, 2, comments.length);
+
+  const sections = Object.entries(context);
+  const contextSheet = tableSheet(wb, SHEETS.context, CONTEXT_COLUMNS, sections, [30, 120]);
+  wrap(contextSheet, 2, sections.length);
 
   return new Uint8Array(await wb.xlsx.writeBuffer());
 }
