@@ -13,8 +13,8 @@ export function fmtReferenceChanges(changes: ReferenceChange[]): string {
     c.kind === "retired"
       ? `- ${c.key} (${c.sources}): pointer removed, so its sources were retired`
       : c.moved === true
-        ? `- ${c.key} (${c.sources}): the pointer now sits on a different claim, "${c.after}" (it was on "${c.before}", which is unchanged). Kept; reads "text changed since" until a source is added for the claim it now covers`
-        : `- ${c.key} (${c.sources}): "${c.before}" -> "${c.after}". Kept; reads "text changed since" until a source is added for the new text`,
+        ? `- ${c.key} (${c.sources}): the pointer now sits on a different claim, "${c.after}" (it was on "${c.before}", which is unchanged). Kept; reads "text changed since" until you give its source again to re-check it, or add one for the claim it now covers`
+        : `- ${c.key} (${c.sources}): "${c.before}" -> "${c.after}". Kept; reads "text changed since" until you give its source again to re-check it, or add one for the new text`,
   );
   return `\nsourced claims you changed:\n${lines.join("\n")}`;
 }
