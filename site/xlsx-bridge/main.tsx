@@ -101,8 +101,9 @@ function Bridge() {
     <main className="bridge">
       <h1>xlsx bridge</h1>
       <p>
-        For when your assistant cannot connect to attraverso directly, such as Copilot in Excel on a managed machine.
-        The assistant edits a spreadsheet, and this page shows that spreadsheet as a plan.
+        For when your assistant cannot connect to attraverso directly, such as using a managed machine where you
+        cannot install software or link additional tools to your agent. The assistant edits a spreadsheet, and this
+        page shows that spreadsheet as a plan.
       </p>
       <ol>
         <li>
