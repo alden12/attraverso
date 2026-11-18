@@ -4,6 +4,7 @@ projects:
     type: software
     status: active
     next:
+      - SECURITY-1
       - DATA-2
       - DATA-3
       - DATA-4
@@ -52,16 +53,25 @@ projects:
         id: 01a1e12c-1808-71ae-afd9-31af21c18422
         created_at: 2026-11-15T21:45:25.768Z
         updated_at: 2026-11-15T21:45:25.838Z
+      - ref: DATA-3.1
+        area: DATA
+        title: Stable key order in the export
+        status: in-progress
+        sort_path: "000003.000001"
+        parent: DATA-3
+        id: 01a1f0c1-3d04-7259-95d7-397da2537abe
+        created_at: 2026-11-18T22:22:38.340Z
+        updated_at: 2026-11-18T22:22:38.340Z
       - ref: DATA-4
         area: DATA
         title: Full-text search
-        status: to-do
+        status: review
         sort_path: "000004"
         deps:
           - DATA-1
         id: 01a1e12c-1812-76ff-985d-2c8e9009c341
         created_at: 2026-11-15T21:45:25.778Z
-        updated_at: 2026-11-15T21:45:25.778Z
+        updated_at: 2026-11-18T22:22:38.286Z
       - ref: DATA-5
         area: DATA
         title: Round-trip the plan
@@ -82,6 +92,32 @@ projects:
         created_at: 2026-11-15T21:45:25.797Z
         updated_at: 2026-11-15T21:45:25.845Z
         deleted_at: 2026-11-15T21:45:25.845Z
+      - ref: DESIGN-1
+        area: DESIGN
+        title: Colour palette
+        status: to-do
+        sort_path: "000001"
+        id: 01a1f0c1-3cde-70d9-860b-5c461da7485f
+        created_at: 2026-11-18T22:22:38.302Z
+        updated_at: 2026-11-18T22:22:38.302Z
+      - ref: DESIGN-2
+        area: DESIGN
+        title: Icon set
+        status: to-do
+        sort_path: "000002"
+        id: 01a1f0c1-3ce8-715a-b7b7-a48ca7d4a450
+        created_at: 2026-11-18T22:22:38.313Z
+        updated_at: 2026-11-18T22:22:38.313Z
+      - ref: DESIGN-3
+        area: DESIGN
+        title: Dark mode pass
+        status: to-do
+        sort_path: "000003"
+        deps:
+          - DESIGN-1
+        id: 01a1f0c1-3cf1-733a-b8e5-f3366f0a2c75
+        created_at: 2026-11-18T22:22:38.321Z
+        updated_at: 2026-11-18T22:23:07.973Z
       - ref: MCP-1
         area: MCP
         title: Serve the tools over stdio
@@ -112,6 +148,15 @@ projects:
         id: 01a1e12c-17f3-732d-9fd3-9b977f6d5bae
         created_at: 2026-11-15T21:45:25.747Z
         updated_at: 2026-11-15T21:45:25.747Z
+      - ref: SECURITY-1
+        area: SECURITY
+        title: Audit the dependencies
+        status: to-do
+        sort_path: "000001"
+        due: 2027-01-15
+        id: 01a1f0c1-3cfb-702b-80b4-5856410a1613
+        created_at: 2026-11-18T22:22:38.331Z
+        updated_at: 2026-11-18T22:22:38.331Z
       - ref: VIEW-1
         area: VIEW
         title: The graph viewer

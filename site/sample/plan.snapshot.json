@@ -1,7 +1,7 @@
 {
   "version": 1,
   "project": "demo",
-  "exportedAt": "2026-11-18T22:18:59.459Z",
+  "exportedAt": "2026-11-18T22:23:08.038Z",
   "items": [
     {
       "id": "01a1e12c-17f7-7148-bc70-b19f074d20a5",
@@ -37,10 +37,21 @@
       "body": "Deterministic export, so a change is a one-line diff."
     },
     {
+      "id": "01a1f0c1-3d04-7259-95d7-397da2537abe",
+      "ref": "DATA-3.1",
+      "title": "Stable key order in the export",
+      "status": "in-progress",
+      "parent": "DATA-3",
+      "deps": "",
+      "start": "",
+      "due": "",
+      "body": ""
+    },
+    {
       "id": "01a1e12c-1812-76ff-985d-2c8e9009c341",
       "ref": "DATA-4",
       "title": "Full-text search",
-      "status": "to-do",
+      "status": "review",
       "parent": "",
       "deps": "DATA-1",
       "start": "",
@@ -57,6 +68,39 @@
       "start": "",
       "due": "",
       "body": "Export, import and export again, byte for byte."
+    },
+    {
+      "id": "01a1f0c1-3cde-70d9-860b-5c461da7485f",
+      "ref": "DESIGN-1",
+      "title": "Colour palette",
+      "status": "to-do",
+      "parent": "",
+      "deps": "",
+      "start": "",
+      "due": "",
+      "body": ""
+    },
+    {
+      "id": "01a1f0c1-3ce8-715a-b7b7-a48ca7d4a450",
+      "ref": "DESIGN-2",
+      "title": "Icon set",
+      "status": "to-do",
+      "parent": "",
+      "deps": "",
+      "start": "",
+      "due": "",
+      "body": ""
+    },
+    {
+      "id": "01a1f0c1-3cf1-733a-b8e5-f3366f0a2c75",
+      "ref": "DESIGN-3",
+      "title": "Dark mode pass",
+      "status": "to-do",
+      "parent": "",
+      "deps": "DESIGN-1",
+      "start": "",
+      "due": "",
+      "body": ""
     },
     {
       "id": "01a1e12c-183c-73fb-b057-305de2b3e552",
@@ -89,6 +133,17 @@
       "deps": "",
       "start": "",
       "due": "",
+      "body": ""
+    },
+    {
+      "id": "01a1f0c1-3cfb-702b-80b4-5856410a1613",
+      "ref": "SECURITY-1",
+      "title": "Audit the dependencies",
+      "status": "to-do",
+      "parent": "",
+      "deps": "",
+      "start": "",
+      "due": "2027-01-15",
       "body": ""
     },
     {
@@ -126,6 +181,7 @@
     }
   ],
   "next": [
+    "SECURITY-1",
     "DATA-2",
     "DATA-3",
     "DATA-4",
