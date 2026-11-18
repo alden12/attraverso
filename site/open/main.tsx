@@ -8,12 +8,23 @@ import { createRoot, type Root } from "react-dom/client";
 import { mountViewer } from "../../roadmap/mount";
 import { changedSince, permitted, pick, readFolder, remembered, supported, type DirectoryHandle } from "./folder";
 import { READ_ONLY, startHost } from "./host";
+import { follow } from "./follow";
 import "./open.css";
 
-/** How often to look at the files for an outside change. A look is a stat per file, no read. */
-const CHECK_EVERY_MS = 2000;
-
 let picker: Root | null = null;
+
+/** The notice that live updates stopped, shown over the viewer and gone the moment someone is back. */
+function pausedNotice(show: boolean): void {
+  let notice = document.getElementById("paused");
+  if (!show) return notice?.remove();
+  if (notice !== null) return;
+  notice = document.createElement("div");
+  notice.id = "paused";
+  notice.className = "paused";
+  notice.setAttribute("role", "status");
+  notice.textContent = "Live updates paused after 15 minutes without activity. Move the mouse or press a key to pick up any changes.";
+  document.body.append(notice);
+}
 
 async function open(dir: DirectoryHandle): Promise<void> {
   let read = await readFolder(dir);
@@ -23,25 +34,20 @@ async function open(dir: DirectoryHandle): Promise<void> {
   document.getElementById("picker")?.remove();
   mountViewer({
     liveRefresh: false,
-    watch: (changed) => {
-      let busy = false;
-      const timer = setInterval(async () => {
-        if (busy || document.visibilityState !== "visible") return;
-        busy = true;
-        try {
-          if (await changedSince(dir, read)) {
-            read = await readFolder(dir);
-            await host.reload(read);
-            changed();
-          }
-        } catch {
-          // A file mid-write, or the permission withdrawn: try again on the next look.
-        } finally {
-          busy = false;
-        }
-      }, CHECK_EVERY_MS);
-      return () => clearInterval(timer);
-    },
+    // When to look is `follow.ts`'s business: often while things move, less when quiet, never while hidden, and
+    // not at all after a long spell with nobody at the page, which the notice says until someone is back.
+    watch: (changed) =>
+      follow({
+        check: async () => {
+          if (!(await changedSince(dir, read))) return false;
+          read = await readFolder(dir);
+          await host.reload(read);
+          changed();
+          return true;
+        },
+        onPause: () => pausedNotice(true),
+        onResume: () => pausedNotice(false),
+      }),
   });
 }
 
