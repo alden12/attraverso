@@ -82,7 +82,9 @@ test("keeps a copy of every version in a folder of the user's, never overwriting
 
   // Off until asked: nothing is written.
   expect(await mirrored()).toEqual([]);
-  await page.getByRole("button", { name: "Keep copies in a folder..." }).click();
+  // Rarely set, so in the viewer's menu.
+  await page.getByRole("button", { name: "More" }).click();
+  await page.getByRole("button", { name: "keep copies in a folder" }).click();
   await expect.poll(mirrored).toEqual(["plan.xlsx"]);
 
   // A new version is copied as it appears.
@@ -90,6 +92,7 @@ test("keeps a copy of every version in a folder of the user's, never overwriting
   await page.evaluate((bytes) => (window as unknown as Bridge).writeSheet("plan_v2.xlsx", bytes), [...v2]);
   await expect(page.getByText("The plan, version two").first()).toBeVisible({ timeout: 10_000 });
   await expect.poll(mirrored).toEqual(["plan.xlsx", "plan_v2.xlsx"]);
+  // The menu stayed open, and says what was copied last.
   await expect(page.getByText("Copied plan_v2.xlsx to mirror")).toBeVisible();
 
   // A version edited in place is copied again, and the copy it replaces is kept beside it.

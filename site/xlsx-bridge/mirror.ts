@@ -66,3 +66,75 @@ export async function copyVersions(source: FolderHandle, mirror: MirrorFolder, b
   }
   return copied;
 }
+
+// ---- The mirror's state, outside React: copying carries on whether or not the viewer's menu, where it is shown and
+// changed, is open, and the menu unmounts each time it closes.
+
+export type MirrorState =
+  | { kind: "off" }
+  | { kind: "paused"; dir: MirrorFolder }
+  | { kind: "on"; dir: MirrorFolder; note: string }
+  | { kind: "error"; message: string };
+
+let state: MirrorState = { kind: "off" };
+let source: { dir: FolderHandle; base: string } | null = null;
+const listeners = new Set<() => void>();
+const set = (next: MirrorState) => {
+  state = next;
+  listeners.forEach((listener) => listener());
+};
+const messageOf = (cause: unknown) => (cause instanceof Error ? cause.message : String(cause));
+
+/** For `useSyncExternalStore`. */
+export const mirrorState = (): MirrorState => state;
+export const onMirrorChange = (listener: () => void): (() => void) => {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+};
+
+async function sync(): Promise<void> {
+  if (state.kind !== "on" || source === null) return;
+  const dir = state.dir;
+  try {
+    const copied = await copyVersions(source.dir, dir, source.base);
+    if (copied.length > 0) set({ kind: "on", dir, note: `Copied ${copied.at(-1)} to ${dir.name}` });
+  } catch (cause) {
+    set({ kind: "error", message: `Could not copy to ${dir.name}: ${messageOf(cause)}` });
+  }
+}
+
+/** The plan was read (first, or again after a change): copy whatever the mirror is missing. */
+export function mirrorSource(dir: FolderHandle, base: string): void {
+  source = { dir, base };
+  void sync();
+}
+
+/** A mirror picked on an earlier visit: on again if the browser still allows writing to it, else one click away. */
+export async function restoreMirror(): Promise<void> {
+  const dir = await rememberedMirror();
+  if (dir === null) return;
+  set((await mirrorPermitted(dir, false)) ? { kind: "on", dir, note: `Copies kept in ${dir.name}` } : { kind: "paused", dir });
+  await sync();
+}
+
+/** Pick (or change) the mirror folder. From a click. */
+export async function chooseMirror(): Promise<void> {
+  if (source === null) return;
+  try {
+    const dir = await pickMirror(source.dir);
+    set({ kind: "on", dir, note: `Copies kept in ${dir.name}` });
+    await sync();
+  } catch (cause) {
+    if (!(cause instanceof DOMException && cause.name === "AbortError")) set({ kind: "error", message: messageOf(cause) });
+  }
+}
+
+/** Carry on copying to a remembered mirror the browser wants asked about again. From a click. */
+export async function resumeMirror(): Promise<void> {
+  if (state.kind !== "paused") return;
+  const dir = state.dir;
+  if (await mirrorPermitted(dir, true)) {
+    set({ kind: "on", dir, note: `Copies kept in ${dir.name}` });
+    await sync();
+  }
+}

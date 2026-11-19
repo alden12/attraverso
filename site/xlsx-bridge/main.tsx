@@ -6,32 +6,35 @@
  * shows up within a couple of seconds. Opt in, it keeps a copy of every version in a folder of the user's own
  * (`mirror.ts`).
  */
-import { StrictMode, useEffect, useState } from "react";
+import { StrictMode, useEffect, useState, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
 import { mountViewer } from "../../roadmap/mount";
-import { changedSince, permitted, pick, readSheet, remembered, supported, type FolderHandle, type SheetRead } from "./file";
-import { copyVersions, mirrorPermitted, pickMirror, rememberedMirror, type MirrorFolder } from "./mirror";
+import { changedSince, permitted, pick, readSheet, remembered, supported, type FolderHandle } from "./file";
+import { chooseMirror, mirrorSource, mirrorState, onMirrorChange, restoreMirror, resumeMirror } from "./mirror";
 import { READ_ONLY, startHost } from "./host";
 import { follow } from "./follow";
 import { writeWorkbook } from "../workbook/xlsx";
 import type { Problem } from "../workbook/model";
 import "./bridge.css";
 
-/** Open the spreadsheet in the viewer; `problems` hears what is wrong with it, and `onRead` what was read, every time. */
-async function open(handle: FolderHandle, problems: (list: Problem[]) => void, onRead: (read: SheetRead) => void): Promise<void> {
+/** Open the spreadsheet in the viewer; `problems` hears what is wrong with it on every read. */
+async function open(handle: FolderHandle, problems: (list: Problem[]) => void): Promise<void> {
   let read = await readSheet(handle);
   const host = await startHost(read);
   problems(host.problems);
-  onRead(read);
+  // Every read goes to the mirror, which copies whatever it is missing, if one is picked.
+  mirrorSource(handle, read.name);
+  void restoreMirror();
   mountViewer({
     liveRefresh: false,
+    MenuActions: MirrorMenu,
     // When to look is `follow.ts`'s business; the viewer shows the notice while it has paused.
     watch: (changed, paused) =>
       follow(async () => {
         if (!(await changedSince(handle, read))) return;
         read = await readSheet(handle, read.name);
         problems(await host.reload(read));
-        onRead(read);
+        mirrorSource(handle, read.name);
         changed();
       }, paused),
   });
@@ -68,82 +71,46 @@ function Problems({ problems }: { problems: Problem[] }) {
   );
 }
 
-/** The plan being followed: its folder, its name, and which file and version of it was read last. */
-interface Source {
-  dir: FolderHandle;
-  read: SheetRead;
-}
-
-type MirrorState =
-  | { kind: "off" }
-  | { kind: "paused"; dir: MirrorFolder }
-  | { kind: "on"; dir: MirrorFolder; note: string }
-  | { kind: "error"; message: string };
-
 const messageOf = (cause: unknown) => (cause instanceof Error ? cause.message : String(cause));
 const aborted = (cause: unknown) => cause instanceof DOMException && cause.name === "AbortError";
 
-/** Copies of every version in a folder of the user's, opt in: off until picked, then kept up as versions appear. */
-function Mirror({ source }: { source: Source }) {
-  const [state, setState] = useState<MirrorState>({ kind: "off" });
-  useEffect(() => {
-    // A mirror picked before: on again if the browser still allows writing to it, otherwise one click to resume.
-    rememberedMirror().then(async (dir) => {
-      if (dir === null) return;
-      setState((await mirrorPermitted(dir, false)) ? { kind: "on", dir, note: `Copies kept in ${dir.name}` } : { kind: "paused", dir });
-    });
-  }, []);
-
-  const dir = state.kind === "on" ? state.dir : null;
-  useEffect(() => {
-    if (dir === null) return;
-    copyVersions(source.dir, dir, source.read.name).then(
-      (copied) => copied.length > 0 && setState({ kind: "on", dir, note: `Copied ${copied.at(-1)} to ${dir.name}` }),
-      (cause) => setState({ kind: "error", message: `Could not copy to ${dir.name}: ${messageOf(cause)}` }),
-    );
-  }, [dir, source.dir, source.read.name, source.read.version]);
-
-  const choose = async () => {
-    try {
-      const picked = await pickMirror(source.dir);
-      setState({ kind: "on", dir: picked, note: `Copies kept in ${picked.name}` });
-    } catch (cause) {
-      if (!aborted(cause)) setState({ kind: "error", message: messageOf(cause) });
-    }
-  };
-  const resume = async (paused: MirrorFolder) => {
-    if (await mirrorPermitted(paused, true)) setState({ kind: "on", dir: paused, note: `Copies kept in ${paused.name}` });
-  };
-
+/**
+ * The copies kept in a folder of the user's (`mirror.ts`), as an entry in the viewer's menu: rarely set, so behind
+ * the menu rather than over the graph. Its state lives in `mirror.ts`, since the menu unmounts when it closes and
+ * the copying must not stop with it.
+ */
+function MirrorMenu() {
+  const state = useSyncExternalStore(onMirrorChange, mirrorState);
+  const note = (text: string, error = false) => <span className={error ? "mirror-note mirror-note--error" : "mirror-note"}>{text}</span>;
   return (
-    <div className="mirror">
+    <>
       {state.kind === "off" && (
-        <button className="corner__button" onClick={() => void choose()} title="Copy every version of the plan into a folder of yours, as a backup">
-          Keep copies in a folder...
+        <button className="chip" onClick={() => void chooseMirror()} title="Copy every version of the plan into a folder of yours, as a backup">
+          keep copies in a folder
         </button>
       )}
       {state.kind === "paused" && (
-        <button className="corner__button" onClick={() => void resume(state.dir)}>
-          Keep copying to {state.dir.name}
+        <button className="chip" onClick={() => void resumeMirror()} title="The browser wants asking again before writing there">
+          keep copying to {state.dir.name}
         </button>
       )}
       {state.kind === "on" && (
-        <span className="corner__note">
-          {state.note}{" "}
-          <button className="link" onClick={() => void choose()}>
-            change
+        <>
+          {note(state.note)}
+          <button className="chip" onClick={() => void chooseMirror()}>
+            change folder
           </button>
-        </span>
+        </>
       )}
       {state.kind === "error" && (
-        <span className="corner__note corner__note--error">
-          {state.message}{" "}
-          <button className="link" onClick={() => void choose()}>
+        <>
+          {note(state.message, true)}
+          <button className="chip" onClick={() => void chooseMirror()}>
             pick a folder
           </button>
-        </span>
+        </>
       )}
-    </div>
+    </>
   );
 }
 
@@ -151,7 +118,6 @@ let opening = false;
 
 function Bridge() {
   const [problems, setProblems] = useState<Problem[] | null>(null);
-  const [source, setSource] = useState<Source | null>(null);
   const [saved, setSaved] = useState<FolderHandle | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -163,8 +129,7 @@ function Bridge() {
     setBusy(true);
     setError(null);
     try {
-      const dir = await choose();
-      await open(dir, setProblems, (read) => setSource({ dir, read }));
+      await open(await choose(), setProblems);
     } catch (cause) {
       // Closing the picker is not an error worth showing.
       if (!aborted(cause)) setError(messageOf(cause));
@@ -182,14 +147,7 @@ function Bridge() {
     });
   }, []);
 
-  if (problems !== null) {
-    return (
-      <div className="corner">
-        <Problems problems={problems} />
-        {source !== null && <Mirror source={source} />}
-      </div>
-    );
-  }
+  if (problems !== null) return <Problems problems={problems} />;
   return (
     <main className="bridge">
       <h1>xlsx bridge</h1>
@@ -216,8 +174,8 @@ function Bridge() {
       ) : (
         <>
           <p className="bridge__note">
-            {READ_ONLY} It is read here, in this browser, and never leaves your computer. Once it is open, you can have the
-            page keep a copy of every version in a folder of your own.
+            {READ_ONLY} It is read here, in this browser, and never leaves your computer. Once it is open, its menu can have it
+            keep a copy of every version in a folder of your own.
           </p>
           <div className="bridge__actions">
             {saved !== null && (
