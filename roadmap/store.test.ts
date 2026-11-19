@@ -4,7 +4,8 @@
  * again by accident.
  */
 import { describe, expect, it } from "vitest";
-import { orderSections, parseHash, sectionInFocus, selectProject, type ProjectPlan } from "./store";
+import { emptyViewNotice, orderSections, parseHash, sectionInFocus, selectProject, type ProjectPlan } from "./store";
+import type { RoadmapItem } from "../scripts/tickets";
 
 const project = (key: string): ProjectPlan => ({ key, name: key.toUpperCase(), items: [], next: [], layout: {}, metrics: new Map(), context: [], file: null, areaInfo: {}, areaOrder: [] });
 const apm = project("apm");
@@ -59,5 +60,33 @@ describe("context sections (VIEW-30)", () => {
     expect(sectionInFocus(parseHash("#apm/context%3AThe%20storage%20model").item)).toBe("The storage model");
     expect(sectionInFocus(parseHash("#apm/VIEW-30").item)).toBeNull();
     expect(sectionInFocus(null)).toBeNull();
+  });
+});
+
+describe("emptyViewNotice", () => {
+  const item = (id: string, status: RoadmapItem["status"]): RoadmapItem => ({
+    id,
+    area: id.split("-")[0]!,
+    status,
+    title: id,
+    deps: [],
+    parent: null,
+  });
+
+  it("says a project with no items is empty, not filtered", () => {
+    expect(emptyViewNotice([], new Set(["done"]), new Set())).toEqual({ filtered: false });
+  });
+
+  it("is silent while anything is shown", () => {
+    expect(emptyViewNotice([item("A-1", "done"), item("A-2", "to-do")], new Set(["done"]), new Set())).toBeNull();
+  });
+
+  it("counts what each filter hid, an item hidden twice under its status", () => {
+    const items = [item("A-1", "done"), item("A-2", "done"), item("B-1", "to-do"), item("B-2", "done")];
+    expect(emptyViewNotice(items, new Set(["done"]), new Set(["B"]))).toEqual({
+      filtered: true,
+      hidden: 4,
+      reasons: ["3 done", "1 in hidden areas"],
+    });
   });
 });

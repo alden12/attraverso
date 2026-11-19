@@ -20,7 +20,7 @@ import { Metrics } from "./Metrics";
 // The plan is fetched at runtime and handed in by `main.tsx` (VIEW-11), so this component renders whichever
 // store was served to it rather than one baked into the bundle, and whichever project of it the URL asked
 // for (VIEW-4).
-import { canWrite, saveLayout, SECTION_PREFIX, sectionInFocus, setInNext, type Plan, type Selection } from "./store";
+import { canWrite, emptyViewNotice, saveLayout, SECTION_PREFIX, sectionInFocus, setInNext, type Plan, type Selection } from "./store";
 import { useExtensions } from "./extensions";
 import { areasOf, STATUSES, type Status, splitScope } from "../scripts/tickets";
 import { areaColours, buildGraph, buildEdges, filteredOut, memoryOf, remembered, type ColourMode, type LayoutMemory, type RoadmapNode } from "./graph";
@@ -794,6 +794,11 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
     return { byArea, byStatus };
   }, [items]);
   const hiddenCount = items.length - visibleItems.length;
+  // Why the graph or board is blank, when it is (VIEW-69). The calendar says its own, for undated items.
+  const viewNotice = useMemo(
+    () => (project === null ? null : emptyViewNotice(items, hiddenStatuses, hiddenAreas)),
+    [project, items, hiddenStatuses, hiddenAreas],
+  );
 
   // The project's context sections (VIEW-30): floating over the graph's top left, and in the board's corner, where
   // the row it would float in is the board's own column heads.
@@ -1161,6 +1166,31 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
                 )}
               </div>
             )
+          )}
+          {viewNotice !== null && view !== "calendar" && (
+            <div className="graph__notice">
+              {viewNotice.filtered ? (
+                <>
+                  {viewNotice.hidden === 1 ? "The only item is" : `All ${viewNotice.hidden} items are`} hidden by the view
+                  filters ({viewNotice.reasons.join(", ")}).
+                  <div className="graph__notice-actions">
+                    <button
+                      className="chip"
+                      onClick={() => {
+                        setHiddenStatuses(new Set());
+                        setHiddenAreas(new Set());
+                      }}
+                    >
+                      show everything
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  No items yet. Create one with <code>create_item</code> and it appears here.
+                </>
+              )}
+            </div>
           )}
           {/* Open by default: this is the answer to "what now", which is the question someone opens the viewer
               with. Dismissible rather than hidden - see the state above. */}

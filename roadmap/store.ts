@@ -429,6 +429,32 @@ export const SECTION_PREFIX = "context:";
 export const sectionInFocus = (focus: string | null): string | null =>
   focus?.startsWith(SECTION_PREFIX) ? focus.slice(SECTION_PREFIX.length) : null;
 
+/**
+ * Why a selected project's graph or board shows nothing, or null when it shows something (`VIEW-69`).
+ *
+ * Done items are hidden by default, so a new plan whose first items were all filed as done opened on a blank
+ * canvas that looked broken. Saying which filter hid what lets the reader tell "empty" from "filtered" at a
+ * glance. An item hidden by both its status and its area is counted under its status, the default filter, so
+ * every item is counted once.
+ */
+export function emptyViewNotice(
+  items: readonly RoadmapItem[],
+  hiddenStatuses: ReadonlySet<Status>,
+  hiddenAreas: ReadonlySet<string>,
+): { filtered: false } | { filtered: true; hidden: number; reasons: string[] } | null {
+  if (items.length === 0) return { filtered: false };
+  const byStatus = new Map<Status, number>();
+  let byArea = 0;
+  for (const item of items) {
+    if (hiddenStatuses.has(item.status)) byStatus.set(item.status, (byStatus.get(item.status) ?? 0) + 1);
+    else if (hiddenAreas.has(item.area)) byArea += 1;
+    else return null; // something is shown
+  }
+  const reasons = [...byStatus].map(([status, count]) => `${count} ${status}`);
+  if (byArea > 0) reasons.push(`${byArea} in hidden areas`);
+  return { filtered: true, hidden: items.length, reasons };
+}
+
 /** What the viewer should render, given the store and the project asked for in the URL hash. */
 export interface Selection {
   /** The project to render, or null when there is nothing unambiguous to show. */

@@ -188,6 +188,24 @@ test.describe("the served store", () => {
     await expect(page.getByRole("button", { name: "show all" })).toBeDisabled();
   });
 
+  test("says every item is hidden, and why, and shows them all again from the notice (VIEW-69)", async ({ page }) => {
+    await expect(page.locator(".item-node").first()).toBeVisible();
+    await expect(page.locator(".graph__notice")).toHaveCount(0);
+    await settings(page, "done"); // back to the default, so both filters are in play
+    await page.locator('.toolbtn[aria-haspopup="dialog"]').click();
+    await page.getByRole("button", { name: "hide all" }).click();
+    await page.keyboard.press("Escape");
+    const done = items.filter((item) => item.status === "done").length;
+    const notice = page.locator(".graph__notice");
+    // An item hidden twice counts under its status, so the two numbers add up to the whole plan.
+    await expect(notice).toContainText(
+      `All ${items.length} items are hidden by the view filters (${done} done, ${items.length - done} in hidden areas)`,
+    );
+    await notice.getByRole("button", { name: "show everything" }).click();
+    await expect(notice).toHaveCount(0);
+    await expect(page.locator('.toolbtn[aria-haspopup="dialog"]')).toContainText("all shown");
+  });
+
   test("shows an area in the pane when its frame is clicked, and goes to an item from it (VIEW-49)", async ({ page }) => {
     const plat = items.filter((item) => item.area === "PLAT");
     const open = plat.filter((item) => item.status !== "done");
