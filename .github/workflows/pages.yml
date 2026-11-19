@@ -1,0 +1,56 @@
+# The project's GitHub Pages site (`DIST-10`), built from master: a React app (`site/`) built with the viewer's
+# toolchain. For now the README as a page at the root; the browser-only viewer and its demo will join it as further
+# pages of the same build (`DIST-9.1`).
+#
+# Only on a change to what the page shows, so an ordinary code push costs nothing. Free either way on this public
+# repo, unlike the private one's Actions minutes (`PLAT-7`). Needs Pages turned on once, with its source set to
+# "GitHub Actions" (Settings, Pages).
+name: Pages
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - README.md
+      - docs/screenshots/**
+      - roadmap/favicon.svg
+      - site/**
+      - package.json
+      - yarn.lock
+      - .github/workflows/pages.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time, and a newer push supersedes a queued one, but never cancels a deploy midway.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: yarn
+      - run: yarn install --frozen-lockfile
+      - run: yarn site:build
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
