@@ -18,7 +18,7 @@ interface FolderHandle extends FileSystemDirectoryHandle {
 }
 declare global {
   interface Window {
-    showDirectoryPicker?: (options: { mode: "read"; id?: string }) => Promise<FolderHandle>;
+    showDirectoryPicker?: (options: { mode: "read" | "readwrite"; id?: string }) => Promise<FolderHandle>;
   }
 }
 
@@ -35,7 +35,7 @@ export interface SheetRead {
 }
 
 /** Every spreadsheet at the top of the folder, with when it last changed: one look per file, no reads. */
-async function entries(dir: FolderHandle): Promise<(FolderEntry & { handle: FileSystemFileHandle })[]> {
+export async function entries(dir: FileSystemDirectoryHandle & { values(): AsyncIterable<FileSystemHandle> }): Promise<(FolderEntry & { handle: FileSystemFileHandle })[]> {
   const found: (FolderEntry & { handle: FileSystemFileHandle })[] = [];
   for await (const entry of dir.values()) {
     if (entry.kind !== "file" || !/\.xlsx$/i.test(entry.name)) continue;
@@ -83,12 +83,13 @@ function idb(): Promise<IDBDatabase> {
   });
 }
 
-async function remember(dir: FolderHandle): Promise<void> {
+/** Keep a folder handle under `key`: `last` is the folder followed, `mirror` the one copies go to (`mirror.ts`). */
+export async function remember(dir: FileSystemDirectoryHandle, key = "last"): Promise<void> {
   try {
     const db = await idb();
     await new Promise<void>((resolve, reject) => {
       const tx = db.transaction(STORE, "readwrite");
-      tx.objectStore(STORE).put(dir, "last");
+      tx.objectStore(STORE).put(dir, key);
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
     });
@@ -97,12 +98,12 @@ async function remember(dir: FolderHandle): Promise<void> {
   }
 }
 
-export async function remembered(): Promise<FolderHandle | null> {
+export async function remembered<T = FolderHandle>(key = "last"): Promise<T | null> {
   try {
     const db = await idb();
     return await new Promise((resolve) => {
-      const request = db.transaction(STORE).objectStore(STORE).get("last");
-      request.onsuccess = () => resolve((request.result as FolderHandle | undefined) ?? null);
+      const request = db.transaction(STORE).objectStore(STORE).get(key);
+      request.onsuccess = () => resolve((request.result as T | undefined) ?? null);
       request.onerror = () => resolve(null);
     });
   } catch {

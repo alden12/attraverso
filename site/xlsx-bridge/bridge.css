@@ -63,15 +63,50 @@ body:has(.bridge) {
   text-decoration: underline;
 }
 
-/* What is wrong with the spreadsheet: a count over the graph, bottom left, that opens into the list. */
-.problems {
+/* Over the graph, bottom left: what is wrong with the spreadsheet (a count that opens into the list), and the
+   copies kept in a folder of the user's. */
+.corner {
   position: fixed;
   left: 16px;
   bottom: 16px;
   z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
   max-width: min(560px, calc(100vw - 32px));
   font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
   color: #d8e0ea;
+}
+.corner__button {
+  padding: 6px 12px;
+  border: 1px solid #3a4656;
+  border-radius: 8px;
+  background: #1b2330;
+  color: #d8e0ea;
+  font: inherit;
+  cursor: pointer;
+}
+.corner__note {
+  padding: 6px 12px;
+  border: 1px solid #2f5a3a;
+  border-radius: 8px;
+  background: #13241a;
+  color: #a8dcb5;
+}
+.corner__note--error {
+  border-color: #6b2b2b;
+  background: #2a1414;
+  color: #ff8a80;
+}
+.corner button.link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: #6cb6ff;
+  text-decoration: underline;
+  font: inherit;
+  cursor: pointer;
 }
 .problems__toggle {
   padding: 7px 12px;

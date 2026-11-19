@@ -13,21 +13,31 @@ const ROWS: ItemRow[] = [
   { ref: "DATA-1", title: "Storage foundation", status: "done", deps: [] },
   { ref: "DATA-2", title: "The plan as YAML", status: "to-do", deps: ["DATA-1"] },
 ];
-type Bridge = { writeSheet: (name: string, bytes: number[]) => Promise<void> };
+type Bridge = { writeSheet: (name: string, bytes: number[]) => Promise<void>; mirrorFiles: () => Promise<string[]> };
 
-/** Give the page a folder holding `plan.xlsx` where it would show the picker, and a way to write into it later. */
+/**
+ * Give the page a folder holding `plan.xlsx` where it would show the picker (and an empty one when it asks for a
+ * folder to write copies to), and ways to write into the first and list the second.
+ */
 async function withSheet(page: Page, bytes: Uint8Array) {
   await page.addInitScript((first: number[]) => {
+    const folder = async (name: string) => (await navigator.storage.getDirectory()).getDirectoryHandle(name, { create: true });
     const write = async (name: string, bytes: number[]) => {
-      const handle = await (await navigator.storage.getDirectory()).getFileHandle(name, { create: true });
-      const writable = await handle.createWritable();
+      const writable = await (await (await folder("source")).getFileHandle(name, { create: true })).createWritable();
       await writable.write(new Uint8Array(bytes));
       await writable.close();
     };
-    (window as unknown as Bridge).writeSheet = write;
-    (window as unknown as { showDirectoryPicker: () => Promise<FileSystemDirectoryHandle> }).showDirectoryPicker = async () => {
+    const bridge = window as unknown as Bridge;
+    bridge.writeSheet = write;
+    bridge.mirrorFiles = async () => {
+      const names: string[] = [];
+      for await (const name of (await folder("mirror") as unknown as { keys(): AsyncIterable<string> }).keys()) names.push(name);
+      return names.sort();
+    };
+    (window as unknown as { showDirectoryPicker: (o: { mode: string }) => Promise<FileSystemDirectoryHandle> }).showDirectoryPicker = async ({ mode }) => {
+      if (mode === "readwrite") return folder("mirror");
       await write("plan.xlsx", first);
-      return navigator.storage.getDirectory();
+      return folder("source");
     };
   }, [...bytes]);
 }
@@ -61,6 +71,33 @@ test("draws a plan spreadsheet, follows a change to it, lists its problems, and 
   });
   expect(refused.status).toBe(403);
   expect(refused.body.error).toContain("never changes it");
+});
+
+test("keeps a copy of every version in a folder of the user's, never overwriting one", async ({ page }) => {
+  await withSheet(page, await writeWorkbook({ items: ROWS }));
+  await page.goto(`${BRIDGE}#plan`);
+  await page.getByRole("button", { name: "Open the folder" }).click();
+  await expect(page.getByText("The plan as YAML").first()).toBeVisible({ timeout: 30_000 });
+  const mirrored = () => page.evaluate(() => (window as unknown as Bridge).mirrorFiles());
+
+  // Off until asked: nothing is written.
+  expect(await mirrored()).toEqual([]);
+  await page.getByRole("button", { name: "Keep copies in a folder..." }).click();
+  await expect.poll(mirrored).toEqual(["plan.xlsx"]);
+
+  // A new version is copied as it appears.
+  const v2 = await writeWorkbook({ items: [ROWS[0]!, { ...ROWS[1]!, title: "The plan, version two" }] });
+  await page.evaluate((bytes) => (window as unknown as Bridge).writeSheet("plan_v2.xlsx", bytes), [...v2]);
+  await expect(page.getByText("The plan, version two").first()).toBeVisible({ timeout: 10_000 });
+  await expect.poll(mirrored).toEqual(["plan.xlsx", "plan_v2.xlsx"]);
+  await expect(page.getByText("Copied plan_v2.xlsx to mirror")).toBeVisible();
+
+  // A version edited in place is copied again, and the copy it replaces is kept beside it.
+  const v2b = await writeWorkbook({ items: [ROWS[0]!, { ...ROWS[1]!, title: "Version two, edited" }] });
+  await page.evaluate((bytes) => (window as unknown as Bridge).writeSheet("plan_v2.xlsx", bytes), [...v2b]);
+  await expect(page.getByText("Version two, edited").first()).toBeVisible({ timeout: 10_000 });
+  await expect.poll(async () => (await mirrored()).filter((name) => name.endsWith(".bak")).length).toBe(1);
+  expect((await mirrored()).filter((name) => !name.endsWith(".bak"))).toEqual(["plan.xlsx", "plan_v2.xlsx"]);
 });
 
 test("offers the template, and says which browsers can open the folder, where this one cannot", async ({ page }) => {
