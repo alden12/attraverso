@@ -2,12 +2,13 @@
  * The xlsx bridge on the Pages site (`DIST-9.1`): for a setup where the assistant cannot reach attraverso's MCP
  * server at all, such as Copilot in Excel on a managed machine. The assistant edits a spreadsheet, which is the plan
  * (`site/workbook/model.ts`); this page reads it and shows it in the viewer, with nothing installed, no server and
- * nothing written, and follows the file, so an edit shows up within a couple of seconds of Excel saving it.
+ * nothing written, and follows the folder it is in, so an edit, or a new version saved beside it (`plan_v2.xlsx`),
+ * shows up within a couple of seconds.
  */
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { mountViewer } from "../../roadmap/mount";
-import { changedSince, permitted, pick, readSheet, remembered, supported, type SheetHandle } from "./file";
+import { changedSince, permitted, pick, readSheet, remembered, supported, type FolderHandle } from "./file";
 import { READ_ONLY, startHost } from "./host";
 import { follow } from "./follow";
 import { writeWorkbook } from "../workbook/xlsx";
@@ -15,7 +16,7 @@ import type { Problem } from "../workbook/model";
 import "./bridge.css";
 
 /** Open the spreadsheet in the viewer; `problems` hears what is wrong with it on every read. */
-async function open(handle: SheetHandle, problems: (list: Problem[]) => void): Promise<void> {
+async function open(handle: FolderHandle, problems: (list: Problem[]) => void): Promise<void> {
   let read = await readSheet(handle);
   const host = await startHost(read);
   problems(host.problems);
@@ -25,7 +26,7 @@ async function open(handle: SheetHandle, problems: (list: Problem[]) => void): P
     watch: (changed, paused) =>
       follow(async () => {
         if (!(await changedSince(handle, read))) return;
-        read = await readSheet(handle);
+        read = await readSheet(handle, read.name);
         problems(await host.reload(read));
         changed();
       }, paused),
@@ -67,11 +68,11 @@ let opening = false;
 
 function Bridge() {
   const [problems, setProblems] = useState<Problem[] | null>(null);
-  const [saved, setSaved] = useState<SheetHandle | null>(null);
+  const [saved, setSaved] = useState<FolderHandle | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const go = async (choose: () => Promise<SheetHandle>) => {
+  const go = async (choose: () => Promise<FolderHandle>) => {
     // Once: StrictMode runs the effect below twice, and a second viewer over the first is two of everything.
     if (opening) return;
     opening = true;
@@ -113,10 +114,13 @@ function Bridge() {
           and save it where your assistant can edit it (for Copilot, in OneDrive or SharePoint, with AutoSave on).
         </li>
         <li>Ask the assistant to fill it in: its Read me sheet tells it how.</li>
-        <li>Open it here to see the plan. The page follows the file as it changes.</li>
+        <li>
+          Open the folder it is in to see the plan. The page follows it: when the spreadsheet changes, or a new version
+          is saved beside it (<code>plan_v2.xlsx</code>, <code>plan_v3.xlsx</code>), it shows the newest.
+        </li>
       </ol>
       {!supported() ? (
-        <p className="bridge__error">Opening the file needs Chrome or Edge: other browsers do not let a page follow a file on your computer.</p>
+        <p className="bridge__error">Opening the folder needs Chrome or Edge: other browsers do not let a page follow a folder on your computer.</p>
       ) : (
         <>
           <p className="bridge__note">{READ_ONLY} It is read here, in this browser, and never leaves your computer.</p>
@@ -127,7 +131,7 @@ function Bridge() {
               </button>
             )}
             <button disabled={busy} className={saved === null ? "" : "secondary"} onClick={() => go(pick)}>
-              {saved === null ? "Open the spreadsheet" : "Open another"}
+              {saved === null ? "Open the folder" : "Open another"}
             </button>
           </div>
         </>

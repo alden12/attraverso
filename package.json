@@ -72,6 +72,7 @@
     "@xyflow/react": "^12.3.0",
     "drizzle-kit": "^0.31.10",
     "exceljs": "4.4.0",
+    "jszip": "3.10.2",
     "github-markdown-css": "5.8.1",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",

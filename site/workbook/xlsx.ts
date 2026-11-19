@@ -11,6 +11,7 @@
  * the stand-in test's new row landed below all of them, at row 250.
  */
 import ExcelJS from "exceljs";
+import JSZip from "jszip";
 import { STATUS_VALUES } from "../../scripts/tickets";
 import { COMMENT_COLUMNS, CONTEXT_COLUMNS, ITEM_COLUMNS, NEXT_COLUMNS, PROJECT_COLUMNS, readmeLines, SHEETS, type Grid, type WorkbookContent } from "./model";
 
@@ -89,8 +90,7 @@ export function cellText(value: ExcelJS.CellValue): string {
 
 /** Every sheet of an `.xlsx`, as text: its header row and its non-empty rows. */
 export async function readWorkbook(bytes: Uint8Array): Promise<Grid> {
-  const wb = new ExcelJS.Workbook();
-  await wb.xlsx.load(bytes as unknown as ArrayBuffer);
+  const wb = await loadWorkbook(bytes);
   return {
     sheets: wb.worksheets.map((ws) => {
       const width = ws.columnCount;
@@ -105,3 +105,36 @@ export async function readWorkbook(bytes: Uint8Array): Promise<Grid> {
     }),
   };
 }
+
+/**
+ * The workbook, repaired first if its document properties are the trouble. ExcelJS refuses a whole file over
+ * `docProps/core.xml` written without the namespace prefixes Excel uses (`<lastModifiedBy>` rather than
+ * `<cp:lastModifiedBy>`), which is what a file saved by a locked-down Copilot produced in the field (2026-11-19).
+ * Those parts are only who saved it and with what, which the plan never reads, so a failed load swaps them for
+ * minimal ones and tries again; anything else that fails, fails as it did.
+ */
+async function loadWorkbook(bytes: Uint8Array): Promise<ExcelJS.Workbook> {
+  const load = async (data: Uint8Array) => {
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(data as unknown as ArrayBuffer);
+    return wb;
+  };
+  try {
+    return await load(bytes);
+  } catch (first) {
+    const zip = await JSZip.loadAsync(bytes).catch(() => null);
+    if (zip === null || (zip.file("docProps/core.xml") === null && zip.file("docProps/app.xml") === null)) throw first;
+    if (zip.file("docProps/core.xml") !== null) zip.file("docProps/core.xml", MINIMAL_CORE);
+    if (zip.file("docProps/app.xml") !== null) zip.file("docProps/app.xml", MINIMAL_APP);
+    try {
+      return await load(await zip.generateAsync({ type: "uint8array" }));
+    } catch {
+      throw first;
+    }
+  }
+}
+
+const MINIMAL_CORE = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/"></cp:coreProperties>`;
+const MINIMAL_APP = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"></Properties>`;

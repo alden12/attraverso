@@ -5,6 +5,7 @@
  */
 import { describe, expect, it } from "vitest";
 import ExcelJS from "exceljs";
+import JSZip from "jszip";
 import { asPlan, importStore } from "../../src/serialise/plan";
 import { createInMemoryDb } from "../../src/db/memory";
 import { ITEM_COLUMNS, readPlan, type ItemRow } from "./model";
@@ -162,5 +163,17 @@ describe("a spreadsheet as the plan (DIST-9.2)", () => {
     ]);
     // The long comment is still shown: the cap is advice here, as it is on import.
     expect(store.projects[0]!.items.find((i) => i.ref === "DATA-1")!.comments).toHaveLength(1);
+  });
+
+  it("reads a file whose document properties ExcelJS would refuse, as a locked-down Copilot saved one", async () => {
+    const zip = await JSZip.loadAsync(await writeWorkbook({ items: ROWS }));
+    // The properties in the default namespace, unprefixed: ExcelJS throws "Unexpected xml node in parseOpen".
+    zip.file(
+      "docProps/core.xml",
+      '<?xml version="1.0" encoding="UTF-8"?><coreProperties xmlns="http://schemas.openxmlformats.org/package/2006/metadata/core-properties"><lastModifiedBy>Copilot</lastModifiedBy></coreProperties>',
+    );
+    const { store, problems } = await read(await zip.generateAsync({ type: "uint8array" }));
+    expect(problems).toEqual([]);
+    expect(store.projects[0]!.items).toHaveLength(4);
   });
 });

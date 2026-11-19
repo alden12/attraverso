@@ -56,8 +56,8 @@ export async function startHost(first: SheetRead): Promise<PageHost> {
     const param = (name: string) => url.searchParams.get(name) ?? "";
     switch (url.pathname.replace(/^.*(?=\/api\/)/, "")) {
       case "/api/store": {
-        const files = Object.fromEntries(store.projects.map((project) => [project.key, `${read.name}.xlsx`]));
-        return json(await storeFeed(db as Database, ownerId, { store: asPlan(store), path: `${read.name}.xlsx`, uploadsDisabled: READ_ONLY, files }));
+        const files = Object.fromEntries(store.projects.map((project) => [project.key, read.file]));
+        return json(await storeFeed(db as Database, ownerId, { store: asPlan(store), path: read.file, uploadsDisabled: READ_ONLY, files }));
       }
       case "/api/item": {
         const found = await itemFeed(db as Database, ownerId, param("project"), param("ref"));
