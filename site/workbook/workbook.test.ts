@@ -165,8 +165,14 @@ describe("a spreadsheet as the plan (DIST-9.2)", () => {
     expect(store.projects[0]!.items.find((i) => i.ref === "DATA-1")!.comments).toHaveLength(1);
   });
 
-  it("reads a file whose document properties ExcelJS would refuse, as a locked-down Copilot saved one", async () => {
+  it("reads a file written the way a locked-down Copilot saved one, which ExcelJS cannot follow as it is", async () => {
     const zip = await JSZip.loadAsync(await writeWorkbook({ items: ROWS }));
+    // openpyxl writes the links between parts as absolute paths, which ExcelJS cannot resolve.
+    for (const path of Object.keys(zip.files).filter((p) => p.endsWith(".rels"))) {
+      const text = await zip.file(path)!.async("string");
+      const folder = path.slice(0, path.lastIndexOf("_rels/"));
+      zip.file(path, text.replace(/Target="(?!\/)([^"]*)"/g, (_, target: string) => `Target="/${new URL(target, `http://x/${folder}`).pathname.slice(1)}"`));
+    }
     // The properties in the default namespace, unprefixed: ExcelJS throws "Unexpected xml node in parseOpen".
     zip.file(
       "docProps/core.xml",

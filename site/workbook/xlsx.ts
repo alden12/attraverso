@@ -107,11 +107,16 @@ export async function readWorkbook(bytes: Uint8Array): Promise<Grid> {
 }
 
 /**
- * The workbook, repaired first if its document properties are the trouble. ExcelJS refuses a whole file over
- * `docProps/core.xml` written without the namespace prefixes Excel uses (`<lastModifiedBy>` rather than
- * `<cp:lastModifiedBy>`), which is what a file saved by a locked-down Copilot produced in the field (2026-11-19).
- * Those parts are only who saved it and with what, which the plan never reads, so a failed load swaps them for
- * minimal ones and tries again; anything else that fails, fails as it did.
+ * The workbook, repaired first if it was written in a way ExcelJS cannot follow, though the format allows it. Both
+ * cases are from a file a locked-down Copilot saved in the field (2026-11-19), through openpyxl:
+ *
+ * - **Document properties without Excel's namespace prefixes** (`<lastModifiedBy>`, not `<cp:lastModifiedBy>`):
+ *   ExcelJS refuses the whole file. They are only who saved it and with what, which the plan never reads, so they
+ *   are swapped for minimal ones.
+ * - **Links between parts as absolute paths** (`/xl/tables/table1.xml`): ExcelJS only resolves relative ones
+ *   (`../tables/table1.xml`), so it loses every table and fails. They are rewritten relative to their part.
+ *
+ * Only on a failed load, and anything that still fails, fails as it first did.
  */
 async function loadWorkbook(bytes: Uint8Array): Promise<ExcelJS.Workbook> {
   const load = async (data: Uint8Array) => {
@@ -123,15 +128,35 @@ async function loadWorkbook(bytes: Uint8Array): Promise<ExcelJS.Workbook> {
     return await load(bytes);
   } catch (first) {
     const zip = await JSZip.loadAsync(bytes).catch(() => null);
-    if (zip === null || (zip.file("docProps/core.xml") === null && zip.file("docProps/app.xml") === null)) throw first;
-    if (zip.file("docProps/core.xml") !== null) zip.file("docProps/core.xml", MINIMAL_CORE);
-    if (zip.file("docProps/app.xml") !== null) zip.file("docProps/app.xml", MINIMAL_APP);
+    if (zip === null) throw first;
     try {
-      return await load(await zip.generateAsync({ type: "uint8array" }));
+      return await load(await repaired(zip));
     } catch {
       throw first;
     }
   }
+}
+
+/** The parts ExcelJS trips on, rewritten as Excel itself would write them. */
+async function repaired(zip: JSZip): Promise<Uint8Array> {
+  if (zip.file("docProps/core.xml") !== null) zip.file("docProps/core.xml", MINIMAL_CORE);
+  if (zip.file("docProps/app.xml") !== null) zip.file("docProps/app.xml", MINIMAL_APP);
+  const rels = Object.keys(zip.files).filter((path) => /(^|\/)_rels\/[^/]+\.rels$/.test(path));
+  for (const path of rels) {
+    // A part's links are relative to the folder the part is in: `xl/worksheets/_rels/sheet1.xml.rels` is
+    // `xl/worksheets/sheet1.xml`'s, so `/xl/tables/table1.xml` becomes `../tables/table1.xml`.
+    const from = path.slice(0, path.lastIndexOf("_rels/")).split("/").filter(Boolean);
+    const text = await zip.file(path)!.async("string");
+    zip.file(path, text.replace(/Target="\/([^"]*)"/g, (_, target: string) => `Target="${relative(from, target.split("/"))}"`));
+  }
+  return zip.generateAsync({ type: "uint8array" });
+}
+
+/** The path from folder `from` to `to`, both as segments from the package root. */
+function relative(from: string[], to: string[]): string {
+  let shared = 0;
+  while (shared < from.length && shared < to.length - 1 && from[shared] === to[shared]) shared++;
+  return [...from.slice(shared).map(() => ".."), ...to.slice(shared)].join("/");
 }
 
 const MINIMAL_CORE = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
