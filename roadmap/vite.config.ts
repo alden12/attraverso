@@ -183,5 +183,8 @@ export default defineConfig({
     port: 5176,
     strictPort: true,
     fs: { allow: [repoRoot] },
+    // Off under the e2e suite, as the site's is (`site/vite.config.ts` says why). Live refresh is its own event
+    // stream (`CHANGES_ENDPOINT`), so nothing here rides on Vite's socket.
+    ws: process.env.E2E_NO_WS ? false : undefined,
   },
 });

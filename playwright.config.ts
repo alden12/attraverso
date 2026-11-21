@@ -47,13 +47,15 @@ export default defineConfig({
       // `demo` last on purpose: the subtitle names only the last of a multi-file store's paths (VIEW-32), and the
       // suite asserts it names the file of the project on screen. This repo's plan passed by the same accident,
       // with `roadmap.apm.yaml` sorting after `cloud.apm.yaml`.
-      env: { APM_STORE_PATH: ["e2e/fixture/other.apm.yaml", "e2e/fixture/demo.apm.yaml"].join(delimiter) },
+      env: { APM_STORE_PATH: ["e2e/fixture/other.apm.yaml", "e2e/fixture/demo.apm.yaml"].join(delimiter), E2E_NO_WS: "1" },
       url: `http://localhost:${PORT}`,
       reuseExistingServer: false,
       timeout: 60_000,
     },
     {
       command: `yarn site --port ${SITE_PORT} --strictPort`,
+      // No Vite websocket, so a dropped one cannot reload a page mid-test (`site/vite.config.ts`).
+      env: { E2E_NO_WS: "1" },
       url: `http://localhost:${SITE_PORT}/xlsx-bridge/`,
       reuseExistingServer: false,
       timeout: 60_000,

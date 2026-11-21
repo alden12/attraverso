@@ -17,7 +17,11 @@ export default defineConfig({
   // The README and the images it shows live at the package root, outside this folder; PGlite's WebAssembly is in
   // the workspace's hoisted node_modules, above that, and without it the dev server answers the bridge's database with
   // an error page.
-  server: { fs: { allow: [repoRoot, searchForWorkspaceRoot(process.cwd())] } },
+  //
+  // No websocket under the e2e suite (`E2E_NO_WS`, set in `playwright.config.ts`): Vite's client reloads the whole page
+  // whenever its socket drops, a missed ping on a busy machine included, and a reload mid-test throws away what the
+  // test had open (a local check once lost the viewer's menu that way). Nothing the pages do needs it.
+  server: { fs: { allow: [repoRoot, searchForWorkspaceRoot(process.cwd())] }, ws: process.env.E2E_NO_WS ? false : undefined },
   build: {
     outDir: "dist",
     emptyOutDir: true,
