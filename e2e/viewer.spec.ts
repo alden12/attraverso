@@ -188,7 +188,7 @@ test.describe("the served store", () => {
     await expect(page.getByRole("button", { name: "show all" })).toBeDisabled();
   });
 
-  test("says every item is hidden, and why, and shows them all again from the notice (VIEW-69)", async ({ page }) => {
+  test("says every item is hidden, and why, and shows them all again from the notice (VIEW-71)", async ({ page }) => {
     await expect(page.locator(".item-node").first()).toBeVisible();
     await expect(page.locator(".graph__notice")).toHaveCount(0);
     await settings(page, "done"); // back to the default, so both filters are in play
@@ -695,6 +695,15 @@ test.describe("the calendar", () => {
     await settings(page, "all projects");
     await settings(page, "CAL"); // hide the dated area, whose chip only appears once narrowed to one project
     await expect(page.locator(".graph__notice")).toContainText("Nothing here has a date yet");
+  });
+
+  test("blames the filters, not the dates, when they hid everything (VIEW-71)", async ({ page }) => {
+    await settings(page, "all projects");
+    await settings(page, "CAL", "MCP"); // every area, so dated items are hidden too
+    const notice = page.locator(".graph__notice");
+    await expect(notice).toHaveCount(1);
+    await expect(notice).toContainText("All 4 items are hidden by the view filters");
+    await expect(notice).not.toContainText("has a date");
   });
 });
 

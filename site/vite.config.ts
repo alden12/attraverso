@@ -13,6 +13,10 @@ const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 export default defineConfig({
   root: siteRoot,
   base: "./",
+  // Its own dependency cache, not the viewer's: the e2e suite runs this dev server beside the viewer's, and with one
+  // shared `node_modules/.vite` the two re-optimise it under each other on a cold start. The suspected cause of every
+  // viewer test failing on GitHub's runner from the day this site joined the suite, while passing on warm machines.
+  cacheDir: "../node_modules/.vite-site",
   plugins: [react()],
   // The README and the images it shows live at the package root, outside this folder; PGlite's WebAssembly is in
   // the workspace's hoisted node_modules, above that, and without it the dev server answers the bridge's database with

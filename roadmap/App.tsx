@@ -794,10 +794,11 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
     return { byArea, byStatus };
   }, [items]);
   const hiddenCount = items.length - visibleItems.length;
-  // Why the graph or board is blank, when it is (VIEW-69). The calendar says its own, for undated items.
+  // Why the view is blank, when the plan is empty or its filters hid everything (VIEW-71). Not across projects: that
+  // calendar's filters are per project, and it says its own when nothing has a date.
   const viewNotice = useMemo(
-    () => (project === null ? null : emptyViewNotice(items, hiddenStatuses, hiddenAreas)),
-    [project, items, hiddenStatuses, hiddenAreas],
+    () => (project === null || (view === "calendar" && allProjects) ? null : emptyViewNotice(items, hiddenStatuses, hiddenAreas)),
+    [project, view, allProjects, items, hiddenStatuses, hiddenAreas],
   );
 
   // The project's context sections (VIEW-30): floating over the graph's top left, and in the board's corner, where
@@ -1143,7 +1144,9 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
             <div className="graph__notice">{selection.notice}</div>
           ) : (
             // An empty calendar looks broken unless it says why. Most items have no date, by design (`CAL-1`).
+            // Not while the notice above says why: "nothing has a date" would blame the dates for what the filters hid.
             view === "calendar" &&
+            viewNotice === null &&
             datedCount === 0 && (
               <div className="graph__notice">
                 {calendarDates === "planned" ? (
@@ -1167,7 +1170,7 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
               </div>
             )
           )}
-          {viewNotice !== null && view !== "calendar" && (
+          {viewNotice !== null && (
             <div className="graph__notice">
               {viewNotice.filtered ? (
                 <>

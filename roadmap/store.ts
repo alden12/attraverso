@@ -13,7 +13,7 @@
  * when it is written (importStore/saveStore enforce the schema and the dep/parent FKs), so the viewer trusts
  * it and only maps, never re-validates.
  */
-import type { RoadmapItem, Status } from "../scripts/tickets";
+import { STATUS_VALUES, type RoadmapItem, type Status } from "../scripts/tickets";
 import { authHeaders } from "./session";
 
 /** Same-origin, so it works unchanged under the dev server and under whatever the MCP server binds to. */
@@ -430,7 +430,7 @@ export const sectionInFocus = (focus: string | null): string | null =>
   focus?.startsWith(SECTION_PREFIX) ? focus.slice(SECTION_PREFIX.length) : null;
 
 /**
- * Why a selected project's graph or board shows nothing, or null when it shows something (`VIEW-69`).
+ * Why a selected project's view (graph, board or calendar) shows nothing, or null when it shows something (`VIEW-71`).
  *
  * Done items are hidden by default, so a new plan whose first items were all filed as done opened on a blank
  * canvas that looked broken. Saying which filter hid what lets the reader tell "empty" from "filtered" at a
@@ -450,7 +450,8 @@ export function emptyViewNotice(
     else if (hiddenAreas.has(item.area)) byArea += 1;
     else return null; // something is shown
   }
-  const reasons = [...byStatus].map(([status, count]) => `${count} ${status}`);
+  // In workflow order, as the viewer lists statuses everywhere, rather than whichever the first item happened to have.
+  const reasons = STATUS_VALUES.filter((status) => byStatus.has(status)).map((status) => `${byStatus.get(status)} ${status}`);
   if (byArea > 0) reasons.push(`${byArea} in hidden areas`);
   return { filtered: true, hidden: items.length, reasons };
 }

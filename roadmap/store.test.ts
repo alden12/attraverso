@@ -89,4 +89,11 @@ describe("emptyViewNotice", () => {
       reasons: ["3 done", "1 in hidden areas"],
     });
   });
+
+  it("lists hidden statuses in workflow order, whichever comes first in the plan", () => {
+    const items = [item("A-1", "to-do"), item("A-2", "done"), item("A-3", "review")];
+    expect(emptyViewNotice(items, new Set(["to-do", "review", "done"]), new Set())).toMatchObject({
+      reasons: ["1 done", "1 review", "1 to-do"],
+    });
+  });
 });
