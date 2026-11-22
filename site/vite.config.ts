@@ -20,7 +20,8 @@ export default defineConfig({
   //
   // No websocket under the e2e suite (`E2E_NO_WS`, set in `playwright.config.ts`): Vite's client reloads the whole page
   // whenever its socket drops, a missed ping on a busy machine included, and a reload mid-test throws away what the
-  // test had open (a local check once lost the viewer's menu that way). Nothing the pages do needs it.
+  // test had open (a local check once lost the viewer's menu that way). Nothing the pages do needs it. The client still
+  // loads and logs one "failed to connect to websocket" error per page, which is expected and harmless: it never reloads.
   server: { fs: { allow: [repoRoot, searchForWorkspaceRoot(process.cwd())] }, ws: process.env.E2E_NO_WS ? false : undefined },
   build: {
     outDir: "dist",
