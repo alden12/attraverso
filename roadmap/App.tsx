@@ -36,7 +36,7 @@ import { spanBy, type CalendarDates } from "./calendarDates";
 import type { BoardGroup } from "./Board";
 import { Logo } from "./Logo";
 import { Search } from "./Search";
-import { fetchItem, type ItemDetail, type SearchHit } from "./store";
+import { fetchHostTabs, fetchItem, type HostTab, type ItemDetail, type SearchHit } from "./store";
 import { ReferencedBody } from "./References";
 import { Comments } from "./Comments";
 import { AreaPane } from "./AreaPane";
@@ -70,6 +70,8 @@ const CalendarIcon = () => icon(<><rect x="3" y="5" width="18" height="16" rx="2
 const BoardIcon = () => icon(<><rect x="3" y="4" width="5" height="16" rx="1.5" /><rect x="10" y="4" width="5" height="10" rx="1.5" /><rect x="17" y="4" width="4" height="13" rx="1.5" /></>);
 const VIEW_ICONS: Record<View, () => React.JSX.Element> = { graph: () => <GraphIcon />, calendar: () => <CalendarIcon />, board: () => <BoardIcon /> };
 const GraphIcon = () => icon(<><circle cx="6" cy="6" r="2.5" /><circle cx="18" cy="8" r="2.5" /><circle cx="9" cy="18" r="2.5" /><path d="M8.3 7.2l7.4 0.6M7 8.4l1.6 7.2" /></>);
+// Two branches meeting: the usual sign for a pull request.
+const HostTabIcon = () => icon(<><circle cx="6" cy="5" r="2" /><circle cx="6" cy="19" r="2" /><circle cx="18" cy="19" r="2" /><path d="M6 7v10M18 17V10a3 3 0 0 0-3-3h-4M13 5l-2 2 2 2" /></>);
 const SearchIcon = () => icon(<><circle cx="11" cy="11" r="6.5" /><path d="M20 20l-4.2-4.2" /></>);
 // Four arrows out from the middle: the usual sign for "move".
 const MoveIcon = () =>
@@ -256,6 +258,11 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
     else openContext(heading);
   }, [focus, openContext]);
   const [view, setView] = usePreference<View>("attraverso.view", "graph", VIEWS);
+  // Tabs an optional package beside attraverso adds (a reviewer's PRs), from the host; none where there are none.
+  const [hostTabs, setHostTabs] = useState<HostTab[]>([]);
+  useEffect(() => {
+    void fetchHostTabs().then(setHostTabs);
+  }, []);
   // Which dates the calendar places items by, and what the board's lanes are (areas, or when items were filed or
   // last changed): both remembered in this browser, like the view itself.
   const [calendarDates, setCalendarDates] = usePreference<CalendarDates>("attraverso.calendar.dates", "planned", ["planned", "created", "updated"]);
@@ -895,6 +902,13 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
                 <span className="toolbtn__main">{VIEW_ICONS[candidate]()}</span>
                 <span className="toolbtn__sub">{candidate}</span>
               </button>
+            ))}
+            {/* A page of the package's own, so it opens as one rather than switching a view in this page. */}
+            {hostTabs.map((tab) => (
+              <a key={tab.path} className="toolbtn" href={tab.path} title={`Open ${tab.label}`}>
+                <span className="toolbtn__main">{HostTabIcon()}</span>
+                <span className="toolbtn__sub">{tab.label}</span>
+              </a>
             ))}
           </div>
           {/* Search (VIEW-25) in the toolbar (VIEW-57), the same in every view, rather than floating over the canvas

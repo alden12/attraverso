@@ -39,6 +39,12 @@ git fetch -q origin master
 
 name="$(node -p 'require("./package.json").name')"
 version="$(node -p 'require("./package.json").version')"
+# A prerelease (0.10.0-alpha.0) goes out under its own dist-tag, named by what follows the dash, so `npm i attraverso`
+# keeps installing the last real release and only someone asking for `attraverso@alpha` gets it.
+case "$version" in
+  *-*) tag="$(echo "${version#*-}" | cut -d. -f1)" ;;
+  *) tag=latest ;;
+esac
 # `npm view` prints the version when it exists and fails when it does not.
 if npm view "$name@$version" version >/dev/null 2>&1; then
   fail "$name@$version is already on npm: bump the version in the private repo and let the export bring it here"
@@ -47,7 +53,7 @@ if [ "$dry_run" -eq 0 ]; then
   npm whoami >/dev/null 2>&1 || fail "not logged in to npm: npm login"
 fi
 
-echo "Releasing $name@$version from $(git rev-parse --short HEAD)."
+echo "Releasing $name@$version from $(git rev-parse --short HEAD), tagged $tag."
 yarn install --frozen-lockfile --silent
 yarn verify
 yarn build:standalone
@@ -67,12 +73,12 @@ echo "The built server starts and keeps stdout clean."
 yarn test:package
 
 if [ "$dry_run" -eq 1 ]; then
-  npm publish standalone/ --dry-run
+  npm publish standalone/ --dry-run --tag "$tag"
   echo "Dry run: nothing published, nothing tagged."
   exit 0
 fi
 
-npm publish standalone/
+npm publish standalone/ --tag "$tag"
 git tag -a "v$version" -m "$name $version"
 git push -q origin "v$version"
-echo "Published $name@$version and pushed tag v$version."
+echo "Published $name@$version as $tag and pushed tag v$version."

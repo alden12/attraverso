@@ -44,6 +44,7 @@ import { getProjectByKey } from "../domain/projects";
 import type { Caller } from "./tools";
 import { createFileMediaStore, mediaDirFor, unacceptable, type MediaStore } from "../media/store";
 import { layoutSave, nextChange, parseBody, readBody, ticketChange } from "./requests";
+import { extensionFor, loadExtensions, serveExtension, type ViewerExtension } from "./extensions";
 
 /** Above the dev server's 5176 so both can run at once (developing the viewer while a Desktop server is up). */
 const FIRST_PORT = 5177;
@@ -182,6 +183,8 @@ export function createViewerHost(db: Database, sources: ViewerSources, store: St
   let started: Promise<string> | null = null;
   let server: Server | null = null;
   let bound = 0;
+  // Optional packages served beside the plan (`extensions.ts`), found when the viewer first starts.
+  let extensions: ViewerExtension[] = [];
   const token = randomBytes(24).toString("hex");
   const { media, storePath } = sources;
 
@@ -249,6 +252,11 @@ export function createViewerHost(db: Database, sources: ViewerSources, store: St
     // refreshed after a `git pull` shows the plan on disk rather than the one this process booted with. The
     // static assets below skip it: they are files, not state, and a page load asks for a dozen of them.
     if (path.startsWith("/api/") || path.startsWith("/media/")) await store.refresh();
+
+    // What the optional packages found at startup add, for the viewer's tabs; empty where none is installed.
+    if (path === "/api/extensions") {
+      return json(200, extensions.map(({ prefix, label }) => ({ path: `${prefix}/`, label })));
+    }
 
     // The one dynamic read. Shape matches what the dev server serves at the same path, so the viewer is
     // identical in both cases and neither side is a special build.
@@ -443,6 +451,7 @@ export function createViewerHost(db: Database, sources: ViewerSources, store: St
         if (findViewerBuild() === null) {
           throw new Error("the viewer has not been built yet - run `yarn viewer:build` in the repo, then ask again");
         }
+        extensions = await loadExtensions([...(store.paths?.() ?? [])]);
 
         const candidate = createServer((request, response) => {
           // The change stream is held open rather than answered, so it goes around `handler` and its one-shot
@@ -454,20 +463,43 @@ export function createViewerHost(db: Database, sources: ViewerSources, store: St
             });
             return;
           }
-          void handler(request)
-            .then(({ status, type, body, cache }) => {
-              // `no-store` is the default rather than the exception: the live store feed, the not-built
-              // notice and the error pages must every one of them be re-fetched, and only a fingerprinted
-              // asset is safe to keep. A response with no directive is not uncached, it is heuristically
-              // cached, so silence here is a decision and the wrong one.
-              response.writeHead(status, { "Content-Type": type, "Cache-Control": cache ?? "no-store" });
-              response.end(body);
-            })
-            .catch((error: unknown) => {
-              process.stderr.write(`viewer: ${request.url} failed: ${String(error)}\n`);
-              response.writeHead(500, { "Content-Type": "text/plain" });
-              response.end("internal error");
-            });
+          // An optional package's own paths go to it, after the same rebinding check as everything else, and with
+          // the same-origin check core's writes have for anything but a read; what it doesn't answer comes back here.
+          const extension = extensionFor(extensions, (request.url ?? "/").split("?")[0]!);
+          if (extension !== undefined && addressedToUs(request, bound)) {
+            const reads = request.method === "GET" || request.method === "HEAD";
+            if (!reads && !sameOrigin(request, bound)) {
+              response.writeHead(403, { "Content-Type": "text/plain" });
+              response.end("cross-origin writes are refused");
+              return;
+            }
+            void serveExtension(extension, request, response, `http://127.0.0.1:${bound}`)
+              .then((answered) => (answered ? undefined : respond()))
+              .catch((error: unknown) => {
+                process.stderr.write(`viewer: ${request.url} failed in ${extension.prefix}: ${String(error)}\n`);
+                response.writeHead(500, { "Content-Type": "text/plain" });
+                response.end("internal error");
+              });
+            return;
+          }
+          respond();
+
+          function respond(): void {
+            void handler(request)
+              .then(({ status, type, body, cache }) => {
+                // `no-store` is the default rather than the exception: the live store feed, the not-built
+                // notice and the error pages must every one of them be re-fetched, and only a fingerprinted
+                // asset is safe to keep. A response with no directive is not uncached, it is heuristically
+                // cached, so silence here is a decision and the wrong one.
+                response.writeHead(status, { "Content-Type": type, "Cache-Control": cache ?? "no-store" });
+                response.end(body);
+              })
+              .catch((error: unknown) => {
+                process.stderr.write(`viewer: ${request.url} failed: ${String(error)}\n`);
+                response.writeHead(500, { "Content-Type": "text/plain" });
+                response.end("internal error");
+              });
+          }
         });
 
         // Walk up from the first free port: another project's server (or a stale one) holding 5177 should

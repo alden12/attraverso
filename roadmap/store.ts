@@ -119,6 +119,29 @@ export async function saveLayout(projectKey: string, layout: Record<string, { x:
  */
 export const CHANGES_ENDPOINT = "/api/changes";
 
+/** A tab an optional package the host found adds beside the views: its label and the page it opens. */
+export interface HostTab {
+  label: string;
+  path: string;
+}
+
+/**
+ * The tabs the host's optional packages add (the loopback host lists them at `/api/extensions`); none from a host
+ * without that route, the dev server or the static site, so a missing list is simply no tabs.
+ */
+export async function fetchHostTabs(): Promise<HostTab[]> {
+  try {
+    const response = await fetch("/api/extensions");
+    if (!response.ok) return [];
+    const tabs = (await response.json()) as unknown;
+    return Array.isArray(tabs)
+      ? tabs.filter((tab): tab is HostTab => typeof tab?.label === "string" && typeof tab?.path === "string" && tab.path.startsWith("/"))
+      : [];
+  } catch {
+    return [];
+  }
+}
+
 /**
  * Everything the detail pane draws for one item (`VIEW-29`), fetched when the pane opens it rather than shipped
  * for every item on every page load: the body, every comment (newest first, agent ones tagged) and the images.

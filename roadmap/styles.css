@@ -496,6 +496,10 @@ body {
   cursor: pointer;
   transition: border-color 0.12s;
 }
+/* A host's tab is a link to a page of its own, drawn like the view tabs beside it. */
+a.toolbtn {
+  text-decoration: none;
+}
 .toolbtn:hover {
   border-color: #38455a;
 }
