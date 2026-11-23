@@ -70,6 +70,10 @@ const CalendarIcon = () => icon(<><rect x="3" y="5" width="18" height="16" rx="2
 const BoardIcon = () => icon(<><rect x="3" y="4" width="5" height="16" rx="1.5" /><rect x="10" y="4" width="5" height="10" rx="1.5" /><rect x="17" y="4" width="4" height="13" rx="1.5" /></>);
 const VIEW_ICONS: Record<View, () => React.JSX.Element> = { graph: () => <GraphIcon />, calendar: () => <CalendarIcon />, board: () => <BoardIcon /> };
 const GraphIcon = () => icon(<><circle cx="6" cy="6" r="2.5" /><circle cx="18" cy="8" r="2.5" /><circle cx="9" cy="18" r="2.5" /><path d="M8.3 7.2l7.4 0.6M7 8.4l1.6 7.2" /></>);
+/** A host tab's link, pointed at its page with this viewer's own URL to come back to. */
+const withBack = (link: HTMLAnchorElement, path: string): void => {
+  link.href = `${path}?back=${encodeURIComponent(window.location.pathname + window.location.search + window.location.hash)}`;
+};
 // Two branches meeting: the usual sign for a pull request.
 const HostTabIcon = () => icon(<><circle cx="6" cy="5" r="2" /><circle cx="6" cy="19" r="2" /><circle cx="18" cy="19" r="2" /><path d="M6 7v10M18 17V10a3 3 0 0 0-3-3h-4M13 5l-2 2 2 2" /></>);
 const SearchIcon = () => icon(<><circle cx="11" cy="11" r="6.5" /><path d="M20 20l-4.2-4.2" /></>);
@@ -918,11 +922,11 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
                 key={tab.path}
                 className="toolbtn"
                 href={tab.path}
-                // Where to come back to, set as it is clicked: the hash moves with the project and the query holds
-                // the write token, so a link back to `/` would open a viewer that can't save.
-                onClick={(event) => {
-                  event.currentTarget.href = `${tab.path}?back=${encodeURIComponent(window.location.pathname + window.location.search + window.location.hash)}`;
-                }}
+                // Where to come back to, set as the link is about to be used (a click of any button, which covers a
+                // new tab and the context menu, or a key): the hash moves with the project and the query holds the
+                // write token, so a link back to `/` would open a viewer that can't save.
+                onPointerDown={(event) => withBack(event.currentTarget, tab.path)}
+                onKeyDown={(event) => withBack(event.currentTarget, tab.path)}
                 title={tabCounts[tab.path] ? `Open ${tab.label}: ${tabCounts[tab.path]} waiting on you` : `Open ${tab.label}`}
               >
                 <span className="toolbtn__main">

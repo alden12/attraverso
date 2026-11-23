@@ -567,8 +567,7 @@ describe("an optional package served beside the plan (DIST-2.2)", () => {
           if (url.pathname === "/echo/skip") return undefined;
           return new Response(request.method + " " + url.pathname + " " + (await request.text()));
         },
-      });
-      export const outside = 1;`,
+      });`,
     );
     await writeFile(
       join(dir, "stray.mjs"),
@@ -620,7 +619,7 @@ describe("an optional package served beside the plan (DIST-2.2)", () => {
     // No Origin reads as same-origin, as it does for core (`sameOrigin`); the write token, core's other half, is not
     // asked of a package's writes.
     expect((await send("/echo/api/reading", { method: "POST", body: "hi" })).status).toBe(200);
-    expect((await send("/echo/page", { headers: { host: "evil.example" } })).status).not.toBe(200);
+    expect((await send("/echo/page", { headers: { host: "evil.example" } })).status).toBe(403);
   });
 
   it("is a 404 for what it leaves unanswered, never passed on to core's routes", async () => {
