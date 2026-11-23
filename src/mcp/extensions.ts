@@ -17,6 +17,8 @@ export interface ViewerExtension {
   prefix: string;
   /** Its tab's label in the viewer. */
   label: string;
+  /** A path under its prefix answering `{ count: number }`, drawn on its tab (how many things wait there), if any. */
+  count?: string;
   handle(request: Request): Promise<Response | undefined>;
 }
 

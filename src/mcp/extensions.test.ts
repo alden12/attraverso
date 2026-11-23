@@ -24,6 +24,7 @@ const fixture = (): string => {
     `export const viewerExtension = ({ plans }) => ({
       prefix: "/echo",
       label: "Echo",
+      count: "/echo/count",
       async handle(request) {
         const url = new URL(request.url);
         if (url.pathname === "/echo/skip") return undefined;
@@ -41,6 +42,7 @@ describe("loadExtensions", () => {
     const [echo] = await loadExtensions(["/plan/attraverso.yaml"], [fixture()]);
     expect(echo?.prefix).toBe("/echo");
     expect(echo?.label).toBe("Echo");
+    expect(echo?.count).toBe("/echo/count");
   });
 
   it("leaves out one that is installed but exports no extension", async () => {

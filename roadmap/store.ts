@@ -123,6 +123,8 @@ export const CHANGES_ENDPOINT = "/api/changes";
 export interface HostTab {
   label: string;
   path: string;
+  /** Where to ask how many things wait there, `{ count }`, for a badge on the tab. */
+  count?: string;
 }
 
 /**
@@ -139,6 +141,22 @@ export async function fetchHostTabs(): Promise<HostTab[]> {
       : [];
   } catch {
     return [];
+  }
+}
+
+/**
+ * A tab's count, asked for after the tabs are drawn, since a package may take a while to answer (the reviewer asks
+ * GitHub); undefined when it has none or could not say, so the tab simply shows no badge.
+ */
+export async function fetchTabCount(tab: HostTab): Promise<number | undefined> {
+  if (tab.count === undefined || !tab.count.startsWith("/")) return undefined;
+  try {
+    const response = await fetch(tab.count);
+    if (!response.ok) return undefined;
+    const { count } = (await response.json()) as { count?: unknown };
+    return typeof count === "number" && Number.isInteger(count) && count >= 0 ? count : undefined;
+  } catch {
+    return undefined;
   }
 }
 

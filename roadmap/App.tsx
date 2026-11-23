@@ -36,7 +36,7 @@ import { spanBy, type CalendarDates } from "./calendarDates";
 import type { BoardGroup } from "./Board";
 import { Logo } from "./Logo";
 import { Search } from "./Search";
-import { fetchHostTabs, fetchItem, type HostTab, type ItemDetail, type SearchHit } from "./store";
+import { fetchHostTabs, fetchItem, fetchTabCount, type HostTab, type ItemDetail, type SearchHit } from "./store";
 import { ReferencedBody } from "./References";
 import { Comments } from "./Comments";
 import { AreaPane } from "./AreaPane";
@@ -260,8 +260,17 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
   const [view, setView] = usePreference<View>("attraverso.view", "graph", VIEWS);
   // Tabs an optional package beside attraverso adds (a reviewer's PRs), from the host; none where there are none.
   const [hostTabs, setHostTabs] = useState<HostTab[]>([]);
+  // Each tab's count (PRs waiting on you), by its path, filled in as each answers.
+  const [tabCounts, setTabCounts] = useState<Record<string, number>>({});
   useEffect(() => {
-    void fetchHostTabs().then(setHostTabs);
+    void fetchHostTabs().then((tabs) => {
+      setHostTabs(tabs);
+      tabs.forEach((tab) =>
+        void fetchTabCount(tab).then((count) => {
+          if (count !== undefined) setTabCounts((counts) => ({ ...counts, [tab.path]: count }));
+        }),
+      );
+    });
   }, []);
   // Which dates the calendar places items by, and what the board's lanes are (areas, or when items were filed or
   // last changed): both remembered in this browser, like the view itself.
@@ -905,8 +914,17 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
             ))}
             {/* A page of the package's own, so it opens as one rather than switching a view in this page. */}
             {hostTabs.map((tab) => (
-              <a key={tab.path} className="toolbtn" href={tab.path} title={`Open ${tab.label}`}>
-                <span className="toolbtn__main">{HostTabIcon()}</span>
+              <a
+                key={tab.path}
+                className="toolbtn"
+                href={tab.path}
+                title={tabCounts[tab.path] ? `Open ${tab.label}: ${tabCounts[tab.path]} waiting on you` : `Open ${tab.label}`}
+              >
+                <span className="toolbtn__main">
+                  {HostTabIcon()}
+                  {/* Nothing waiting draws nothing: a zero badge is noise on every page load. */}
+                  {(tabCounts[tab.path] ?? 0) > 0 && <span className="tab-count">{tabCounts[tab.path]}</span>}
+                </span>
                 <span className="toolbtn__sub">{tab.label}</span>
               </a>
             ))}
