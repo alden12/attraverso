@@ -11,14 +11,10 @@
  */
 import { basename, join } from "node:path";
 
-/** The plan file's name. */
-export const STORE_FILE = "attraverso.yaml";
+import { LEGACY_STORE_SUFFIX } from "./names";
 
-/** The suffix plan files had before `IMP-20`, still recognised wherever a plan is looked for. */
-export const LEGACY_STORE_SUFFIX = ".apm.yaml";
-
-/** Whether a file of this name is a plan file, under either naming. */
-export const isStoreFile = (name: string): boolean => name === STORE_FILE || name.endsWith(LEGACY_STORE_SUFFIX);
+// The names themselves are Node-free, in `names.ts`, so the library can export them.
+export { isStoreFile, LEGACY_STORE_SUFFIX, STORE_FILE } from "./names";
 
 /** Whether this plan file uses the pre-`IMP-20` name. */
 export const isLegacyStore = (storePath: string): boolean => basename(storePath).endsWith(LEGACY_STORE_SUFFIX);

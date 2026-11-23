@@ -23,6 +23,8 @@
  * open. Two handles on one plan would each save over the other.
  */
 import { open } from "./open";
+import { isStoreFile as isPlanFileName, STORE_FILE } from "../serialise/names";
+import { isRef as isWellFormedRef } from "../../scripts/tickets";
 
 export interface PlanOptions {
   /** The plan as YAML, as an `attraverso.yaml` holds it. Absent or blank opens an empty plan. */
@@ -188,3 +190,15 @@ export interface SearchResult {
 export function openPlan(options: PlanOptions = {}): Promise<Plan> {
   return open(options);
 }
+
+/**
+ * What a plan file is called, `attraverso.yaml`, so a program looks for one by the server's rule. Declared with its
+ * type here rather than re-exported, so the published declaration stands alone.
+ */
+export const PLAN_FILE: string = STORE_FILE;
+
+/** Whether a file of this name is a plan file: `attraverso.yaml`, or the `<name>.apm.yaml` older plans still use. */
+export const isPlanFile: (name: string) => boolean = isPlanFileName;
+
+/** Whether a string is a well-formed item ref: an upper-case area, then dot-separated numbers (`MCP-3`, `MCP-3.1.2`). */
+export const isRef: (ref: string) => boolean = isWellFormedRef;

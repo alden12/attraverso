@@ -20,6 +20,14 @@
   "bin": {
     "attraverso": "./dist/server.js"
   },
+  "exports": {
+    "./library": "./src/library/index.ts",
+    "./package.json": "./package.json",
+    "./src/*": "./src/*.ts",
+    "./roadmap/mount": "./roadmap/mount.tsx",
+    "./roadmap/session": "./roadmap/session.ts",
+    "./roadmap/store": "./roadmap/store.ts"
+  },
   "scripts": {
     "mcp": "node dist/server.js",
     "mcp:dev": "vite-node src/mcp/server.ts",

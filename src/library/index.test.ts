@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { openPlan, type Plan } from "./index";
+import { isPlanFile, isRef, openPlan, PLAN_FILE, type Plan } from "./index";
 import { createStoreFile } from "../serialise/store";
 import { createInMemoryDb } from "../db/memory";
 
@@ -157,5 +157,28 @@ describe("openPlan (DIST-6)", () => {
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe("the plan-file and ref rules (DIST-6)", () => {
+  it("names a plan file as the server finds one, under either naming", () => {
+    expect(PLAN_FILE).toBe("attraverso.yaml");
+    expect(["attraverso.yaml", "roadmap.apm.yaml", "config.yaml", "attraverso.yml"].map(isPlanFile)).toEqual([
+      true,
+      true,
+      false,
+      false,
+    ]);
+  });
+
+  it("knows a well-formed ref", () => {
+    expect(["MCP-3", "MCP-3.1.2", "mcp-3", "MCP-0", "MCP-3.", "MCP"].map(isRef)).toEqual([
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+    ]);
   });
 });

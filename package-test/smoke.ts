@@ -38,7 +38,7 @@ const typescript = createRequire(import.meta.url).resolve("typescript/bin/tsc");
  * summary the caller compares against `EXPECTED`, so a failure says which step went wrong rather than "false".
  */
 const SCENARIO = `
-import { openPlan } from "attraverso/library";
+import { isPlanFile, isRef, openPlan, PLAN_FILE } from "attraverso/library";
 
 export async function scenario() {
   const saves = [];
@@ -56,25 +56,28 @@ export async function scenario() {
   const reopened = await (await again.project("world")).getItem("NPC-1");
   const same = (await again.toYaml()) === saves.at(-1);
   await again.close();
-  return { ref: item.ref, saves: saves.length, hits, body: reopened.body, comments: reopened.comments.map((c) => c.body), same };
+  const rules = [isPlanFile(PLAN_FILE), isPlanFile("config.yaml"), isRef(item.ref), isRef("npc-1")];
+  return { ref: item.ref, saves: saves.length, hits, body: reopened.body, comments: reopened.comments.map((c) => c.body), same, rules };
 }
 `;
 
-const EXPECTED = { ref: "NPC-1", saves: 4, hits: ["NPC-1"], body: "Takes coins.", comments: ["Met at the river."], same: true };
+const EXPECTED = { ref: "NPC-1", saves: 4, hits: ["NPC-1"], body: "Takes coins.", comments: ["Met at the river."], same: true, rules: [true, false, true, false] };
 
 /** A use of every public type, compiled under the settings a Node project has, so a declaration that only
  *  resolves under \`bundler\` fails here. */
 const TYPES = `
-import { openPlan, type Plan, type PlanProject, type ItemDetail, type SearchResult } from "attraverso/library";
+import { isPlanFile, isRef, openPlan, PLAN_FILE, type Plan, type PlanProject, type ItemDetail, type SearchResult } from "attraverso/library";
 
 const plan: Plan = await openPlan({ yaml: "", save: async (yaml: string) => void yaml, actor: "smoke" });
 const world: PlanProject = await plan.project("world");
 const item: ItemDetail | null = await world.getItem("NPC-1");
 const found: SearchResult = await world.search("x", { limit: 3 });
 const ref: string | undefined = item?.comments[0]?.ref ?? undefined;
+const planFile: string = PLAN_FILE;
+const rules: boolean[] = [isPlanFile(planFile), isRef("NPC-1")];
 // @ts-expect-error - only the library is exported; the bundle's internals are not reachable
 import("attraverso/server.js");
-export { ref, found };
+export { ref, found, rules };
 `;
 
 function run(command: string, args: string[], cwd: string): string {
