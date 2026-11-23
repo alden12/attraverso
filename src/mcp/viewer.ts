@@ -44,7 +44,7 @@ import { getProjectByKey } from "../domain/projects";
 import type { Caller } from "./tools";
 import { createFileMediaStore, mediaDirFor, unacceptable, type MediaStore } from "../media/store";
 import { layoutSave, nextChange, parseBody, readBody, ticketChange } from "./requests";
-import { extensionFor, loadExtensions, serveExtension, type ViewerExtension } from "./extensions";
+import { extensionFor, loadExtensions, OPTIONAL_EXTENSIONS, serveExtension, type ViewerExtension } from "./extensions";
 
 /** Above the dev server's 5176 so both can run at once (developing the viewer while a Desktop server is up). */
 const FIRST_PORT = 5177;
@@ -179,7 +179,14 @@ export const fileSources = (storePath: string): ViewerSources => ({
  * mode: it is bound to `127.0.0.1` for one person's checkout, and the cloud's `remoteViewerHost` refuses to
  * open at all. A hosted viewer serving several people is `VIEW-24`, and would need this per request.
  */
-export function createViewerHost(db: Database, sources: ViewerSources, store: StoreAccess, caller: Caller): ViewerHost {
+export function createViewerHost(
+  db: Database,
+  sources: ViewerSources,
+  store: StoreAccess,
+  caller: Caller,
+  // The optional packages tried (`extensions.ts`); a test names its own rather than whatever is installed.
+  { extensions: tried = OPTIONAL_EXTENSIONS }: { extensions?: string[] } = {},
+): ViewerHost {
   let started: Promise<string> | null = null;
   let server: Server | null = null;
   let bound = 0;
@@ -459,7 +466,7 @@ export function createViewerHost(db: Database, sources: ViewerSources, store: St
         if (findViewerBuild() === null) {
           throw new Error("the viewer has not been built yet - run `yarn viewer:build` in the repo, then ask again");
         }
-        extensions = await loadExtensions([...(store.paths?.() ?? [])]);
+        extensions = await loadExtensions([...(store.paths?.() ?? [])], tried);
 
         const candidate = createServer((request, response) => {
           // The change stream is held open rather than answered, so it goes around `handler` and its one-shot
@@ -472,7 +479,8 @@ export function createViewerHost(db: Database, sources: ViewerSources, store: St
             return;
           }
           // An optional package's own paths go to it, after the same rebinding check as everything else, and with
-          // the same-origin check core's writes have for anything but a read; what it doesn't answer comes back here.
+          // the same-origin check (not the write token) for anything but a read. Its paths are its own, so what it
+          // leaves unanswered is a 404 rather than core's: its body may already have been read.
           const extension = extensionFor(extensions, (request.url ?? "/").split("?")[0]!);
           if (extension !== undefined && addressedToUs(request, bound)) {
             const reads = request.method === "GET" || request.method === "HEAD";
@@ -482,7 +490,11 @@ export function createViewerHost(db: Database, sources: ViewerSources, store: St
               return;
             }
             void serveExtension(extension, request, response, `http://127.0.0.1:${bound}`)
-              .then((answered) => (answered ? undefined : respond()))
+              .then((answered) => {
+                if (answered) return;
+                response.writeHead(404, { "Content-Type": "text/plain" });
+                response.end("not found");
+              })
               .catch((error: unknown) => {
                 process.stderr.write(`viewer: ${request.url} failed in ${extension.prefix}: ${String(error)}\n`);
                 response.writeHead(500, { "Content-Type": "text/plain" });

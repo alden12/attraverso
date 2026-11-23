@@ -8,6 +8,7 @@ import { existsSync } from "node:fs";
 import { request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { freshDb } from "../db/testing";
 import { one } from "../db/rows";
 import { createProject, listProjects } from "../domain/projects";
@@ -542,5 +543,88 @@ describe("uploads when the store cannot hold them (OPS-11)", () => {
     const store = createUnavailableMediaStore("nope");
     await expect(store.read("deadbeef", "image/png")).resolves.toBeNull();
     await expect(store.put(PNG, "image/png")).rejects.toThrow("nope");
+  });
+});
+
+describe("an optional package served beside the plan (DIST-2.2)", () => {
+  let origin: string;
+  let close: () => Promise<void>;
+  let stop: () => Promise<void>;
+  let dir: string;
+
+  beforeAll(async () => {
+    dir = await mkdtemp(join(tmpdir(), "apm-viewer-extension-"));
+    await writeFile(join(dir, "store.apm.yaml"), "projects: []\n");
+    // Echoes what reached it, answers nothing under /echo/skip, and names one count inside its prefix and one outside.
+    await writeFile(
+      join(dir, "echo.mjs"),
+      `export const viewerExtension = () => ({
+        prefix: "/echo",
+        label: "Echo",
+        count: "/echo/count",
+        async handle(request) {
+          const url = new URL(request.url);
+          if (url.pathname === "/echo/skip") return undefined;
+          return new Response(request.method + " " + url.pathname + " " + (await request.text()));
+        },
+      });
+      export const outside = 1;`,
+    );
+    await writeFile(
+      join(dir, "stray.mjs"),
+      `export const viewerExtension = () => ({ prefix: "/stray", label: "Stray", count: "/api/store", handle: async () => undefined });`,
+    );
+    const fresh = await freshDb();
+    close = fresh.close;
+    await createProject(fresh.db, { key: "apm", name: "AI PM", type: "software", ownerId: fresh.ownerId }, ACTOR);
+    const host = createViewerHost(
+      fresh.db,
+      fileSources(join(dir, "store.apm.yaml")),
+      { persist: async () => {}, refresh: async () => false, appendMeasurements: async () => {} },
+      { ownerId: fresh.ownerId },
+      { extensions: [pathToFileURL(join(dir, "echo.mjs")).href, pathToFileURL(join(dir, "stray.mjs")).href] },
+    );
+    origin = new URL(await host.open("apm")).origin;
+    stop = host.close;
+  });
+
+  afterAll(async () => {
+    await stop();
+    await close();
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  const send = (path: string, { method = "GET", headers = {}, body }: { method?: string; headers?: Record<string, string>; body?: string } = {}) =>
+    new Promise<{ status: number; body: string }>((fulfil, fail) => {
+      const call = httpRequest({ hostname: "127.0.0.1", port: Number(new URL(origin).port), path, method, headers }, (response) => {
+        let text = "";
+        response.setEncoding("utf8");
+        response.on("data", (chunk) => (text += chunk));
+        response.on("end", () => fulfil({ status: response.statusCode ?? 0, body: text }));
+      });
+      call.on("error", fail);
+      call.end(body);
+    });
+
+  it("is listed for the tabs, with a count only when it is under the package's own prefix", async () => {
+    expect(JSON.parse((await send("/api/extensions")).body)).toEqual([
+      { path: "/echo/", label: "Echo", count: "/echo/count" },
+      { path: "/stray/", label: "Stray" },
+    ]);
+  });
+
+  it("answers its reads and same-origin writes, refusing a write from another origin and a rebound host", async () => {
+    expect(await send("/echo/page")).toEqual({ status: 200, body: "GET /echo/page " });
+    expect(await send("/echo/api/reading", { method: "POST", headers: { origin }, body: "hi" })).toEqual({ status: 200, body: "POST /echo/api/reading hi" });
+    expect((await send("/echo/api/reading", { method: "POST", headers: { origin: "http://evil.example" }, body: "hi" })).status).toBe(403);
+    // No Origin reads as same-origin, as it does for core (`sameOrigin`); the write token, core's other half, is not
+    // asked of a package's writes.
+    expect((await send("/echo/api/reading", { method: "POST", body: "hi" })).status).toBe(200);
+    expect((await send("/echo/page", { headers: { host: "evil.example" } })).status).not.toBe(200);
+  });
+
+  it("is a 404 for what it leaves unanswered, never passed on to core's routes", async () => {
+    expect((await send("/echo/skip")).status).toBe(404);
+    expect((await send("/echo/skip", { method: "POST", headers: { origin }, body: "x" })).status).toBe(404);
   });
 });

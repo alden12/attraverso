@@ -27,12 +27,18 @@ type Factory = (options: { plans: string[] }) => ViewerExtension;
 /** The packages tried, by the module each exports its extension from. */
 export const OPTIONAL_EXTENSIONS = ["@attraverso/pr-reviewer/host"];
 
-/** Whether `error` says the package itself isn't installed, rather than that it is and is broken. */
+/**
+ * Whether `error` says the package itself isn't installed, rather than that it is and something it imports is missing.
+ * Both are the same error code, and the second's message names the package too, in the path it was imported from, so
+ * the test is what the message quotes as not found: the package (Node) or a path in it (vite's runner, in development).
+ */
 const isMissing = (error: unknown, specifier: string): boolean => {
   const code = (error as { code?: string }).code;
   const message = error instanceof Error ? error.message : String(error);
-  const name = specifier.split("/").slice(0, 2).join("/");
-  return (code === "ERR_MODULE_NOT_FOUND" || code === "MODULE_NOT_FOUND") && message.includes(name);
+  const name = specifier.split("/").slice(0, specifier.startsWith("@") ? 2 : 1).join("/");
+  const notFound = /Cannot find (?:package|module) '([^']+)'/.exec(message)?.[1];
+  const named = notFound === name || notFound?.startsWith(`${name}/`) === true;
+  return (code === "ERR_MODULE_NOT_FOUND" || code === "MODULE_NOT_FOUND") && named;
 };
 
 /**
@@ -62,8 +68,8 @@ export const extensionFor = (extensions: ViewerExtension[], path: string): Viewe
   extensions.find((extension) => path === extension.prefix || path.startsWith(`${extension.prefix}/`));
 
 /**
- * A node request as a fetch `Request`. Its body is the node stream, read whole by whoever reads it: only requests
- * under an extension's prefix come here, and the extension answers all of them, so nothing is passed on after.
+ * A node request as a fetch `Request`. Its body is the node stream, read whole by whoever reads it, so a request an
+ * extension leaves unanswered can't be passed on to core's routes: the host answers it 404 instead.
  */
 const toRequest = (request: IncomingMessage, origin: string): Request => {
   const method = request.method ?? "GET";

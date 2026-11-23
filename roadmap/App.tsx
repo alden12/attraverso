@@ -918,6 +918,11 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
                 key={tab.path}
                 className="toolbtn"
                 href={tab.path}
+                // Where to come back to, set as it is clicked: the hash moves with the project and the query holds
+                // the write token, so a link back to `/` would open a viewer that can't save.
+                onClick={(event) => {
+                  event.currentTarget.href = `${tab.path}?back=${encodeURIComponent(window.location.pathname + window.location.search + window.location.hash)}`;
+                }}
                 title={tabCounts[tab.path] ? `Open ${tab.label}: ${tabCounts[tab.path]} waiting on you` : `Open ${tab.label}`}
               >
                 <span className="toolbtn__main">

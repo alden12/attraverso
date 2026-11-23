@@ -8,7 +8,7 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { extensionFor, loadExtensions, serveExtension } from "./extensions";
 
 const cleanup: (() => void)[] = [];
@@ -43,6 +43,20 @@ describe("loadExtensions", () => {
     expect(echo?.prefix).toBe("/echo");
     expect(echo?.label).toBe("Echo");
     expect(echo?.count).toBe("/echo/count");
+  });
+
+  it("reports one that is installed but whose own dependency is missing, rather than calling it not installed", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "viewer-extension-"));
+    cleanup.push(() => rmSync(dir, { recursive: true, force: true }));
+    writeFileSync(join(dir, "broken.mjs"), 'import "@example/gone-dependency";\nexport const viewerExtension = () => ({});');
+    const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    cleanup.push(() => stderr.mockRestore());
+    expect(await loadExtensions([], [pathToFileURL(join(dir, "broken.mjs")).href])).toEqual([]);
+    expect(stderr.mock.calls.map(([line]) => String(line)).join("")).toContain("is installed but did not load");
+    // A package that is absent says nothing.
+    stderr.mockClear();
+    expect(await loadExtensions([], ["@example/not-installed/host", "not-installed-either/host"])).toEqual([]);
+    expect(stderr).not.toHaveBeenCalled();
   });
 
   it("leaves out one that is installed but exports no extension", async () => {
