@@ -262,15 +262,7 @@ export function createViewerHost(
 
     // What the optional packages found at startup add, for the viewer's tabs; empty where none is installed.
     if (path === "/api/extensions") {
-      // A count path outside the extension's own prefix is left off: the viewer only asks an extension about itself.
-      return json(
-        200,
-        extensions.map(({ prefix, label, count }) => ({
-          path: `${prefix}/`,
-          label,
-          ...(count?.startsWith(`${prefix}/`) ? { count } : {}),
-        })),
-      );
+      return json(200, extensions.map(({ prefix, label }) => ({ path: `${prefix}/`, label })));
     }
 
     // The one dynamic read. Shape matches what the dev server serves at the same path, so the viewer is

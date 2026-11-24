@@ -17,15 +17,13 @@ export interface ViewerExtension {
   prefix: string;
   /** Its tab's label in the viewer. */
   label: string;
-  /** A path under its prefix answering `{ count: number }`, drawn on its tab (how many things wait there), if any. */
-  count?: string;
   handle(request: Request): Promise<Response | undefined>;
 }
 
 type Factory = (options: { plans: string[] }) => ViewerExtension;
 
 /** The packages tried, by the module each exports its extension from. */
-export const OPTIONAL_EXTENSIONS = ["@attraverso/pr-reviewer/host"];
+export const OPTIONAL_EXTENSIONS = ["@traverso/pr-reviewer/host"];
 
 /**
  * Whether `error` says the package itself isn't installed, rather than that it is and something it imports is missing.

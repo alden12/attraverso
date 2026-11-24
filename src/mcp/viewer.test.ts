@@ -555,23 +555,18 @@ describe("an optional package served beside the plan (DIST-2.2)", () => {
   beforeAll(async () => {
     dir = await mkdtemp(join(tmpdir(), "apm-viewer-extension-"));
     await writeFile(join(dir, "store.apm.yaml"), "projects: []\n");
-    // Echoes what reached it, answers nothing under /echo/skip, and names one count inside its prefix and one outside.
+    // Echoes what reached it, and answers nothing under /echo/skip.
     await writeFile(
       join(dir, "echo.mjs"),
       `export const viewerExtension = () => ({
         prefix: "/echo",
         label: "Echo",
-        count: "/echo/count",
         async handle(request) {
           const url = new URL(request.url);
           if (url.pathname === "/echo/skip") return undefined;
           return new Response(request.method + " " + url.pathname + " " + (await request.text()));
         },
       });`,
-    );
-    await writeFile(
-      join(dir, "stray.mjs"),
-      `export const viewerExtension = () => ({ prefix: "/stray", label: "Stray", count: "/api/store", handle: async () => undefined });`,
     );
     const fresh = await freshDb();
     close = fresh.close;
@@ -581,7 +576,7 @@ describe("an optional package served beside the plan (DIST-2.2)", () => {
       fileSources(join(dir, "store.apm.yaml")),
       { persist: async () => {}, refresh: async () => false, appendMeasurements: async () => {} },
       { ownerId: fresh.ownerId },
-      { extensions: [pathToFileURL(join(dir, "echo.mjs")).href, pathToFileURL(join(dir, "stray.mjs")).href] },
+      { extensions: [pathToFileURL(join(dir, "echo.mjs")).href] },
     );
     origin = new URL(await host.open("apm")).origin;
     stop = host.close;
@@ -605,11 +600,8 @@ describe("an optional package served beside the plan (DIST-2.2)", () => {
       call.end(body);
     });
 
-  it("is listed for the tabs, with a count only when it is under the package's own prefix", async () => {
-    expect(JSON.parse((await send("/api/extensions")).body)).toEqual([
-      { path: "/echo/", label: "Echo", count: "/echo/count" },
-      { path: "/stray/", label: "Stray" },
-    ]);
+  it("is listed for the tabs", async () => {
+    expect(JSON.parse((await send("/api/extensions")).body)).toEqual([{ path: "/echo/", label: "Echo" }]);
   });
 
   it("answers its reads and same-origin writes, refusing a write from another origin and a rebound host", async () => {

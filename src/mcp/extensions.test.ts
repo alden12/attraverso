@@ -24,7 +24,6 @@ const fixture = (): string => {
     `export const viewerExtension = ({ plans }) => ({
       prefix: "/echo",
       label: "Echo",
-      count: "/echo/count",
       async handle(request) {
         const url = new URL(request.url);
         if (url.pathname === "/echo/skip") return undefined;
@@ -42,7 +41,6 @@ describe("loadExtensions", () => {
     const [echo] = await loadExtensions(["/plan/attraverso.yaml"], [fixture()]);
     expect(echo?.prefix).toBe("/echo");
     expect(echo?.label).toBe("Echo");
-    expect(echo?.count).toBe("/echo/count");
   });
 
   it("reports one that is installed but whose own dependency is missing, rather than calling it not installed", async () => {

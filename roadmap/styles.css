@@ -500,18 +500,6 @@ body {
 a.toolbtn {
   text-decoration: none;
 }
-/* A host tab's count beside its icon, in the header and the phone's bottom bar alike. */
-.tab-count {
-  min-width: 16px;
-  padding: 0 4px;
-  border-radius: 999px;
-  background: #3a4a60;
-  color: var(--text);
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 16px;
-  text-align: center;
-}
 .toolbtn:hover {
   border-color: #38455a;
 }
