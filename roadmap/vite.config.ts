@@ -3,7 +3,7 @@ import react from "@vitejs/plugin-react";
 import { readFile, stat } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { asPlan, displayPath, mergeLayout, mergeReferences, parseLayout, parseReferences, resolveStorePaths, type Store } from "../src/serialise/store";
 import { layoutPathFor, referencesPathFor } from "../src/serialise/paths";
 import type { Database } from "../src/db/client";
@@ -173,9 +173,14 @@ function servePlan(): Plugin {
   };
 }
 
+/** The package's version, which the viewer shows (`VIEWER_VERSION` in `App.tsx`). */
+const version = (JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { version: string })
+  .version;
+
 export default defineConfig({
   root: viewerRoot,
   plugins: [react(), servePlan()],
+  define: { __ATTRAVERSO_VERSION__: JSON.stringify(version) },
   server: {
     // 5176, not the 5175 this config was copied in with: the project it came from still runs its own viewer
     // there. strictPort makes a future collision fail loudly rather than letting Vite drift to another port,

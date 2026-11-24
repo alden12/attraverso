@@ -80,6 +80,15 @@ const SearchIcon = () => icon(<><circle cx="11" cy="11" r="6.5" /><path d="M20 2
 // Four arrows out from the middle: the usual sign for "move".
 const MoveIcon = () =>
   icon(<><path d="M12 3v18M3 12h18" /><path d="M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3" /></>);
+/**
+ * The version this viewer was built from, set by `roadmap/vite.config.ts`. Shown in the "more" menu, because an old
+ * `npx attraverso viewer` still running on a port looks exactly like a new install that failed (it did, at work: a
+ * 0.9.0 viewer was serving with no PRs tab). Null from a host whose build doesn't set it (the site, the hosted viewer).
+ */
+// Declared here rather than in `vite-env.d.ts`: the hosted viewer's build compiles this file with its own types.
+declare const __ATTRAVERSO_VERSION__: string | undefined;
+const VIEWER_VERSION: string | null = typeof __ATTRAVERSO_VERSION__ === "string" ? __ATTRAVERSO_VERSION__ : null;
+
 // Three dots stacked: the usual "more" menu.
 const MoreIcon = () => icon(<><circle cx="12" cy="5" r="1.4" /><circle cx="12" cy="12" r="1.4" /><circle cx="12" cy="19" r="1.4" /></>);
 const SlidersIcon = () => icon(<><path d="M4 7h10M18 7h2M4 17h4M12 17h8" /><circle cx="16" cy="7" r="2" /><circle cx="10" cy="17" r="2" /></>);
@@ -1154,6 +1163,7 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
                   </div>
                 </>
               )}
+              {VIEWER_VERSION !== null && <div className="settings__version">attraverso {VIEWER_VERSION}</div>}
             </div>
           </>
         )}

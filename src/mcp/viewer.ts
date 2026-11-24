@@ -459,6 +459,14 @@ export function createViewerHost(
           throw new Error("the viewer has not been built yet - run `yarn viewer:build` in the repo, then ask again");
         }
         extensions = await loadExtensions([...(store.paths?.() ?? [])], tried);
+        // Said either way, on stderr: at work an absent reviewer meant no PRs tab and no word why, and the way to
+        // install it was found by reading OPTIONAL_EXTENSIONS. One line, once per viewer start.
+        process.stderr.write(
+          extensions.length > 0
+            ? `viewer: serving ${extensions.map(({ label, prefix }) => `${label} at ${prefix}/`).join(", ")}\n`
+            : `viewer: no optional packages found beside attraverso (tried ${tried.join(", ")}); ` +
+                "install @traverso/pr-reviewer next to it for the PRs tab\n",
+        );
 
         const candidate = createServer((request, response) => {
           // The change stream is held open rather than answered, so it goes around `handler` and its one-shot

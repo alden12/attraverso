@@ -230,6 +230,13 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* The viewer's version, last in the more menu: there to check, never in the way. */
+.settings__version {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
 .settings__label {
   margin-top: 4px;
   font-size: 11px;
