@@ -70,6 +70,30 @@ const CalendarIcon = () => icon(<><rect x="3" y="5" width="18" height="16" rx="2
 const BoardIcon = () => icon(<><rect x="3" y="4" width="5" height="16" rx="1.5" /><rect x="10" y="4" width="5" height="10" rx="1.5" /><rect x="17" y="4" width="4" height="13" rx="1.5" /></>);
 const VIEW_ICONS: Record<View, () => React.JSX.Element> = { graph: () => <GraphIcon />, calendar: () => <CalendarIcon />, board: () => <BoardIcon /> };
 const GraphIcon = () => icon(<><circle cx="6" cy="6" r="2.5" /><circle cx="18" cy="8" r="2.5" /><circle cx="9" cy="18" r="2.5" /><path d="M8.3 7.2l7.4 0.6M7 8.4l1.6 7.2" /></>);
+/**
+ * The width below which the viewer lays out for a phone: the pane starts closed, a tab opens as a page of its own
+ * and the minimap starts hidden. `styles.css`'s `max-width: 700px` query draws the same line, so the two move together.
+ */
+const NARROW_SCREEN_PX = 700;
+const isNarrowScreen = (): boolean => typeof window !== "undefined" && window.innerWidth < NARROW_SCREEN_PX;
+/**
+ * This viewer's URL with `pane` saying which optional package's tab the pane holds (its path), or with none: what a
+ * tab's page is handed as `back`, and what the address bar holds while the pane shows it, so coming back by the page's
+ * own link or by the browser's back button reopens the pane rather than only the plan. Only `pane` is touched, since
+ * the query also holds the write token.
+ */
+const withPane = (path: string | null): string => {
+  const params = new URLSearchParams(window.location.search);
+  if (path === null) params.delete("pane");
+  else params.set("pane", path);
+  const search = params.toString();
+  return window.location.pathname + (search === "" ? "" : `?${search}`) + window.location.hash;
+};
+/** The tab a URL's `pane` names, opened on load on a wide screen; a phone opens a tab as a page of its own. */
+const paneOnLoad = (): ListKind | null => {
+  const path = new URLSearchParams(window.location.search).get("pane");
+  return path?.startsWith("/") && !isNarrowScreen() ? `tab:${path}` : null;
+};
 /** A host tab's link, pointed at its page with this viewer's own URL to come back to. */
 const withBack = (link: HTMLAnchorElement, path: string): void => {
   link.href = `${path}?back=${encodeURIComponent(window.location.pathname + window.location.search + window.location.hash)}`;
@@ -88,6 +112,11 @@ const MoveIcon = () =>
 // Declared here rather than in `vite-env.d.ts`: the hosted viewer's build compiles this file with its own types.
 declare const __ATTRAVERSO_VERSION__: string | undefined;
 const VIEWER_VERSION: string | null = typeof __ATTRAVERSO_VERSION__ === "string" ? __ATTRAVERSO_VERSION__ : null;
+/**
+ * What the pane's list slot can hold: the agreed order, the search, or an optional package's tab (`tab:` and its
+ * path), which on a wide screen opens in the pane beside the plan rather than as a page of its own.
+ */
+type ListKind = "next" | "search" | `tab:${string}`;
 
 // Three dots stacked: the usual "more" menu.
 const MoreIcon = () => icon(<><circle cx="12" cy="5" r="1.4" /><circle cx="12" cy="12" r="1.4" /><circle cx="12" cy="19" r="1.4" /></>);
@@ -156,8 +185,13 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
   // canvas is left to the graph. The pane holds one thing at a time (VIEW-30): an item, an area, context, or one of
   // these. The next list starts open on a wide screen, as its floating panel did: it answers "what did we agree?",
   // which someone back after three weeks is the least likely to know to ask. A narrow screen starts with the graph.
-  const [listShown, setListShown] = useState<"next" | "search" | null>(() =>
-    focus === null && (typeof window === "undefined" || window.innerWidth >= 700) ? "next" : null,
+  // A tab named by the URL's `pane` (coming back from it, `withPane`) is opened in place of the next list.
+  const [listShown, setListShown] = useState<ListKind | null>(() =>
+    typeof window === "undefined"
+      ? "next"
+      : focus === null && !isNarrowScreen()
+        ? (paneOnLoad() ?? "next")
+        : null,
   );
   const [searchQuery, setSearchQuery] = useState("");
   // Where an item was opened from, so its pane can offer the way back: the list, the search as it was left, or the
@@ -217,7 +251,7 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
     setListShown(null);
     setAreaShown(area);
   }, []);
-  function openList(kind: "next" | "search") {
+  function openList(kind: ListKind) {
     setSelectedId(null);
     setContextView(null);
     setAreaShown(null);
@@ -272,10 +306,14 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
   }, [focus, openContext]);
   const [view, setView] = usePreference<View>("attraverso.view", "graph", VIEWS);
   // Tabs an optional package beside attraverso adds (a reviewer's PRs), from the host; none where there are none.
-  const [hostTabs, setHostTabs] = useState<HostTab[]>([]);
+  // Null until the host has answered, so a tab named by the URL's `pane` can wait for the list rather than be taken
+  // for one the host does not list.
+  const [hostTabs, setHostTabs] = useState<HostTab[] | null>(null);
+  const { extensionTabs = true } = useExtensions();
   useEffect(() => {
-    void fetchHostTabs().then(setHostTabs);
-  }, []);
+    if (extensionTabs) void fetchHostTabs().then(setHostTabs);
+    else setHostTabs([]);
+  }, [extensionTabs]);
   // Which dates the calendar places items by, and what the board's lanes are (areas, or when items were filed or
   // last changed): both remembered in this browser, like the view itself.
   const [calendarDates, setCalendarDates] = usePreference<CalendarDates>("attraverso.calendar.dates", "planned", ["planned", "created", "updated"]);
@@ -283,7 +321,7 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
   // The minimap is a help on a big screen and a quarter of a small one, so it starts hidden on a narrow one, and
   // the choice is remembered - **separately for each**. One shared choice meant hiding it on a phone-sized
   // window hid it on the desktop too, since every tab of the viewer shares one browser's storage.
-  const narrow = typeof window !== "undefined" && window.innerWidth < 700;
+  const narrow = isNarrowScreen();
   const [minimap, setMinimap] = usePreference<"shown" | "hidden">(
     narrow ? "attraverso.minimap.narrow" : "attraverso.minimap.wide",
     narrow ? "hidden" : "shown",
@@ -318,7 +356,26 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
   );
   // An empty next list has nothing to show, so asking for it shows nothing rather than an empty pane.
   // The board shows the agreed order as its first lane, so the pane would only repeat it there.
-  const listPane = listShown === "next" && (next.length === 0 || view === "board") ? null : listShown;
+  // A tab is shown once the host lists it: until its list arrives there is nothing to put in the pane, which would
+  // otherwise open empty.
+  const paneTab = hostTabs?.find((tab) => listShown === `tab:${tab.path}`);
+  const listPane =
+    (listShown === "next" && (next.length === 0 || view === "board")) || (listShown?.startsWith("tab:") && paneTab === undefined)
+      ? null
+      : listShown;
+  // The tab the pane holds, in the address bar (`withPane`), so the browser's back from one of its pages comes back to
+  // it. Kept from `listShown` rather than what is shown, so the wait for the host's list does not drop it.
+  const tabShown = listShown?.startsWith("tab:") ? listShown.slice("tab:".length) : null;
+  // A `pane` naming a tab the host does not list (a stale link, a package since removed) falls back to the next list
+  // once the host has answered, as a start with no `pane` would, rather than leaving the pane empty and the parameter
+  // in the address bar: the effect below drops it, since the pane no longer holds a tab.
+  useEffect(() => {
+    if (hostTabs !== null && tabShown !== null && paneTab === undefined) setListShown("next");
+  }, [hostTabs, tabShown, paneTab]);
+  useEffect(() => {
+    const wanted = withPane(tabShown);
+    if (wanted !== window.location.pathname + window.location.search + window.location.hash) history.replaceState(null, "", wanted);
+  }, [tabShown]);
 
   // The pane's width, dragged by its left edge and remembered in this browser: how much of the graph to give up
   // is a matter of screen and taste, not of the plan, so it is not saved anywhere shared.
@@ -332,6 +389,10 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
   });
   const startResize = (event: React.PointerEvent) => {
     event.preventDefault();
+    // Captured, so every move and the release come to this page even with the pointer over an iframe in the pane (an
+    // optional package's tab): uncaptured, the frame's own document took them, the width stopped following, and a
+    // release over it left these listeners on, resizing the pane on every later move with no button held.
+    (event.currentTarget as Element).setPointerCapture(event.pointerId);
     const startX = event.clientX;
     const startWidth = paneWidth;
     let width = startWidth;
@@ -916,8 +977,9 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
                 <span className="toolbtn__sub">{candidate}</span>
               </button>
             ))}
-            {/* A page of the package's own, so it opens as one rather than switching a view in this page. */}
-            {hostTabs.map((tab) => (
+            {/* On a phone, a page of the package's own, so it opens as one rather than switching a view in this page:
+                the pane would be the whole screen anyway. On a wide screen it is a toggle beside search instead. */}
+            {narrow && (hostTabs ?? []).map((tab) => (
               <a
                 key={tab.path}
                 className="toolbtn"
@@ -934,6 +996,23 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
               </a>
             ))}
           </div>
+          {/* An optional package's tab on a wide screen: its page in the pane, beside whichever view is showing, so it
+              toggles like search rather than replacing the view. */}
+          {!narrow && (hostTabs ?? []).map((tab) => {
+            const kind: ListKind = `tab:${tab.path}`;
+            return (
+              <button
+                key={tab.path}
+                className="toolbtn"
+                data-on={listPane === kind}
+                title={`Show ${tab.label} beside the plan`}
+                onClick={() => (listPane === kind ? setListShown(null) : openList(kind))}
+              >
+                <span className="toolbtn__main">{HostTabIcon()}</span>
+                <span className="toolbtn__sub">{tab.label}</span>
+              </button>
+            );
+          })}
           {/* Search (VIEW-25) in the toolbar (VIEW-57), the same in every view, rather than floating over the canvas
               where the board had no room for it. */}
           <button
@@ -1574,6 +1653,23 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
                 </li>
               ))}
             </ol>
+          </aside>
+        )}
+        {!selected && contextView === null && areaShown === null && paneTab !== undefined && (
+          <aside className="detail detail--frame" aria-label={paneTab.label}>
+            <div className="detail__head">
+              <span className="detail__id">{paneTab.label}</span>
+              <button className="detail__close" onClick={() => setListShown(null)} aria-label="Close">
+                ×
+              </button>
+            </div>
+            {/* The package's own page, told it is in a pane (`in=pane`) so it fits the width and opens its links in
+                the whole window; `back` is this viewer as it is with this pane open (`withPane`), so its way back reopens it. */}
+            <iframe
+              className="detail__frame"
+              title={paneTab.label}
+              src={`${paneTab.path}?in=pane&back=${encodeURIComponent(withPane(paneTab.path))}`}
+            />
           </aside>
         )}
         {!selected && contextView === null && areaShown === null && listPane === "search" && project !== null && (

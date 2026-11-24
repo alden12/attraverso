@@ -25,6 +25,12 @@ export interface ViewerExtensions {
    */
   liveRefresh?: boolean;
   /**
+   * Whether this host may serve optional packages' tabs (a reviewer's PRs), listed at `/api/extensions`. On unless a
+   * host says otherwise: the loopback host serves them. A host that never loads one (the hosted server, the static
+   * site) turns it off, so the viewer never asks for the list, rather than asking on every page load for a 404.
+   */
+  extensionTabs?: boolean;
+  /**
    * How this host says the plan changed, when it is not the `/api/changes` stream: called once with the viewer's
    * refresh, returning how to stop. The folder page on the Pages site (`DIST-9.1`) has no server to push, so it
    * checks the files itself and calls this. Given, it replaces the stream. `paused` says the host has stopped

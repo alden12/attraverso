@@ -27,6 +27,8 @@ async function open(handle: FolderHandle, problems: (list: Problem[]) => void): 
   void restoreMirror();
   mountViewer({
     liveRefresh: false,
+    // No server here to serve an optional package's tab.
+    extensionTabs: false,
     MenuActions: MirrorMenu,
     // When to look is `follow.ts`'s business; the viewer shows the notice while it has paused.
     watch: (changed, paused) =>

@@ -1285,6 +1285,24 @@ a.toolbtn {
   min-height: 0;
   overflow-y: auto;
 }
+/* An optional package's page in the pane (`detail--frame`): the frame fills what the head leaves and scrolls itself,
+   so the pane doesn't scroll around it. An iframe has no content height for the floating pane to be "as tall as",
+   so without one of its own the pane shrank to the frame's default 150px; it takes the full height instead. Docked
+   (board, calendar) it is stretched already, and that rule sets the height back. */
+.pane:has(.detail--frame) {
+  height: calc(100% - 24px);
+}
+.detail--frame {
+  flex: 1;
+  overflow: hidden;
+}
+.detail__frame {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  border: 0;
+  background: var(--bg);
+}
 .detail__head {
   display: flex;
   align-items: center;
@@ -1665,7 +1683,8 @@ a.toolbtn {
 }
 
 /* With the pane open on a narrow screen the graph is a sliver beside it, and the floating buttons spilled over the
-   pane's header. Hidden until the pane closes; VIEW-38.3's bottom sheet is what gives them room back. */
+   pane's header. Hidden until the pane closes; VIEW-38.3's bottom sheet is what gives them room back. 700px is
+   `NARROW_SCREEN_PX` in App.tsx: a media query can't read it, so move the two together. */
 @media (max-width: 700px) {
   .body[data-pane="open"] .fabs {
     display: none;
@@ -1998,6 +2017,7 @@ a.toolbtn {
     right: auto;
     flex: none;
     align-self: stretch;
+    height: auto;
     max-height: none;
     max-width: 60%;
     border-width: 0 0 0 1px;

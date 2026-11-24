@@ -44,12 +44,18 @@ async function withSheet(page: Page, bytes: Uint8Array) {
 
 test("draws a plan spreadsheet, follows a change to it, lists its problems, and refuses to write", async ({ page }) => {
   await withSheet(page, await writeWorkbook({ items: ROWS, context: { "How we store it": "One spreadsheet, read in the browser." } }));
+  // No server here serves an optional package's tab, so the page says `extensionTabs: false` and never asks for them.
+  const askedForTabs: string[] = [];
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname.endsWith("/api/extensions")) askedForTabs.push(request.url());
+  });
   // Opened on a context section, so the Context sheet is shown to reach the viewer as well as the items.
   await page.goto(`${BRIDGE}#plan/context:How%20we%20store%20it`);
   await page.getByRole("button", { name: "Open the folder" }).click();
   await expect(page.getByText("The plan as YAML").first()).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText(/problems? in the spreadsheet/)).toHaveCount(0);
   await expect(page.getByText("One spreadsheet, read in the browser.")).toBeVisible();
+  expect(askedForTabs).toEqual([]);
 
   // The assistant edits the workbook: a renamed item (an open one: done ones are hidden by default), and a new one depending on something that is not there.
   const edited = await writeWorkbook({ items: [ROWS[0]!, { ...ROWS[1]!, title: "The plan as a spreadsheet" }, { ref: "DATA-3", title: "Migrations", status: "to-do", deps: ["DATA-9"] }] });

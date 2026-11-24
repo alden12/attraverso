@@ -790,6 +790,127 @@ test.describe("the map follows the filters (VIEW-23.1)", () => {
   });
 });
 
+/**
+ * An optional package's tab (`DIST-2.5`): the fixture host loads no package, so `/api/extensions` is stubbed with one
+ * tab and the tab's path with a page that is nothing but height, which is all the pane's layout needs from it.
+ */
+test.describe("an optional package's tab", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => window.localStorage.clear());
+    await page.route("**/api/extensions", (route) => route.fulfill({ json: [{ label: "PRs", path: "/reviews/" }] }));
+    await page.route(
+      (url) => url.pathname === "/reviews/",
+      (route) => route.fulfill({ contentType: "text/html", body: '<!doctype html><body style="margin:0"><div style="height:3000px">Reviews</div></body>' }),
+    );
+  });
+
+  test("on a wide screen, toggles its page in the pane at the pane's full height, in every view", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/#demo");
+    const toggle = page.getByRole("button", { name: "PRs" });
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("data-on", "true");
+    const frame = page.locator("iframe.detail__frame");
+    await expect(frame).toHaveAttribute("src", /^\/reviews\/\?in=pane&back=%2F/);
+    await expect(page.frameLocator("iframe.detail__frame").getByText("Reviews")).toBeVisible();
+    // The graph's floating pane is as tall as what it holds, and a frame holds nothing it can measure: it has to be
+    // given the height, not left at an iframe's default 150px. Docked on the board, it fills the column the same way.
+    // Filling it means reaching the pane's foot, and the pane reaching the foot of the space it has.
+    const fills = async () => {
+      const box = (await frame.boundingBox())!;
+      const pane = (await page.locator(".pane").boundingBox())!;
+      const body = (await page.locator(".body").boundingBox())!;
+      return box.height > 600 && Math.abs(box.y + box.height - (pane.y + pane.height)) <= 2 && body.y + body.height - (pane.y + pane.height) <= 13;
+    };
+    await expect.poll(fills).toBe(true);
+    for (const docked of ["board", "calendar", "graph"]) {
+      await page.getByRole("tablist", { name: "View" }).getByRole("tab", { name: docked }).click();
+      await expect.poll(fills).toBe(true);
+    }
+
+    // The toggle closes it, and an item opened takes the pane's one place, as search's would.
+    await toggle.click();
+    await expect(frame).toHaveCount(0);
+    await toggle.click();
+    await page.locator(".item-node", { hasText: "MCP-1" }).first().click();
+    await expect(frame).toHaveCount(0);
+    await expect(toggle).toHaveAttribute("data-on", "false");
+  });
+
+  test("is in the address bar and the frame's way back, so coming back reopens it", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/#demo");
+    await page.getByRole("button", { name: "PRs" }).click();
+    await expect(page).toHaveURL(/\/\?pane=%2Freviews%2F#demo$/);
+    const src = (await page.locator("iframe.detail__frame").getAttribute("src"))!;
+    const back = new URL(src, "http://x").searchParams.get("back")!;
+    expect(back).toBe("/?pane=%2Freviews%2F#demo");
+
+    // The frame's links open in the whole window: away to one of its pages, then back by the browser's button.
+    await page.goto("/reviews/?review=x");
+    await page.goBack();
+    await expect(page.locator("iframe.detail__frame")).toBeVisible();
+    // And by the page's own link, which is the `back` it was handed.
+    await page.goto(back);
+    await expect(page.locator("iframe.detail__frame")).toBeVisible();
+    await expect(page.getByRole("button", { name: "PRs" })).toHaveAttribute("data-on", "true");
+
+    // Closed, it leaves the address bar, so a reload is the plan alone.
+    await page.getByRole("button", { name: "PRs" }).click();
+    await expect(page).toHaveURL(/\/#demo$/);
+  });
+
+  test("named in the URL but not listed by the host, falls back to the next list and leaves the URL", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    // The fixture agrees no order, and an empty next list shows nothing: one is given, so the fallback can be seen.
+    await page.route("**/api/store", async (route) => {
+      const json = await (await route.fetch()).json();
+      for (const p of json.store.projects) if (p.key === "demo") p.next = ["MCP-1"];
+      await route.fulfill({ json });
+    });
+    await page.goto("/?pane=%2Fgone%2F#demo");
+    await expect(page.locator('aside[aria-label="Next"]')).toBeVisible();
+    await expect(page.locator("iframe.detail__frame")).toHaveCount(0);
+    await expect(page).toHaveURL(/\/#demo$/);
+  });
+
+  test("named in the URL on a phone, opens nothing: there a tab is a page of its own", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 800 });
+    await page.goto("/?pane=%2Freviews%2F#demo");
+    await expect(page.getByRole("link", { name: "PRs" })).toBeVisible();
+    await expect(page.locator("iframe.detail__frame")).toHaveCount(0);
+  });
+
+  test("resizes from its edge with the pointer over the frame, and stops when released there", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/#demo");
+    await page.getByRole("button", { name: "PRs" }).click();
+    const pane = page.locator(".pane");
+    await expect(page.locator("iframe.detail__frame")).toBeVisible();
+    const before = (await pane.boundingBox())!;
+    const handle = (await page.locator(".pane__resize").boundingBox())!;
+    const y = handle.y + 200;
+    // Narrowed: dragged right, so the pointer travels over the frame and is released over it.
+    await page.mouse.move(handle.x + 3, y);
+    await page.mouse.down();
+    await page.mouse.move(handle.x + 60, y, { steps: 4 });
+    await page.mouse.move(handle.x + 103, y, { steps: 4 });
+    await page.mouse.up();
+    await expect.poll(async () => Math.round((await pane.boundingBox())!.width)).toBe(Math.round(before.width - 100));
+    // With the button up the drag is over: a move out over the graph leaves the width alone.
+    await page.mouse.move(handle.x - 300, y, { steps: 4 });
+    expect(Math.round((await pane.boundingBox())!.width)).toBe(Math.round(before.width - 100));
+  });
+
+  test("on a phone, is a link to its own page rather than a toggle", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 800 });
+    await page.goto("/#demo");
+    const link = page.getByRole("link", { name: "PRs" });
+    await expect(link).toHaveAttribute("href", /^\/reviews\//);
+    await expect(page.getByRole("button", { name: "PRs" })).toHaveCount(0);
+  });
+});
+
 test.describe("on a phone (VIEW-58)", () => {
   test.use({ viewport: { width: 390, height: 800 } });
 
