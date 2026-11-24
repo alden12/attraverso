@@ -460,12 +460,13 @@ export function createViewerHost(
         }
         extensions = await loadExtensions([...(store.paths?.() ?? [])], tried);
         // Said either way, on stderr: at work an absent reviewer meant no PRs tab and no word why, and the way to
-        // install it was found by reading OPTIONAL_EXTENSIONS. One line, once per viewer start.
+        // install it was found by reading OPTIONAL_EXTENSIONS. Named from `tried` alone, since which package gives
+        // which tab is the README's to say. One line, once per viewer start.
         process.stderr.write(
           extensions.length > 0
             ? `viewer: serving ${extensions.map(({ label, prefix }) => `${label} at ${prefix}/`).join(", ")}\n`
             : `viewer: no optional packages found beside attraverso (tried ${tried.join(", ")}); ` +
-                "install @traverso/pr-reviewer next to it for the PRs tab\n",
+                "install one next to it to add its tab\n",
         );
 
         const candidate = createServer((request, response) => {
