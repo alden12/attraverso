@@ -118,7 +118,7 @@ const SearchIcon = () => icon(<><circle cx="11" cy="11" r="6.5" /><path d="M20 2
 const MoveIcon = () =>
   icon(<><path d="M12 3v18M3 12h18" /><path d="M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3" /></>);
 /**
- * The version this viewer was built from, set by `roadmap/vite.config.ts`. Shown in the "more" menu, because an old
+ * The version this viewer was built from, set by `roadmap/vite.config.ts`. Shown at the foot of the settings, because an old
  * `npx attraverso viewer` still running on a port looks exactly like a new install that failed (it did, at work: a
  * 0.9.0 viewer was serving with no PRs tab). Null from a host whose build doesn't set it (the site, the hosted viewer).
  */
@@ -133,7 +133,6 @@ type ListKind = "next" | "search" | "view" | `tab:${string}`;
 
 // Three dots stacked: the usual "more" menu.
 const MoreIcon = () => icon(<><circle cx="12" cy="5" r="1.4" /><circle cx="12" cy="12" r="1.4" /><circle cx="12" cy="19" r="1.4" /></>);
-const SlidersIcon = () => icon(<><path d="M4 7h10M18 7h2M4 17h4M12 17h8" /><circle cx="16" cy="7" r="2" /><circle cx="10" cy="17" r="2" /></>);
 const MapIcon = () => icon(<><path d="M9 4l-6 2v14l6-2 6 2 6-2V4l-6 2-6-2z" /><path d="M9 4v14M15 6v14" /></>);
 
 /**
@@ -189,11 +188,10 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
   // question the graph answers is what is left. One click in the view settings brings it back.
   const [hiddenStatuses, setHiddenStatuses] = useState<Set<Status>>(new Set<Status>(["done"]));
   const [colourMode, setColourMode] = useState<ColourMode>("area");
-  // The toolbar's two dialogs (VIEW-37, VIEW-56), one open at a time: "view" filters what is shown, "more" holds
-  // what is set rarely - the colouring, a layout reset and whatever the host adds.
-  const [menu, setMenu] = useState<"view" | "more" | null>(null);
+  // The phone's settings dialog (VIEW-37, VIEW-56, VIEW-73): what is shown, then what is set rarely (the colouring and
+  // whatever the host adds). A wide screen has the same in the right-hand pane instead.
+  const [menu, setMenu] = useState<"view" | null>(null);
   const settingsOpen = menu === "view";
-  const moreOpen = menu === "more";
   // The next list and the search box, in the right-hand pane with everything else you open over the graph, so the
   // canvas is left to the graph. The pane holds one thing at a time (VIEW-30): an item, an area, context, or one of
   // these. The next list starts open on a wide screen, as its floating panel did: it answers "what did we agree?",
@@ -1072,7 +1070,7 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
                   collapse all
                 </button>
               )}
-              {view === "graph" && !narrow && resetButton}
+              {view === "graph" && resetButton}
               </div>
     </>
   );
@@ -1098,9 +1096,6 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
                   ))}
                 </div>
               )}
-              {/* In the pane, reset sits with expand and collapse under the one Layout heading (`viewSettings`). */}
-              {view === "graph" && narrow && <div className="settings__label">Layout</div>}
-              {view === "graph" && narrow && resetButton}
               {/* Whatever the host adds (`extensions.ts`): nothing, from this package's own two hosts. */}
               {MenuActions !== undefined && (
                 <>
@@ -1279,44 +1274,24 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
             );
           })}
           {narrow && searchButton}
+          {/* Every setting behind one gear (VIEW-37, VIEW-73): on a phone the toolbar was most of the screen, so they
+              live in one dialog, what is shown first and what is set rarely below it, as the wide screen's pane has
+              them. How much the filters hide is the dialog's first line. */}
           {narrow && (
-            <>
-          {/* Everything set occasionally lives in one dialog (VIEW-37): on a phone the toolbar was most of the screen.
-              The button says how much is filtered out, because a filter set last week and tucked behind a menu
-              otherwise reads as items gone missing. */}
-          <button
-            className="toolbtn"
-            data-on={settingsOpen}
-            aria-haspopup="dialog"
-            aria-expanded={settingsOpen}
-            aria-label="View settings"
-            onClick={() => setMenu(settingsOpen ? null : "view")}
-          >
-            <span className="toolbtn__main">
-              <SlidersIcon />
-              <span className="toolbtn__text">view</span>
-            </span>
-            <span className="toolbtn__sub">{hiddenCount > 0 ? `${hiddenCount} hidden` : "all shown"}</span>
-            {/* On a phone the caption goes, so the count rides on the icon instead (styles.css). */}
-            {hiddenCount > 0 && (
-              <span className="toolbtn__badge" aria-hidden="true">
-                {hiddenCount}
+            <button
+              className="toolbtn"
+              data-on={settingsOpen}
+              aria-haspopup="dialog"
+              aria-expanded={settingsOpen}
+              aria-label="Settings"
+              title="Settings"
+              onClick={() => setMenu(settingsOpen ? null : "view")}
+            >
+              <span className="toolbtn__main">
+                <GearIcon />
               </span>
-            )}
-          </button>
-          {/* What is set rarely (VIEW-56), behind the kebab at the end, so the bar keeps to what is used constantly. */}
-          <button
-            className="toolbtn toolbtn--icon"
-            data-on={moreOpen}
-            aria-haspopup="menu"
-            aria-expanded={moreOpen}
-            aria-label="More"
-            title="More"
-            onClick={() => setMenu(moreOpen ? null : "more")}
-          >
-            <MoreIcon />
-          </button>
-            </>
+              <span className="toolbtn__sub">settings</span>
+            </button>
           )}
           {/* The sidebar's foot on a wide screen (VIEW-73): the agreed order and the context sections, which open in the
               right-hand pane, and one gear for every setting, opening there too (what is shown first, what is set
@@ -1369,15 +1344,9 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
         {settingsOpen && narrow && (
           <>
             <div className="settings__backdrop" onClick={() => setMenu(null)} />
-            <div className="settings" role="dialog" aria-label="View settings">
+            <div className="settings" role="dialog" aria-label="Settings">
               {viewSettings}
-            </div>
-          </>
-        )}
-        {moreOpen && narrow && (
-          <>
-            <div className="settings__backdrop" onClick={() => setMenu(null)} />
-            <div className="settings settings--more" role="menu" aria-label="More">
+              <div className="settings__divider" />
               {moreSettings}
             </div>
           </>
