@@ -100,10 +100,10 @@ const withBack = (link: HTMLAnchorElement, path: string): void => {
 };
 // Two branches meeting: the usual sign for a pull request.
 const HostTabIcon = () => icon(<><circle cx="6" cy="5" r="2" /><circle cx="6" cy="19" r="2" /><circle cx="18" cy="19" r="2" /><path d="M6 7v10M18 17V10a3 3 0 0 0-3-3h-4M13 5l-2 2 2 2" /></>);
-// A numbered list: the agreed order.
-const NextIcon = () => icon(<><path d="M10 6h10M10 12h10M10 18h10" /><path d="M4 5l1.5-1v5M4 12h2.5L4 15h2.5M4 17.5h2.5l-1.2 1.2a1.2 1.2 0 1 1-1.3 1.6" /></>);
-// A page with lines on it: the project's written context.
-const ContextIcon = () => icon(<><path d="M6 3h9l4 4v14H6z" /><path d="M15 3v4h4M9 12h7M9 16h7" /></>);
+const CaretIcon = () => icon(<path d="M6 9l6 6 6-6" />);
+// A cog: the settings that are changed rarely, at the sidebar's foot.
+const GearIcon = () =>
+  icon(<><circle cx="12" cy="12" r="3" /><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1" /></>);
 const SearchIcon = () => icon(<><circle cx="11" cy="11" r="6.5" /><path d="M20 20l-4.2-4.2" /></>);
 // Four arrows out from the middle: the usual sign for "move".
 const MoveIcon = () =>
@@ -120,7 +120,7 @@ const VIEWER_VERSION: string | null = typeof __ATTRAVERSO_VERSION__ === "string"
  * What the pane's list slot can hold: the agreed order, the search, or an optional package's tab (`tab:` and its
  * path), which on a wide screen opens in the pane beside the plan rather than as a page of its own.
  */
-type ListKind = "next" | "search" | `tab:${string}`;
+type ListKind = "next" | "search" | "view" | `tab:${string}`;
 
 // Three dots stacked: the usual "more" menu.
 const MoreIcon = () => icon(<><circle cx="12" cy="5" r="1.4" /><circle cx="12" cy="12" r="1.4" /><circle cx="12" cy="19" r="1.4" /></>);
@@ -215,6 +215,13 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
     window.addEventListener("keydown", open);
     return () => window.removeEventListener("keydown", open);
   }, []);
+  // Escape closes the view settings in the pane too (VIEW-73), as it closes their dialog on a phone.
+  useEffect(() => {
+    if (listShown !== "view") return;
+    const close = (event: KeyboardEvent) => event.key === "Escape" && setListShown(null);
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, [listShown]);
   useEffect(() => {
     if (menu === null) return;
     const close = (event: KeyboardEvent) => event.key === "Escape" && setMenu(null);
@@ -907,211 +914,14 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
     </button>
   );
 
-  return (
-    // On a wide screen the toolbar is a sidebar down the left (VIEW-73), holding the agreed order and the context
-    // sections too, so the canvas is left to the graph; a phone keeps the bar across the top.
-    <div className="app" data-sidebar={!narrow}>
-      <header className="topbar">
-        <div className="topbar__title">
-          {/* The switcher takes the title's place rather than sitting beside it, since both would be saying the
-              project's name. It is absent when there is nothing to switch to, and present with no project
-              chosen - landing on the root of a multi-project store is exactly when you need it (VIEW-4). */}
-          {/* The mark sits in the name's row rather than in a corner of its own spanning the subtitle too: on a phone
-              the toolbar has no width to spare for a mark that tall. */}
-          <span className="picker-wrap" title={project?.name ?? "no project"}>
-          <Logo className="picker__logo" crop="icon" />
-          {/* The name reads as a title, and shows it is a switcher only when hovered, with the plan file as a faint
-              caption after it: "which file is this?" is occasional, so it gets a whisper rather than a line. Absent
-              in cloud mode, where there is no file (OPS-11).
-
-              **Drawn by us, with the real <select> laid over it, invisible.** A native select can only show its
-              chosen option's text, so the caption could not sit inside it; replacing it with a custom dropdown would
-              lose the phone's own picker, the keyboard and the screen reader for the sake of one caption. Clicking
-              lands on the select, which opens the browser's own list, and the <label> is what ties the two. */}
-          {(() => {
-            // The project's own plan file, relative to its repo (VIEW-48): a split plan has two, which the
-            // basename alone named identically. An older server sends no map, so fall back to the basename.
-            const file = project?.file ?? (plan.storePath === null ? null : plan.storePath.split(",")[0]!.split("/").pop()!);
-            const caption = file !== null && (
-              <span className="picker__file" title={plan.storePath ?? undefined}>
-                <bdi>{file}</bdi>
-              </span>
-            );
-            if (plan.projects.length <= 1) {
-              return (
-                <span className="picker picker--static">
-                  <strong className="picker__name">{project?.name ?? "no project"}</strong>
-                  {caption}
-                </span>
-              );
-            }
-            return (
-              <label className="picker" title="Switch project">
-                <span className="picker__name">{project?.name ?? "choose a project"}</span>
-                {caption}
-                <select
-                  className="picker__native"
-                  aria-label="Project"
-                  value={project?.key ?? ""}
-                  // Writing the hash is the navigation: `hashchange` re-runs the selection in `main.tsx`.
-                  onChange={(event) => {
-                    window.location.hash = event.target.value;
-                  }}
-                >
-                  {project === null && <option value="">choose a project</option>}
-                  {plan.projects.map((candidate) => (
-                    <option key={candidate.key} value={candidate.key}>
-                      {candidate.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            );
-          })()}
-          </span>
-        </div>
-        <div className="filters">
-          {/* Toolbar buttons carry their detail underneath rather than inline (a caption below the icon), which
-              is what lets the toolbar fit a phone's width in one row. */}
-          {/* The three views as tabs (VIEW-57), always all there, with the one showing highlighted: a switch that
-              only offers the others leaves you working out where you are from what is missing. */}
-          <div className="view-tabs" role="tablist" aria-label="View">
-            {VIEWS.map((candidate) => (
-              <button
-                key={candidate}
-                className="toolbtn"
-                role="tab"
-                aria-selected={candidate === view}
-                data-on={candidate === view}
-                title={`Show the ${candidate}`}
-                onClick={() => setView(candidate)}
-              >
-                <span className="toolbtn__main">{VIEW_ICONS[candidate]()}</span>
-                <span className="toolbtn__sub">{candidate}</span>
-              </button>
-            ))}
-            {/* On a phone, a page of the package's own, so it opens as one rather than switching a view in this page:
-                the pane would be the whole screen anyway. On a wide screen it is a toggle beside search instead. */}
-            {narrow && (hostTabs ?? []).map((tab) => (
-              <a
-                key={tab.path}
-                className="toolbtn"
-                href={tab.path}
-                // Where to come back to, set as the link is about to be used (a click of any button, which covers a
-                // new tab and the context menu, or a key): the hash moves with the project and the query holds the
-                // write token, so a link back to `/` would open a viewer that can't save.
-                onPointerDown={(event) => withBack(event.currentTarget, tab.path)}
-                onKeyDown={(event) => withBack(event.currentTarget, tab.path)}
-                title={`Open ${tab.label}`}
-              >
-                <span className="toolbtn__main">{HostTabIcon()}</span>
-                <span className="toolbtn__sub">{tab.label}</span>
-              </a>
-            ))}
-          </div>
-          {/* The agreed order and the context sections, in the sidebar on a wide screen (VIEW-73) rather than floating over
-              the canvas, so they are in the same place in every view. Both open in the right-hand pane. */}
-          {!narrow && project !== null && (
-            <>
-              <button
-                className="toolbtn"
-                data-on={listPane === "next"}
-                disabled={next.length === 0}
-                title="The order agreed with set_next"
-                onClick={() => (listPane === "next" ? setListShown(null) : openList("next"))}
-              >
-                <span className="toolbtn__main">
-                  <NextIcon />
-                </span>
-                <span className="toolbtn__sub">next</span>
-                <span className="toolbtn__count">{next.length}</span>
-              </button>
-              <button
-                className="toolbtn"
-                data-on={contextView !== null}
-                disabled={project.context.length === 0}
-                title="The project's context sections: what it is, and how it is worked on"
-                onClick={() => (contextView === null ? openContext(null) : setContextView(null))}
-              >
-                <span className="toolbtn__main">
-                  <ContextIcon />
-                </span>
-                <span className="toolbtn__sub">context</span>
-                <span className="toolbtn__count">{project.context.length}</span>
-              </button>
-            </>
-          )}
-          {/* An optional package's tab on a wide screen: its page in the pane, beside whichever view is showing, so it
-              toggles like search rather than replacing the view. */}
-          {!narrow && (hostTabs ?? []).map((tab) => {
-            const kind: ListKind = `tab:${tab.path}`;
-            return (
-              <button
-                key={tab.path}
-                className="toolbtn"
-                data-on={listPane === kind}
-                title={`Show ${tab.label} beside the plan`}
-                onClick={() => (listPane === kind ? setListShown(null) : openList(kind))}
-              >
-                <span className="toolbtn__main">{HostTabIcon()}</span>
-                <span className="toolbtn__sub">{tab.label}</span>
-              </button>
-            );
-          })}
-          {/* Search (VIEW-25) in the toolbar (VIEW-57), the same in every view, rather than floating over the canvas
-              where the board had no room for it. */}
-          <button
-            className="toolbtn"
-            data-on={listPane === "search"}
-            aria-label="Search"
-            title="Search (/ or Cmd+K)"
-            onClick={() => (listPane === "search" ? setListShown(null) : openList("search"))}
-          >
-            <span className="toolbtn__main">
-              <SearchIcon />
-            </span>
-            <span className="toolbtn__sub">search</span>
-          </button>
-          {/* Everything set occasionally lives in one dialog (VIEW-37): on a phone the toolbar was most of the screen.
-              The button says how much is filtered out, because a filter set last week and tucked behind a menu
-              otherwise reads as items gone missing. */}
-          <button
-            className="toolbtn"
-            data-on={settingsOpen}
-            aria-haspopup="dialog"
-            aria-expanded={settingsOpen}
-            aria-label="View settings"
-            onClick={() => setMenu(settingsOpen ? null : "view")}
-          >
-            <span className="toolbtn__main">
-              <SlidersIcon />
-              <span className="toolbtn__text">view</span>
-            </span>
-            <span className="toolbtn__sub">{hiddenCount > 0 ? `${hiddenCount} hidden` : "all shown"}</span>
-            {/* On a phone the caption goes, so the count rides on the icon instead (styles.css). */}
-            {hiddenCount > 0 && (
-              <span className="toolbtn__badge" aria-hidden="true">
-                {hiddenCount}
-              </span>
-            )}
-          </button>
-          {/* What is set rarely (VIEW-56), behind the kebab at the end, so the bar keeps to what is used constantly. */}
-          <button
-            className="toolbtn toolbtn--icon"
-            data-on={moreOpen}
-            aria-haspopup="menu"
-            aria-expanded={moreOpen}
-            aria-label="More"
-            title="More"
-            onClick={() => setMenu(moreOpen ? null : "more")}
-          >
-            <MoreIcon />
-          </button>
-        </div>
-        {settingsOpen && (
-          <>
-            <div className="settings__backdrop" onClick={() => setMenu(null)} />
-            <div className="settings" role="dialog" aria-label="View settings">
+  // The project switcher on a wide screen (VIEW-73), floating with the other controls at the canvas's top left and in
+  // the board's corner, the same shape as they are: the project's name, and a dropdown when there is more than one,
+  // the real <select> laid over it invisibly (`.picker__native`) so the browser's own list opens. A phone keeps the
+  // switcher in its top bar; the sidebar's logo is a switcher too, for the calendar, which has no room for this.
+  // What the view settings hold (VIEW-37): the filters and layout controls, in a dialog on a phone and in the
+  // right-hand pane on a wide screen.
+  const viewSettings = (
+    <>
               {/* Which plan this is, here rather than under the title, where it was a second line on every screen
                   for a question asked occasionally; the count beside it moved to the view button's caption. The
                   plan file's basename, with the full path on hover. In cloud mode there is no file (OPS-11), so it
@@ -1239,13 +1049,221 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
                 </button>
               )}
               </div>
+    </>
+  );
+  const projectOptions = (
+    <>
+      {project === null && <option value="">choose a project</option>}
+      {plan.projects.map((candidate) => (
+        <option key={candidate.key} value={candidate.key}>
+          {candidate.name}
+        </option>
+      ))}
+    </>
+  );
+  // Writing the hash is the navigation: `hashchange` re-runs the selection in `main.tsx`.
+  const switchProject = (key: string) => {
+    window.location.hash = key;
+  };
+  const projectFab =
+    !narrow &&
+    (plan.projects.length <= 1 ? (
+      <span className="next-fab project-fab">{project?.name ?? "no project"}</span>
+    ) : (
+      <label className="next-fab project-fab" title="Switch project">
+        <span className="next-fab__label">{project?.name ?? "choose a project"}</span>
+        <CaretIcon />
+        <select className="picker__native" aria-label="Project" value={project?.key ?? ""} onChange={(event) => switchProject(event.target.value)}>
+          {projectOptions}
+        </select>
+      </label>
+    ));
+
+  return (
+    // On a wide screen the toolbar is a sidebar down the left (VIEW-73), holding the agreed order and the context
+    // sections too, so the canvas is left to the graph; a phone keeps the bar across the top.
+    <div className="app" data-sidebar={!narrow}>
+      <header className="topbar">
+        <div className="topbar__title">
+          {/* The switcher takes the title's place rather than sitting beside it, since both would be saying the
+              project's name. It is absent when there is nothing to switch to, and present with no project
+              chosen - landing on the root of a multi-project store is exactly when you need it (VIEW-4). */}
+          {/* The mark sits in the name's row rather than in a corner of its own spanning the subtitle too: on a phone
+              the toolbar has no width to spare for a mark that tall. */}
+          <span className="picker-wrap" title={project?.name ?? "no project"}>
+          <Logo className="picker__logo" crop="icon" />
+          {/* The name reads as a title, and shows it is a switcher only when hovered, with the plan file as a faint
+              caption after it: "which file is this?" is occasional, so it gets a whisper rather than a line. Absent
+              in cloud mode, where there is no file (OPS-11).
+
+              **Drawn by us, with the real <select> laid over it, invisible.** A native select can only show its
+              chosen option's text, so the caption could not sit inside it; replacing it with a custom dropdown would
+              lose the phone's own picker, the keyboard and the screen reader for the sake of one caption. Clicking
+              lands on the select, which opens the browser's own list, and the <label> is what ties the two. */}
+          {(() => {
+            // The project's own plan file, relative to its repo (VIEW-48): a split plan has two, which the
+            // basename alone named identically. An older server sends no map, so fall back to the basename.
+            const file = project?.file ?? (plan.storePath === null ? null : plan.storePath.split(",")[0]!.split("/").pop()!);
+            const caption = file !== null && (
+              <span className="picker__file" title={plan.storePath ?? undefined}>
+                <bdi>{file}</bdi>
+              </span>
+            );
+            if (plan.projects.length <= 1) {
+              return (
+                <span className="picker picker--static">
+                  <strong className="picker__name">{project?.name ?? "no project"}</strong>
+                  {caption}
+                </span>
+              );
+            }
+            return (
+              <label className="picker" title="Switch project">
+                <span className="picker__name">{project?.name ?? "choose a project"}</span>
+                {caption}
+                <select
+                  className="picker__native"
+                  aria-label="Project"
+                  value={project?.key ?? ""}
+                  // Writing the hash is the navigation: `hashchange` re-runs the selection in `main.tsx`.
+                  onChange={(event) => {
+                    window.location.hash = event.target.value;
+                  }}
+                >
+                  {project === null && <option value="">choose a project</option>}
+                  {plan.projects.map((candidate) => (
+                    <option key={candidate.key} value={candidate.key}>
+                      {candidate.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            );
+          })()}
+          </span>
+        </div>
+        <div className="filters">
+          {/* Toolbar buttons carry their detail underneath rather than inline (a caption below the icon), which
+              is what lets the toolbar fit a phone's width in one row. */}
+          {/* The three views as tabs (VIEW-57), always all there, with the one showing highlighted: a switch that
+              only offers the others leaves you working out where you are from what is missing. */}
+          <div className="view-tabs" role="tablist" aria-label="View">
+            {VIEWS.map((candidate) => (
+              <button
+                key={candidate}
+                className="toolbtn"
+                role="tab"
+                aria-selected={candidate === view}
+                data-on={candidate === view}
+                title={`Show the ${candidate}`}
+                onClick={() => setView(candidate)}
+              >
+                <span className="toolbtn__main">{VIEW_ICONS[candidate]()}</span>
+                <span className="toolbtn__sub">{candidate}</span>
+              </button>
+            ))}
+            {/* On a phone, a page of the package's own, so it opens as one rather than switching a view in this page:
+                the pane would be the whole screen anyway. On a wide screen it is a toggle beside search instead. */}
+            {narrow && (hostTabs ?? []).map((tab) => (
+              <a
+                key={tab.path}
+                className="toolbtn"
+                href={tab.path}
+                // Where to come back to, set as the link is about to be used (a click of any button, which covers a
+                // new tab and the context menu, or a key): the hash moves with the project and the query holds the
+                // write token, so a link back to `/` would open a viewer that can't save.
+                onPointerDown={(event) => withBack(event.currentTarget, tab.path)}
+                onKeyDown={(event) => withBack(event.currentTarget, tab.path)}
+                title={`Open ${tab.label}`}
+              >
+                <span className="toolbtn__main">{HostTabIcon()}</span>
+                <span className="toolbtn__sub">{tab.label}</span>
+              </a>
+            ))}
+          </div>
+          {/* An optional package's tab on a wide screen: its page in the pane, beside whichever view is showing, so it
+              toggles like search rather than replacing the view. */}
+          {!narrow && (hostTabs ?? []).map((tab) => {
+            const kind: ListKind = `tab:${tab.path}`;
+            return (
+              <button
+                key={tab.path}
+                className="toolbtn"
+                data-on={listPane === kind}
+                title={`Show ${tab.label} beside the plan`}
+                onClick={() => (listPane === kind ? setListShown(null) : openList(kind))}
+              >
+                <span className="toolbtn__main">{HostTabIcon()}</span>
+                <span className="toolbtn__sub">{tab.label}</span>
+              </button>
+            );
+          })}
+          {/* Search (VIEW-25) in the toolbar (VIEW-57), the same in every view, rather than floating over the canvas
+              where the board had no room for it. */}
+          <button
+            className="toolbtn"
+            data-on={listPane === "search"}
+            aria-label="Search"
+            title="Search (/ or Cmd+K)"
+            onClick={() => (listPane === "search" ? setListShown(null) : openList("search"))}
+          >
+            <span className="toolbtn__main">
+              <SearchIcon />
+            </span>
+            <span className="toolbtn__sub">search</span>
+          </button>
+          {/* Everything set occasionally lives in one dialog (VIEW-37): on a phone the toolbar was most of the screen.
+              The button says how much is filtered out, because a filter set last week and tucked behind a menu
+              otherwise reads as items gone missing. */}
+          <button
+            className="toolbtn"
+            data-on={narrow ? settingsOpen : listPane === "view"}
+            {...(narrow ? { "aria-haspopup": "dialog" as const, "aria-expanded": settingsOpen } : {})}
+            aria-label="View settings"
+            // A dialog on a phone; on a wide screen the right-hand pane, like search and the next list (VIEW-73).
+            onClick={() => {
+              if (narrow) setMenu(settingsOpen ? null : "view");
+              else if (listPane === "view") setListShown(null);
+              else openList("view");
+            }}
+          >
+            <span className="toolbtn__main">
+              <SlidersIcon />
+              <span className="toolbtn__text">view</span>
+            </span>
+            <span className="toolbtn__sub">{hiddenCount > 0 ? `${hiddenCount} hidden` : "all shown"}</span>
+            {/* On a phone the caption goes, so the count rides on the icon instead (styles.css). */}
+            {hiddenCount > 0 && (
+              <span className="toolbtn__badge" aria-hidden="true">
+                {hiddenCount}
+              </span>
+            )}
+          </button>
+          {/* What is set rarely (VIEW-56), behind the kebab at the end, so the bar keeps to what is used constantly. */}
+          <button
+            className="toolbtn toolbtn--icon"
+            data-on={moreOpen}
+            aria-haspopup="menu"
+            aria-expanded={moreOpen}
+            aria-label={narrow ? "More" : "Settings"}
+            title={narrow ? "More" : "Settings"}
+            onClick={() => setMenu(moreOpen ? null : "more")}
+          >
+            {narrow ? <MoreIcon /> : <GearIcon />}
+          </button>
+        </div>
+        {settingsOpen && narrow && (
+          <>
+            <div className="settings__backdrop" onClick={() => setMenu(null)} />
+            <div className="settings" role="dialog" aria-label="View settings">
+              {viewSettings}
             </div>
           </>
         )}
         {moreOpen && (
           <>
             <div className="settings__backdrop" onClick={() => setMenu(null)} />
-            <div className="settings settings--more" role="menu" aria-label="More">
+            <div className="settings settings--more" role="menu" aria-label={narrow ? "More" : "Settings"}>
               <div className="settings__label">Colour cards by</div>
               <div className="segmented" role="group" aria-label="Colour by">
                 {COLOUR_MODES.map((mode) => (
@@ -1365,11 +1383,13 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
           {/* The floating controls at the canvas's top left, in one row: the agreed order, and beside it the
               project's context sections (VIEW-30), which open in the right-hand pane rather than here, since a
               section is too long to read in a panel this size. */}
-          {/* Not on the board, which has the agreed order as a lane of its own and these two in its corner. On a wide
-              screen the agreed order and context are in the sidebar instead, leaving move mode here. */}
-          {view === "graph" && project !== null && (
+          {/* Not on the board, which has the agreed order as a lane of its own and these in its corner. On a wide screen
+              the project switcher leads the row (the sidebar keeps only the logo), so the row is there with no
+              project chosen too, which is when the switcher is needed. */}
+          {view === "graph" && (project !== null || projectFab) && (
           <div className="fabs">
-          {narrow && next.length > 0 && (
+          {projectFab}
+          {next.length > 0 && (
             <button
               className="next-fab"
               data-on={listPane === "next"}
@@ -1379,9 +1399,9 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
               Next<span className="chip__count">{next.length}</span>
             </button>
           )}
-          {narrow && contextFab}
+          {contextFab}
           {/* Move mode (VIEW-54): the only time cards and boxes drag or resize. */}
-          {view === "graph" && (
+          {project !== null && (
           <button
             className="next-fab"
             data-on={moving}
@@ -1397,7 +1417,12 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
           )}
           {view === "board" && project !== null ? (
             <Board
-              corner={narrow ? contextFab : undefined}
+              corner={
+                <>
+                  {projectFab}
+                  {contextFab}
+                </>
+              }
               group={boardGroup}
               items={visibleItems}
               areas={areas}
@@ -1666,6 +1691,17 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
             onZoom={() => zoomToArea(areaShown)}
             onClose={() => setAreaShown(null)}
           />
+        )}
+        {!selected && contextView === null && areaShown === null && listPane === "view" && (
+          <aside className="detail" aria-label="View settings">
+            <div className="detail__head">
+              <span className="detail__id">View</span>
+              <button className="detail__close" onClick={() => setListShown(null)} aria-label="Close">
+                ×
+              </button>
+            </div>
+            <div className="settings settings--pane">{viewSettings}</div>
+          </aside>
         )}
         {!selected && contextView === null && areaShown === null && listPane === "next" && (
           <aside className="detail" aria-label="Next">

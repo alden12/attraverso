@@ -2386,15 +2386,11 @@ a.toolbtn {
 .app[data-sidebar="true"] .toolbtn__main:has(.toolbtn__text) + .toolbtn__sub {
   display: none;
 }
-.toolbtn__count {
-  display: none;
-}
-.app[data-sidebar="true"] .toolbtn__count,
 .app[data-sidebar="true"] .toolbtn__badge {
   display: block;
   position: absolute;
-  top: 2px;
-  right: 6px;
+  top: 0;
+  right: 0;
   min-width: 16px;
   padding: 0 4px;
   border-radius: 999px;
@@ -2416,4 +2412,29 @@ a.toolbtn {
   top: 12px;
   right: auto;
   left: calc(100% + 8px);
+}
+/* The settings menu from the gear at the rail's foot opens beside the gear, at the bottom. */
+.app[data-sidebar="true"] .settings.settings--more {
+  top: auto;
+  bottom: 12px;
+}
+/* The view settings in the right-hand pane (VIEW-73): the dialog's contents, laid in the pane rather than floating. */
+.settings.settings--pane {
+  position: static;
+  width: auto;
+  max-height: none;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+/* The project switcher with the floating controls (VIEW-73): a pill like them, the select laid over it. */
+.project-fab {
+  position: relative;
+  max-width: 260px;
+}
+.project-fab svg {
+  flex: none;
+  color: var(--muted);
 }

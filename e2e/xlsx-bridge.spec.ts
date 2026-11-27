@@ -89,7 +89,7 @@ test("keeps a copy of every version in a folder of the user's, never overwriting
   // Off until asked: nothing is written.
   expect(await mirrored()).toEqual([]);
   // Rarely set, so in the viewer's menu.
-  await page.getByRole("button", { name: "More" }).click();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
   await page.getByRole("button", { name: "keep copies in a folder" }).click();
   await expect.poll(mirrored).toEqual(["plan.xlsx"]);
 

@@ -33,7 +33,7 @@ const foreignProjects = [...new Set(foreign.map((dep) => dep.split(":")[0]!))];
  * its backdrop would otherwise catch the next click meant for the graph or the calendar.
  */
 async function settings(page: Page, ...chips: string[]): Promise<void> {
-  await page.locator('.toolbtn[aria-haspopup="dialog"]').click();
+  await page.locator('.toolbtn[aria-label="View settings"]').click();
   // An area's chip zooms to it in the graph (VIEW-36), and its eye beside it is the toggle, so that is clicked where
   // there is one; a status or a calendar's area chip is the toggle itself.
   for (const chip of chips) {
@@ -57,28 +57,28 @@ test.describe("the served store", () => {
     // Finished work is hidden by default; this suite is about the whole plan, so it starts with all of it - and
     // waits for it, or a test's first count reads the map from before the done items came back.
     await settings(page, "done");
-    await expect(page.locator('.toolbtn[aria-haspopup="dialog"]')).toContainText("all shown");
+    await expect(page.locator('.toolbtn[aria-label="View settings"]')).toContainText("all shown");
   });
 
   test("hides finished work until asked, and says so on the settings button", async ({ page }) => {
     await settings(page, "done"); // back to the default
     const done = items.filter((item) => item.status === "done").length;
     expect(done).toBeGreaterThan(0); // the fixture has finished work in it; guard the guard
-    await expect(page.locator('.toolbtn[aria-haspopup="dialog"]')).toContainText(`${done} hidden`);
+    await expect(page.locator('.toolbtn[aria-label="View settings"]')).toContainText(`${done} hidden`);
   });
 
   test("renders every area and item from the store", async ({ page }) => {
     // The title is the served project's own name now, not a hardcoded string: the viewer renders whichever
     // store `/api/store` hands it (VIEW-11), so this asserts it picked up the right one.
-    await expect(page.locator(".topbar__title")).toContainText(project.name);
+    await expect(page.locator(".project-fab")).toContainText(project.name);
     // Which plan file this is lives at the top of the view dialog, with the project's name.
-    await page.locator('.toolbtn[aria-haspopup="dialog"]').click();
+    await page.locator('.toolbtn[aria-label="View settings"]').click();
     // Relative to the repo root (VIEW-48), which is `packages/core/...` here and `e2e/...` in the public repo.
     await expect(page.locator(".settings__head")).toHaveText(new RegExp(`^${project.name} - (.+/)?e2e/fixture/demo\\.apm\\.yaml$`));
     await page.keyboard.press("Escape");
     // Two projects are served, so the switcher is present and offers both (VIEW-4).
-    await expect(page.locator(".picker")).toBeVisible();
-    await expect(page.locator(".picker option")).toHaveCount(2);
+    await expect(page.locator(".project-fab")).toBeVisible();
+    await expect(page.locator(".project-fab option")).toHaveCount(2);
 
     // This plan's own areas only: a foreign-project box is the same frame and would otherwise inflate the
     // count by one per project pointed at (`PROJ-11`).
@@ -153,7 +153,7 @@ test.describe("the served store", () => {
 
     await settings(page, "PLAT");
 
-    await expect(page.locator('.toolbtn[aria-haspopup="dialog"]')).toContainText(`${platItems} hidden`);
+    await expect(page.locator('.toolbtn[aria-label="View settings"]')).toContainText(`${platItems} hidden`);
     // Polled: the subtitle updates a frame before the re-layout drops the filtered cards.
     await expect.poll(() => page.locator(".item-node").count()).toBeLessThan(before);
   });
@@ -167,7 +167,7 @@ test.describe("the served store", () => {
       return Math.round(Math.abs(frame.x + frame.width / 2 - (canvas.x + canvas.width / 2)) + Math.abs(frame.y + frame.height / 2 - (canvas.y + canvas.height / 2)));
     };
 
-    await page.locator('.toolbtn[aria-haspopup="dialog"]').click();
+    await page.locator('.toolbtn[aria-label="View settings"]').click();
     await page.getByRole("button", { name: "Hide PLAT" }).click();
     await expect(page.locator('.react-flow__node[data-id="area:PLAT"]')).toBeHidden();
 
@@ -179,7 +179,7 @@ test.describe("the served store", () => {
 
   test("hides and shows every area at once", async ({ page }) => {
     await expect(page.locator(".item-node").first()).toBeVisible();
-    await page.locator('.toolbtn[aria-haspopup="dialog"]').click();
+    await page.locator('.toolbtn[aria-label="View settings"]').click();
     await page.getByRole("button", { name: "hide all" }).click();
     await expect(page.locator(".item-node")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "hide all" })).toBeDisabled();
@@ -192,7 +192,7 @@ test.describe("the served store", () => {
     await expect(page.locator(".item-node").first()).toBeVisible();
     await expect(page.locator(".graph__notice")).toHaveCount(0);
     await settings(page, "done"); // back to the default, so both filters are in play
-    await page.locator('.toolbtn[aria-haspopup="dialog"]').click();
+    await page.locator('.toolbtn[aria-label="View settings"]').click();
     await page.getByRole("button", { name: "hide all" }).click();
     await page.keyboard.press("Escape");
     const done = items.filter((item) => item.status === "done").length;
@@ -203,7 +203,7 @@ test.describe("the served store", () => {
     );
     await notice.getByRole("button", { name: "show everything" }).click();
     await expect(notice).toHaveCount(0);
-    await expect(page.locator('.toolbtn[aria-haspopup="dialog"]')).toContainText("all shown");
+    await expect(page.locator('.toolbtn[aria-label="View settings"]')).toContainText("all shown");
   });
 
   test("shows an area in the pane when its frame is clicked, and goes to an item from it (VIEW-49)", async ({ page }) => {
@@ -301,7 +301,7 @@ test.describe("the served store", () => {
     await expect(overview.locator(".area-box__overview-name")).toHaveText("Storage"); // and the zoomed-out overview
     await expect(overview.locator(".area-box__overview-description")).toHaveText("Where the plan lives.");
 
-    await page.locator('.toolbtn[aria-haspopup="dialog"]').click();
+    await page.locator('.toolbtn[aria-label="View settings"]').click();
     await expect(page.locator(".settings .chip", { hasText: "DATA" }).first().locator(".chip__name")).toHaveText("Storage");
     await page.keyboard.press("Escape");
 
@@ -381,12 +381,12 @@ test.describe("several projects in one store", () => {
     await page.getByRole("button", { name: "Back to Next" }).click();
     await expect(list.locator(".next__item")).toHaveCount(2);
 
-    // Dismissible, leaving the sidebar's button with the count (VIEW-73), so closing it does not hide that an order
-    // exists, and the button opens it again.
+    // Dismissible, leaving the floating button with the count, so closing it does not hide that an order exists,
+    // and the button opens it again.
     await list.getByRole("button", { name: "Close" }).click();
     await expect(list).toHaveCount(0);
-    await expect(page.locator(".topbar .toolbtn", { hasText: "next" })).toContainText("2");
-    await page.locator(".topbar .toolbtn", { hasText: "next" }).click();
+    await expect(page.locator(".next-fab", { hasText: "Next" })).toContainText("2");
+    await page.locator(".next-fab", { hasText: "Next" }).click();
     await expect(list.locator(".next__item")).toHaveCount(2);
   });
 
@@ -418,10 +418,11 @@ test.describe("several projects in one store", () => {
     await page.getByRole("tab", { name: "board" }).click();
 
     const board = page.getByRole("grid", { name: "Board" });
-    await expect(board.getByRole("columnheader")).toHaveText([/^$/, /planning/i, /to-do/i, /in-progress/i, /review/i]);
-    // The board has the agreed order as a lane, so the pane doesn't open to repeat it there (the sidebar's button
-    // stays, the same in every view).
+    // The corner holds the project switcher on a wide screen (VIEW-73), with no context sections here to sit beside it.
+    await expect(board.getByRole("columnheader")).toHaveText(["AI PM", /planning/i, /to-do/i, /in-progress/i, /review/i]);
+    // The board has the agreed order as a lane, so neither the pane nor its button repeats it there.
     await expect(page.locator('aside.detail[aria-label="Next"]')).toHaveCount(0);
+    await expect(page.locator(".next-fab", { hasText: "Next" })).toHaveCount(0);
     // The agreed order's own lane first, then the areas in the plan's order, as the graph has them.
     const heads = board.getByRole("rowheader");
     await expect(heads.locator(".board__lane-name")).toHaveText([/Next/, /MCP/, /DATA/]);
@@ -524,13 +525,13 @@ test.describe("several projects in one store", () => {
     await expect(page.locator(".metrics__table")).toHaveCount(1);
   });
 
-  test("shows no panel, and its button disabled, when nobody has recorded an order", async ({ page }) => {
+  test("shows no panel and no button when nobody has recorded an order", async ({ page }) => {
     // The state this project is in right now, which is exactly why the test above cannot use the live store.
     // The shared fixture holds two projects and no `next`, so the hash picks one and the panel has nothing.
     await page.goto("/#apm");
     await expect(page.locator(".react-flow__node").first()).toBeVisible();
     await expect(page.locator('aside.detail[aria-label="Next"]')).toHaveCount(0);
-    await expect(page.locator(".topbar .toolbtn", { hasText: "next" })).toBeDisabled();
+    await expect(page.locator(".next-fab", { hasText: "Next" })).toHaveCount(0);
   });
 
   test("opens the first project when none is named, and offers the others (VIEW-31)", async ({ page }) => {
@@ -539,13 +540,14 @@ test.describe("several projects in one store", () => {
     // The first project's graph, with the switcher beside it naming every project, so the others are never
     // hidden - which was the reason the viewer used to prompt instead.
     await expect(page.locator(".item-node").first()).toBeVisible();
-    await expect(page.locator(".picker")).toBeVisible();
-    await expect(page.locator(".picker option")).toHaveCount(2);
+    // On a wide screen, floating at the canvas's top left (VIEW-73).
+    await expect(page.locator(".project-fab")).toBeVisible();
+    await expect(page.locator(".project-fab option")).toHaveCount(2);
   });
 
   test("switches project from the toolbar, and the URL follows so the link can be shared", async ({ page }) => {
     await page.goto("/");
-    await page.selectOption(".picker", "spanish");
+    await page.selectOption(".project-fab select", "spanish");
 
     expect(page.url()).toContain("#spanish");
     await expect(page.locator(".item-node", { hasText: "GRAM-1" })).toBeVisible();
@@ -1001,7 +1003,7 @@ test.describe("the project's context sections (VIEW-30)", () => {
     await expect(page.locator(".react-flow__node").first()).toBeVisible();
   });
 
-  const button = (page: Page) => page.locator(".topbar .toolbtn", { hasText: "context" });
+  const button = (page: Page) => page.locator(".next-fab", { hasText: "Context" });
   const pane = (page: Page) => page.locator('aside.detail[aria-label="Context"]');
 
   test("lists the headings, protocol first, and opens one in the pane with a link to it", async ({ page }) => {
