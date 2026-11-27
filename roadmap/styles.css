@@ -366,12 +366,14 @@ body {
   flex: none;
   width: 38px;
   height: 38px;
-  color: var(--text);
+  color: var(--logo-ink);
   /* A round badge: the disc gives the clip an edge to see, since the drawing itself only touches the circle
      where the bridge runs off it. */
   clip-path: circle(50%);
-  /* One colour for the disc and the outline that lifts the bridge's near rail off the robot (Logo.tsx). */
-  --logo-disc: #33435a;
+  /* The brand's two colours: the disc (also the outline that lifts the bridge's near rail off the robot, Logo.tsx),
+     and the drawing on it. favicon.svg has the same pair. */
+  --logo-disc: #5b2a6e;
+  --logo-ink: #f6e9ff;
   background: var(--logo-disc);
 }
 
