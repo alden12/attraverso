@@ -101,9 +101,14 @@ const withBack = (link: HTMLAnchorElement, path: string): void => {
 // Two branches meeting: the usual sign for a pull request.
 const HostTabIcon = () => icon(<><circle cx="6" cy="5" r="2" /><circle cx="6" cy="19" r="2" /><circle cx="18" cy="19" r="2" /><path d="M6 7v10M18 17V10a3 3 0 0 0-3-3h-4M13 5l-2 2 2 2" /></>);
 const CaretIcon = () => icon(<path d="M6 9l6 6 6-6" />);
-// A cog: the settings that are changed rarely, at the sidebar's foot.
+// A cog: every setting, at the sidebar's foot. Feather's "settings" icon (MIT).
 const GearIcon = () =>
-  icon(<><circle cx="12" cy="12" r="3" /><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1" /></>);
+  icon(
+    <>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+    </>,
+  );
 const SearchIcon = () => icon(<><circle cx="11" cy="11" r="6.5" /><path d="M20 20l-4.2-4.2" /></>);
 // Four arrows out from the middle: the usual sign for "move".
 const MoveIcon = () =>
@@ -918,6 +923,19 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
   // the board's corner, the same shape as they are: the project's name, and a dropdown when there is more than one,
   // the real <select> laid over it invisibly (`.picker__native`) so the browser's own list opens. A phone keeps the
   // switcher in its top bar; the sidebar's logo is a switcher too, for the calendar, which has no room for this.
+  // Lay the map out afresh: in the phone's kebab menu, and beside expand and collapse in the settings pane.
+  const resetButton = (
+    <button
+      className="chip"
+      onClick={() => {
+        setMenu(null);
+        resetLayout();
+      }}
+      title="Lay the map out afresh, forgetting where everything was"
+    >
+      reset layout
+    </button>
+  );
   // What the view settings hold (VIEW-37): the filters and layout controls, in a dialog on a phone and in the
   // right-hand pane on a wide screen.
   const viewSettings = (
@@ -930,6 +948,8 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
                 {project?.name ?? "No project"}
                 {plan.storePath !== null && ` - ${project?.file ?? plan.storePath.split("/").pop()}`}
               </div>
+              {/* How much the filters below hide, where the sidebar's gear carries no count (VIEW-73). */}
+              <div className="settings__note">{hiddenCount > 0 ? `${hiddenCount} hidden by these filters` : "Everything shown"}</div>
               {!(view === "calendar" && allProjects) && <div className="settings__label">Areas</div>}
               {!(view === "calendar" && allProjects) && (
                 <div className="filters__group">
@@ -1048,8 +1068,61 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
                   collapse all
                 </button>
               )}
+              {view === "graph" && !narrow && resetButton}
               </div>
     </>
+  );
+  // What is set rarely (VIEW-56): behind the kebab on a phone, and at the foot of the settings pane on a wide screen.
+  const moreSettings = (
+    <>
+              <div className="settings__label">Colour cards by</div>
+              <div className="segmented" role="group" aria-label="Colour by">
+                {COLOUR_MODES.map((mode) => (
+                  <button key={mode} className="segmented__btn" data-on={colourMode === mode} onClick={() => setColourMode(mode)}>
+                    {mode}
+                  </button>
+                ))}
+              </div>
+              {/* What the board's lanes are (VIEW-46): its areas, or when things were filed or last touched. */}
+              {view === "board" && <div className="settings__label">Group board by</div>}
+              {view === "board" && (
+                <div className="segmented" role="group" aria-label="Group board by">
+                  {(["area", "created", "updated"] as const).map((group) => (
+                    <button key={group} className="segmented__btn" data-on={boardGroup === group} onClick={() => setBoardGroup(group)}>
+                      {group === "updated" ? "modified" : group}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {/* In the pane, reset sits with expand and collapse under the one Layout heading (`viewSettings`). */}
+              {view === "graph" && narrow && <div className="settings__label">Layout</div>}
+              {view === "graph" && narrow && resetButton}
+              {/* Whatever the host adds (`extensions.ts`): nothing, from this package's own two hosts. */}
+              {MenuActions !== undefined && (
+                <>
+                  <div className="settings__label">Plan</div>
+                  <div className="settings__row">
+                    <MenuActions plan={plan} project={project} reload={reload} />
+                  </div>
+                </>
+              )}
+              {VIEWER_VERSION !== null && <div className="settings__version">attraverso {VIEWER_VERSION}</div>}
+    </>
+  );
+  // Search, the same in every view: in the phone's top bar, and leading the sidebar on a wide screen.
+  const searchButton = (
+          <button
+            className="toolbtn"
+            data-on={listPane === "search"}
+            aria-label="Search"
+            title="Search (/ or Cmd+K)"
+            onClick={() => (listPane === "search" ? setListShown(null) : openList("search"))}
+          >
+            <span className="toolbtn__main">
+              <SearchIcon />
+            </span>
+            <span className="toolbtn__sub">search</span>
+          </button>
   );
   const projectOptions = (
     <>
@@ -1147,6 +1220,8 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
               is what lets the toolbar fit a phone's width in one row. */}
           {/* The three views as tabs (VIEW-57), always all there, with the one showing highlighted: a switch that
               only offers the others leaves you working out where you are from what is missing. */}
+          {/* On a wide screen search leads the sidebar, above the views (VIEW-73). */}
+          {!narrow && searchButton}
           <div className="view-tabs" role="tablist" aria-label="View">
             {VIEWS.map((candidate) => (
               <button
@@ -1198,34 +1273,19 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
               </button>
             );
           })}
-          {/* Search (VIEW-25) in the toolbar (VIEW-57), the same in every view, rather than floating over the canvas
-              where the board had no room for it. */}
-          <button
-            className="toolbtn"
-            data-on={listPane === "search"}
-            aria-label="Search"
-            title="Search (/ or Cmd+K)"
-            onClick={() => (listPane === "search" ? setListShown(null) : openList("search"))}
-          >
-            <span className="toolbtn__main">
-              <SearchIcon />
-            </span>
-            <span className="toolbtn__sub">search</span>
-          </button>
+          {narrow && searchButton}
+          {narrow && (
+            <>
           {/* Everything set occasionally lives in one dialog (VIEW-37): on a phone the toolbar was most of the screen.
               The button says how much is filtered out, because a filter set last week and tucked behind a menu
               otherwise reads as items gone missing. */}
           <button
             className="toolbtn"
-            data-on={narrow ? settingsOpen : listPane === "view"}
-            {...(narrow ? { "aria-haspopup": "dialog" as const, "aria-expanded": settingsOpen } : {})}
+            data-on={settingsOpen}
+            aria-haspopup="dialog"
+            aria-expanded={settingsOpen}
             aria-label="View settings"
-            // A dialog on a phone; on a wide screen the right-hand pane, like search and the next list (VIEW-73).
-            onClick={() => {
-              if (narrow) setMenu(settingsOpen ? null : "view");
-              else if (listPane === "view") setListShown(null);
-              else openList("view");
-            }}
+            onClick={() => setMenu(settingsOpen ? null : "view")}
           >
             <span className="toolbtn__main">
               <SlidersIcon />
@@ -1245,12 +1305,30 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
             data-on={moreOpen}
             aria-haspopup="menu"
             aria-expanded={moreOpen}
-            aria-label={narrow ? "More" : "Settings"}
-            title={narrow ? "More" : "Settings"}
+            aria-label="More"
+            title="More"
             onClick={() => setMenu(moreOpen ? null : "more")}
           >
-            {narrow ? <MoreIcon /> : <GearIcon />}
+            <MoreIcon />
           </button>
+            </>
+          )}
+          {/* On a wide screen one gear at the sidebar's foot (VIEW-73) opens every setting in the right-hand pane, like
+              search and the next list: what is shown first, what is set rarely below it. */}
+          {!narrow && (
+            <button
+              className="toolbtn toolbtn--settings"
+              data-on={listPane === "view"}
+              aria-label="Settings"
+              title="Settings"
+              onClick={() => (listPane === "view" ? setListShown(null) : openList("view"))}
+            >
+              <span className="toolbtn__main">
+                <GearIcon />
+              </span>
+              <span className="toolbtn__sub">settings</span>
+            </button>
+          )}
         </div>
         {settingsOpen && narrow && (
           <>
@@ -1260,52 +1338,11 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
             </div>
           </>
         )}
-        {moreOpen && (
+        {moreOpen && narrow && (
           <>
             <div className="settings__backdrop" onClick={() => setMenu(null)} />
-            <div className="settings settings--more" role="menu" aria-label={narrow ? "More" : "Settings"}>
-              <div className="settings__label">Colour cards by</div>
-              <div className="segmented" role="group" aria-label="Colour by">
-                {COLOUR_MODES.map((mode) => (
-                  <button key={mode} className="segmented__btn" data-on={colourMode === mode} onClick={() => setColourMode(mode)}>
-                    {mode}
-                  </button>
-                ))}
-              </div>
-              {/* What the board's lanes are (VIEW-46): its areas, or when things were filed or last touched. */}
-              {view === "board" && <div className="settings__label">Group board by</div>}
-              {view === "board" && (
-                <div className="segmented" role="group" aria-label="Group board by">
-                  {(["area", "created", "updated"] as const).map((group) => (
-                    <button key={group} className="segmented__btn" data-on={boardGroup === group} onClick={() => setBoardGroup(group)}>
-                      {group === "updated" ? "modified" : group}
-                    </button>
-                  ))}
-                </div>
-              )}
-              {view === "graph" && <div className="settings__label">Layout</div>}
-              {view === "graph" && (
-                <button
-                  className="chip"
-                  onClick={() => {
-                    setMenu(null);
-                    resetLayout();
-                  }}
-                  title="Lay the map out afresh, forgetting where everything was"
-                >
-                  reset layout
-                </button>
-              )}
-              {/* Whatever the host adds (`extensions.ts`): nothing, from this package's own two hosts. */}
-              {MenuActions !== undefined && (
-                <>
-                  <div className="settings__label">Plan</div>
-                  <div className="settings__row">
-                    <MenuActions plan={plan} project={project} reload={reload} />
-                  </div>
-                </>
-              )}
-              {VIEWER_VERSION !== null && <div className="settings__version">attraverso {VIEWER_VERSION}</div>}
+            <div className="settings settings--more" role="menu" aria-label="More">
+              {moreSettings}
             </div>
           </>
         )}
@@ -1693,14 +1730,18 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
           />
         )}
         {!selected && contextView === null && areaShown === null && listPane === "view" && (
-          <aside className="detail" aria-label="View settings">
+          <aside className="detail" aria-label="Settings">
             <div className="detail__head">
-              <span className="detail__id">View</span>
+              <span className="detail__id">Settings</span>
               <button className="detail__close" onClick={() => setListShown(null)} aria-label="Close">
                 ×
               </button>
             </div>
-            <div className="settings settings--pane">{viewSettings}</div>
+            <div className="settings settings--pane">
+              {viewSettings}
+              <div className="settings__divider" />
+              {moreSettings}
+            </div>
           </aside>
         )}
         {!selected && contextView === null && areaShown === null && listPane === "next" && (

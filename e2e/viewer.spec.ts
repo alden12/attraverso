@@ -28,12 +28,15 @@ const areas = [...new Set(items.map((item) => item.area))];
 const foreign = [...new Set(items.flatMap((item) => (item.deps ?? []).filter((dep) => dep.includes(":"))))];
 const foreignProjects = [...new Set(foreign.map((dep) => dep.split(":")[0]!))];
 
+/** The button that opens the view settings: the gear on a wide screen (VIEW-73), the view button on a phone. */
+const SETTINGS = '.toolbtn[aria-label="Settings"], .toolbtn[aria-label="View settings"]';
+
 /**
  * Toggle chips in the view settings dialog (VIEW-37), where the filters and layout controls live, then close it -
  * its backdrop would otherwise catch the next click meant for the graph or the calendar.
  */
 async function settings(page: Page, ...chips: string[]): Promise<void> {
-  await page.locator('.toolbtn[aria-label="View settings"]').click();
+  await page.locator(SETTINGS).click();
   // An area's chip zooms to it in the graph (VIEW-36), and its eye beside it is the toggle, so that is clicked where
   // there is one; a status or a calendar's area chip is the toggle itself.
   for (const chip of chips) {
@@ -57,14 +60,17 @@ test.describe("the served store", () => {
     // Finished work is hidden by default; this suite is about the whole plan, so it starts with all of it - and
     // waits for it, or a test's first count reads the map from before the done items came back.
     await settings(page, "done");
-    await expect(page.locator('.toolbtn[aria-label="View settings"]')).toContainText("all shown");
+    await page.locator(SETTINGS).click();
+    await expect(page.locator(".settings__note")).toHaveText("Everything shown");
+    await page.keyboard.press("Escape");
   });
 
-  test("hides finished work until asked, and says so on the settings button", async ({ page }) => {
+  test("hides finished work until asked, and says so in the settings", async ({ page }) => {
     await settings(page, "done"); // back to the default
     const done = items.filter((item) => item.status === "done").length;
     expect(done).toBeGreaterThan(0); // the fixture has finished work in it; guard the guard
-    await expect(page.locator('.toolbtn[aria-label="View settings"]')).toContainText(`${done} hidden`);
+    await page.locator(SETTINGS).click();
+    await expect(page.locator(".settings__note")).toHaveText(`${done} hidden by these filters`);
   });
 
   test("renders every area and item from the store", async ({ page }) => {
@@ -72,7 +78,7 @@ test.describe("the served store", () => {
     // store `/api/store` hands it (VIEW-11), so this asserts it picked up the right one.
     await expect(page.locator(".project-fab")).toContainText(project.name);
     // Which plan file this is lives at the top of the view dialog, with the project's name.
-    await page.locator('.toolbtn[aria-label="View settings"]').click();
+    await page.locator(SETTINGS).click();
     // Relative to the repo root (VIEW-48), which is `packages/core/...` here and `e2e/...` in the public repo.
     await expect(page.locator(".settings__head")).toHaveText(new RegExp(`^${project.name} - (.+/)?e2e/fixture/demo\\.apm\\.yaml$`));
     await page.keyboard.press("Escape");
@@ -153,7 +159,9 @@ test.describe("the served store", () => {
 
     await settings(page, "PLAT");
 
-    await expect(page.locator('.toolbtn[aria-label="View settings"]')).toContainText(`${platItems} hidden`);
+    await page.locator(SETTINGS).click();
+    await expect(page.locator(".settings__note")).toHaveText(`${platItems} hidden by these filters`);
+    await page.keyboard.press("Escape");
     // Polled: the subtitle updates a frame before the re-layout drops the filtered cards.
     await expect.poll(() => page.locator(".item-node").count()).toBeLessThan(before);
   });
@@ -167,7 +175,7 @@ test.describe("the served store", () => {
       return Math.round(Math.abs(frame.x + frame.width / 2 - (canvas.x + canvas.width / 2)) + Math.abs(frame.y + frame.height / 2 - (canvas.y + canvas.height / 2)));
     };
 
-    await page.locator('.toolbtn[aria-label="View settings"]').click();
+    await page.locator(SETTINGS).click();
     await page.getByRole("button", { name: "Hide PLAT" }).click();
     await expect(page.locator('.react-flow__node[data-id="area:PLAT"]')).toBeHidden();
 
@@ -179,7 +187,7 @@ test.describe("the served store", () => {
 
   test("hides and shows every area at once", async ({ page }) => {
     await expect(page.locator(".item-node").first()).toBeVisible();
-    await page.locator('.toolbtn[aria-label="View settings"]').click();
+    await page.locator(SETTINGS).click();
     await page.getByRole("button", { name: "hide all" }).click();
     await expect(page.locator(".item-node")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "hide all" })).toBeDisabled();
@@ -192,7 +200,7 @@ test.describe("the served store", () => {
     await expect(page.locator(".item-node").first()).toBeVisible();
     await expect(page.locator(".graph__notice")).toHaveCount(0);
     await settings(page, "done"); // back to the default, so both filters are in play
-    await page.locator('.toolbtn[aria-label="View settings"]').click();
+    await page.locator(SETTINGS).click();
     await page.getByRole("button", { name: "hide all" }).click();
     await page.keyboard.press("Escape");
     const done = items.filter((item) => item.status === "done").length;
@@ -203,7 +211,8 @@ test.describe("the served store", () => {
     );
     await notice.getByRole("button", { name: "show everything" }).click();
     await expect(notice).toHaveCount(0);
-    await expect(page.locator('.toolbtn[aria-label="View settings"]')).toContainText("all shown");
+    await page.locator(SETTINGS).click();
+    await expect(page.locator(".settings__note")).toHaveText("Everything shown");
   });
 
   test("shows an area in the pane when its frame is clicked, and goes to an item from it (VIEW-49)", async ({ page }) => {
@@ -301,7 +310,7 @@ test.describe("the served store", () => {
     await expect(overview.locator(".area-box__overview-name")).toHaveText("Storage"); // and the zoomed-out overview
     await expect(overview.locator(".area-box__overview-description")).toHaveText("Where the plan lives.");
 
-    await page.locator('.toolbtn[aria-label="View settings"]').click();
+    await page.locator(SETTINGS).click();
     await expect(page.locator(".settings .chip", { hasText: "DATA" }).first().locator(".chip__name")).toHaveText("Storage");
     await page.keyboard.press("Escape");
 

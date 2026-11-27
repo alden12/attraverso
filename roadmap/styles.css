@@ -2402,8 +2402,8 @@ a.toolbtn {
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
-/* The kebab at the foot of the rail. */
-.app[data-sidebar="true"] .filters .toolbtn--icon {
+/* The settings gear at the foot of the rail. */
+.app[data-sidebar="true"] .filters .toolbtn--settings {
   margin-top: auto;
   align-self: center;
 }
@@ -2437,4 +2437,18 @@ a.toolbtn {
 .project-fab svg {
   flex: none;
   color: var(--muted);
+}
+/* Between what is shown and what is set rarely, in the settings pane. */
+.settings__divider {
+  border-top: 1px solid var(--line);
+  margin: 4px 0;
+}
+.settings__note {
+  margin-top: -6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+/* A segmented control keeps its own width in the pane, rather than stretching across it. */
+.settings--pane .segmented {
+  align-self: flex-start;
 }
