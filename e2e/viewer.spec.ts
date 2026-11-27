@@ -28,13 +28,20 @@ const areas = [...new Set(items.map((item) => item.area))];
 const foreign = [...new Set(items.flatMap((item) => (item.deps ?? []).filter((dep) => dep.includes(":"))))];
 const foreignProjects = [...new Set(foreign.map((dep) => dep.split(":")[0]!))];
 
-/** The button that opens the view settings: the gear on a wide screen (VIEW-73), the view button on a phone. */
-const SETTINGS = '.toolbtn[aria-label="Settings"], .toolbtn[aria-label="View settings"]';
+/** The gear that opens the settings (VIEW-73): the right-hand pane on a wide screen, a dialog on a phone. */
+const SETTINGS = '.toolbtn[aria-label="Settings"]';
 
 /**
- * Toggle chips in the view settings dialog (VIEW-37), where the filters and layout controls live, then close it -
- * its backdrop would otherwise catch the next click meant for the graph or the calendar.
+ * Close the settings as a person would: the pane's close button on a wide screen, as every pane closes, and Escape
+ * for the phone's dialog, whose backdrop would otherwise catch the next click meant for the graph or the calendar.
  */
+async function closeSettings(page: Page): Promise<void> {
+  const pane = page.locator('aside.detail[aria-label="Settings"]');
+  if ((await pane.count()) > 0) await pane.getByRole("button", { name: "Close" }).click();
+  else await page.keyboard.press("Escape");
+}
+
+/** Toggle chips in the settings (VIEW-37), where the filters and layout controls live, then close them. */
 async function settings(page: Page, ...chips: string[]): Promise<void> {
   await page.locator(SETTINGS).click();
   // An area's chip zooms to it in the graph (VIEW-36), and its eye beside it is the toggle, so that is clicked where
@@ -43,7 +50,7 @@ async function settings(page: Page, ...chips: string[]): Promise<void> {
     const eye = page.locator(".settings").getByRole("button", { name: new RegExp(`^(Hide|Show) ${chip}$`) });
     await ((await eye.count()) > 0 ? eye : page.locator(".settings .chip", { hasText: chip }).first()).click();
   }
-  await page.keyboard.press("Escape");
+  await closeSettings(page);
   await expect(page.locator(".settings")).toHaveCount(0);
 }
 
@@ -62,7 +69,7 @@ test.describe("the served store", () => {
     await settings(page, "done");
     await page.locator(SETTINGS).click();
     await expect(page.locator(".settings__note")).toHaveText("Everything shown");
-    await page.keyboard.press("Escape");
+    await closeSettings(page);
   });
 
   test("hides finished work until asked, and says so in the settings", async ({ page }) => {
@@ -81,7 +88,7 @@ test.describe("the served store", () => {
     await page.locator(SETTINGS).click();
     // Relative to the repo root (VIEW-48), which is `packages/core/...` here and `e2e/...` in the public repo.
     await expect(page.locator(".settings__head")).toHaveText(new RegExp(`^${project.name} - (.+/)?e2e/fixture/demo\\.apm\\.yaml$`));
-    await page.keyboard.press("Escape");
+    await closeSettings(page);
     // Two projects are served, so the switcher is present and offers both (VIEW-4).
     await expect(page.locator(".project-fab")).toBeVisible();
     await expect(page.locator(".project-fab option")).toHaveCount(2);
@@ -161,7 +168,7 @@ test.describe("the served store", () => {
 
     await page.locator(SETTINGS).click();
     await expect(page.locator(".settings__note")).toHaveText(`${platItems} hidden by these filters`);
-    await page.keyboard.press("Escape");
+    await closeSettings(page);
     // Polled: the subtitle updates a frame before the re-layout drops the filtered cards.
     await expect.poll(() => page.locator(".item-node").count()).toBeLessThan(before);
   });
@@ -202,7 +209,7 @@ test.describe("the served store", () => {
     await settings(page, "done"); // back to the default, so both filters are in play
     await page.locator(SETTINGS).click();
     await page.getByRole("button", { name: "hide all" }).click();
-    await page.keyboard.press("Escape");
+    await closeSettings(page);
     const done = items.filter((item) => item.status === "done").length;
     const notice = page.locator(".graph__notice");
     // An item hidden twice counts under its status, so the two numbers add up to the whole plan.
@@ -312,7 +319,7 @@ test.describe("the served store", () => {
 
     await page.locator(SETTINGS).click();
     await expect(page.locator(".settings .chip", { hasText: "DATA" }).first().locator(".chip__name")).toHaveText("Storage");
-    await page.keyboard.press("Escape");
+    await closeSettings(page);
 
     await frame.click({ position: { x: 12, y: 12 } });
     await expect(page.locator('aside[aria-label="Area DATA"] .detail__title')).toHaveText("StorageDATA"); // the name, its key beside it

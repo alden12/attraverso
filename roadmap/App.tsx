@@ -222,13 +222,6 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
     window.addEventListener("keydown", open);
     return () => window.removeEventListener("keydown", open);
   }, []);
-  // Escape closes the view settings in the pane too (VIEW-73), as it closes their dialog on a phone.
-  useEffect(() => {
-    if (listShown !== "view") return;
-    const close = (event: KeyboardEvent) => event.key === "Escape" && setListShown(null);
-    window.addEventListener("keydown", close);
-    return () => window.removeEventListener("keydown", close);
-  }, [listShown]);
   useEffect(() => {
     if (menu === null) return;
     const close = (event: KeyboardEvent) => event.key === "Escape" && setMenu(null);
