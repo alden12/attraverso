@@ -100,9 +100,8 @@ const withBack = (link: HTMLAnchorElement, path: string): void => {
 };
 // Two branches meeting: the usual sign for a pull request.
 const HostTabIcon = () => icon(<><circle cx="6" cy="5" r="2" /><circle cx="6" cy="19" r="2" /><circle cx="18" cy="19" r="2" /><path d="M6 7v10M18 17V10a3 3 0 0 0-3-3h-4M13 5l-2 2 2 2" /></>);
-// Rows with a marker each, like Material's "view list": the agreed order.
-const NextIcon = () =>
-  icon(<><rect x="3" y="4.5" width="4" height="4" rx="1" /><rect x="3" y="10" width="4" height="4" rx="1" /><rect x="3" y="15.5" width="4" height="4" rx="1" /><path d="M10 6.5h11M10 12h11M10 17.5h11" /></>);
+// A framed list of three rows, a small cell and a long one each, like Material's "view list": the agreed order.
+const NextIcon = () => icon(<><rect x="3" y="4" width="18" height="16" rx="2.5" /><path d="M8.5 4v16M3 9.33h18M3 14.67h18" /></>);
 // A page with lines on it: the project's written context.
 const ContextIcon = () => icon(<><path d="M6 3h9l4 4v14H6z" /><path d="M15 3v4h4M9 12h7M9 16h7" /></>);
 const CaretIcon = () => icon(<path d="M6 9l6 6 6-6" />);
