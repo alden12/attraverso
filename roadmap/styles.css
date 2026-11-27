@@ -2290,3 +2290,108 @@ a.toolbtn {
   font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
 }
+
+/* The toolbar as a sidebar (VIEW-73) ------------------------------------------
+   On a wide screen (`data-sidebar`, set from App.tsx's narrow-screen line, so the two can't disagree) the bar runs down
+   the left: the project, then the views, the agreed order and context, search and the view settings, each a row with
+   its caption beside its icon, and the kebab last at the foot. The canvas keeps the whole height. */
+.app[data-sidebar="true"] {
+  flex-direction: row;
+}
+.app[data-sidebar="true"] > .body {
+  min-width: 0;
+}
+.app[data-sidebar="true"] .topbar {
+  flex: none;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 16px;
+  width: 188px;
+  padding: 12px 10px;
+  border-bottom: 0;
+  border-right: 1px solid var(--line);
+  /* Not scrolled: the dialogs open from it, out past its edge, which a scrolling box would clip. */
+}
+.app[data-sidebar="true"] .topbar__title {
+  flex: none;
+}
+/* The name and its file on two lines under the mark's row, since the column is too narrow for them beside it. */
+.app[data-sidebar="true"] .picker-wrap {
+  gap: 10px;
+}
+.app[data-sidebar="true"] .picker__logo {
+  width: 30px;
+  height: 30px;
+}
+.app[data-sidebar="true"] .filters {
+  flex: 1;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+}
+.app[data-sidebar="true"] .view-tabs {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 10px;
+}
+/* Each button a row: icon, caption, and a count or the filter's state at the far end. Borderless, lit by its
+   background, as a sidebar's rows are. */
+.app[data-sidebar="true"] .filters .toolbtn,
+.app[data-sidebar="true"] .view-tabs .toolbtn {
+  flex-direction: row;
+  justify-content: flex-start;
+  gap: 10px;
+  min-width: 0;
+  margin: 0;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 13px;
+}
+.app[data-sidebar="true"] .filters .toolbtn:hover:not(:disabled) {
+  background: var(--panel);
+}
+.app[data-sidebar="true"] .filters .toolbtn[data-on="true"] {
+  background: #263243;
+}
+.app[data-sidebar="true"] .filters .toolbtn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.app[data-sidebar="true"] .toolbtn__sub {
+  font-size: 13px;
+  color: var(--text);
+}
+/* "view" is the caption for the settings row, and its "all shown" or "3 hidden" goes to the far end like a count. */
+.app[data-sidebar="true"] .toolbtn__main .toolbtn__text {
+  font-size: 13px;
+}
+.app[data-sidebar="true"] .toolbtn__main:has(.toolbtn__text) + .toolbtn__sub,
+.app[data-sidebar="true"] .toolbtn__count {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.app[data-sidebar="true"] .toolbtn__badge {
+  display: none;
+}
+/* The kebab at the foot of the column, as a row like the rest. */
+.app[data-sidebar="true"] .filters .toolbtn--icon {
+  margin-top: auto;
+  align-self: flex-start;
+}
+/* The dialogs open beside the sidebar rather than below it, at its top. */
+.app[data-sidebar="true"] .settings {
+  top: 12px;
+  right: auto;
+  left: calc(100% + 8px);
+}
+.toolbtn__count {
+  display: none;
+}
+.app[data-sidebar="true"] .toolbtn__count {
+  display: inline;
+}

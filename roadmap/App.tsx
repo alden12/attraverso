@@ -100,6 +100,10 @@ const withBack = (link: HTMLAnchorElement, path: string): void => {
 };
 // Two branches meeting: the usual sign for a pull request.
 const HostTabIcon = () => icon(<><circle cx="6" cy="5" r="2" /><circle cx="6" cy="19" r="2" /><circle cx="18" cy="19" r="2" /><path d="M6 7v10M18 17V10a3 3 0 0 0-3-3h-4M13 5l-2 2 2 2" /></>);
+// A numbered list: the agreed order.
+const NextIcon = () => icon(<><path d="M10 6h10M10 12h10M10 18h10" /><path d="M4 5l1.5-1v5M4 12h2.5L4 15h2.5M4 17.5h2.5l-1.2 1.2a1.2 1.2 0 1 1-1.3 1.6" /></>);
+// A page with lines on it: the project's written context.
+const ContextIcon = () => icon(<><path d="M6 3h9l4 4v14H6z" /><path d="M15 3v4h4M9 12h7M9 16h7" /></>);
 const SearchIcon = () => icon(<><circle cx="11" cy="11" r="6.5" /><path d="M20 20l-4.2-4.2" /></>);
 // Four arrows out from the middle: the usual sign for "move".
 const MoveIcon = () =>
@@ -321,7 +325,14 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
   // The minimap is a help on a big screen and a quarter of a small one, so it starts hidden on a narrow one, and
   // the choice is remembered - **separately for each**. One shared choice meant hiding it on a phone-sized
   // window hid it on the desktop too, since every tab of the viewer shares one browser's storage.
-  const narrow = isNarrowScreen();
+  // Watched rather than read once, since the toolbar's place follows it (a sidebar on a wide screen, VIEW-73), and a
+  // window resized past the line should move it there and back.
+  const [narrow, setNarrow] = useState(isNarrowScreen);
+  useEffect(() => {
+    const onResize = () => setNarrow(isNarrowScreen());
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
   const [minimap, setMinimap] = usePreference<"shown" | "hidden">(
     narrow ? "attraverso.minimap.narrow" : "attraverso.minimap.wide",
     narrow ? "hidden" : "shown",
@@ -897,7 +908,9 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
   );
 
   return (
-    <div className="app">
+    // On a wide screen the toolbar is a sidebar down the left (VIEW-73), holding the agreed order and the context
+    // sections too, so the canvas is left to the graph; a phone keeps the bar across the top.
+    <div className="app" data-sidebar={!narrow}>
       <header className="topbar">
         <div className="topbar__title">
           {/* The switcher takes the title's place rather than sitting beside it, since both would be saying the
@@ -996,6 +1009,38 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
               </a>
             ))}
           </div>
+          {/* The agreed order and the context sections, in the sidebar on a wide screen (VIEW-73) rather than floating over
+              the canvas, so they are in the same place in every view. Both open in the right-hand pane. */}
+          {!narrow && project !== null && (
+            <>
+              <button
+                className="toolbtn"
+                data-on={listPane === "next"}
+                disabled={next.length === 0}
+                title="The order agreed with set_next"
+                onClick={() => (listPane === "next" ? setListShown(null) : openList("next"))}
+              >
+                <span className="toolbtn__main">
+                  <NextIcon />
+                </span>
+                <span className="toolbtn__sub">next</span>
+                <span className="toolbtn__count">{next.length}</span>
+              </button>
+              <button
+                className="toolbtn"
+                data-on={contextView !== null}
+                disabled={project.context.length === 0}
+                title="The project's context sections: what it is, and how it is worked on"
+                onClick={() => (contextView === null ? openContext(null) : setContextView(null))}
+              >
+                <span className="toolbtn__main">
+                  <ContextIcon />
+                </span>
+                <span className="toolbtn__sub">context</span>
+                <span className="toolbtn__count">{project.context.length}</span>
+              </button>
+            </>
+          )}
           {/* An optional package's tab on a wide screen: its page in the pane, beside whichever view is showing, so it
               toggles like search rather than replacing the view. */}
           {!narrow && (hostTabs ?? []).map((tab) => {
@@ -1320,10 +1365,11 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
           {/* The floating controls at the canvas's top left, in one row: the agreed order, and beside it the
               project's context sections (VIEW-30), which open in the right-hand pane rather than here, since a
               section is too long to read in a panel this size. */}
-          {/* Not on the board, which has the agreed order as a lane of its own and these two in its corner. */}
+          {/* Not on the board, which has the agreed order as a lane of its own and these two in its corner. On a wide
+              screen the agreed order and context are in the sidebar instead, leaving move mode here. */}
           {view === "graph" && project !== null && (
           <div className="fabs">
-          {next.length > 0 && (
+          {narrow && next.length > 0 && (
             <button
               className="next-fab"
               data-on={listPane === "next"}
@@ -1333,7 +1379,7 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
               Next<span className="chip__count">{next.length}</span>
             </button>
           )}
-          {contextFab}
+          {narrow && contextFab}
           {/* Move mode (VIEW-54): the only time cards and boxes drag or resize. */}
           {view === "graph" && (
           <button
@@ -1351,7 +1397,7 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
           )}
           {view === "board" && project !== null ? (
             <Board
-              corner={contextFab}
+              corner={narrow ? contextFab : undefined}
               group={boardGroup}
               items={visibleItems}
               areas={areas}
