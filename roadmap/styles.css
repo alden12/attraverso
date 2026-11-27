@@ -2337,15 +2337,17 @@ a.toolbtn {
   align-items: center;
   gap: 4px;
 }
+/* A rule between search and the views, which are the sidebar's sections. */
 .app[data-sidebar="true"] .view-tabs {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding-bottom: 10px;
-  margin-bottom: 6px;
-  border-bottom: 1px solid var(--line);
+  padding-top: 10px;
+  margin-top: 6px;
+  border-top: 1px solid var(--line);
 }
 .app[data-sidebar="true"] .filters .toolbtn,
+.app[data-sidebar="true"] .rail-foot .toolbtn,
 .app[data-sidebar="true"] .view-tabs .toolbtn {
   position: relative;
   gap: 3px;
@@ -2402,10 +2404,13 @@ a.toolbtn {
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
-/* The settings gear at the foot of the rail. */
-.app[data-sidebar="true"] .filters .toolbtn--settings {
+/* Next, context and the settings gear at the foot of the rail. */
+.app[data-sidebar="true"] .rail-foot {
   margin-top: auto;
-  align-self: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
 }
 /* The dialogs open beside the rail rather than below it, at its top. */
 .app[data-sidebar="true"] .settings {

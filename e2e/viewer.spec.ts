@@ -390,12 +390,12 @@ test.describe("several projects in one store", () => {
     await page.getByRole("button", { name: "Back to Next" }).click();
     await expect(list.locator(".next__item")).toHaveCount(2);
 
-    // Dismissible, leaving the floating button with the count, so closing it does not hide that an order exists,
-    // and the button opens it again.
+    // Dismissible, leaving the sidebar's button with the count (VIEW-73), so closing it does not hide that an order
+    // exists, and the button opens it again.
     await list.getByRole("button", { name: "Close" }).click();
     await expect(list).toHaveCount(0);
-    await expect(page.locator(".next-fab", { hasText: "Next" })).toContainText("2");
-    await page.locator(".next-fab", { hasText: "Next" }).click();
+    await expect(page.locator(".topbar .toolbtn", { hasText: "next" })).toContainText("2");
+    await page.locator(".topbar .toolbtn", { hasText: "next" }).click();
     await expect(list.locator(".next__item")).toHaveCount(2);
   });
 
@@ -429,9 +429,9 @@ test.describe("several projects in one store", () => {
     const board = page.getByRole("grid", { name: "Board" });
     // The corner holds the project switcher on a wide screen (VIEW-73), with no context sections here to sit beside it.
     await expect(board.getByRole("columnheader")).toHaveText(["AI PM", /planning/i, /to-do/i, /in-progress/i, /review/i]);
-    // The board has the agreed order as a lane, so neither the pane nor its button repeats it there.
+    // The board has the agreed order as a lane, so the pane doesn't open to repeat it there (the sidebar's button
+    // stays, the same in every view).
     await expect(page.locator('aside.detail[aria-label="Next"]')).toHaveCount(0);
-    await expect(page.locator(".next-fab", { hasText: "Next" })).toHaveCount(0);
     // The agreed order's own lane first, then the areas in the plan's order, as the graph has them.
     const heads = board.getByRole("rowheader");
     await expect(heads.locator(".board__lane-name")).toHaveText([/Next/, /MCP/, /DATA/]);
@@ -534,13 +534,13 @@ test.describe("several projects in one store", () => {
     await expect(page.locator(".metrics__table")).toHaveCount(1);
   });
 
-  test("shows no panel and no button when nobody has recorded an order", async ({ page }) => {
+  test("shows no panel, and its button disabled, when nobody has recorded an order", async ({ page }) => {
     // The state this project is in right now, which is exactly why the test above cannot use the live store.
     // The shared fixture holds two projects and no `next`, so the hash picks one and the panel has nothing.
     await page.goto("/#apm");
     await expect(page.locator(".react-flow__node").first()).toBeVisible();
     await expect(page.locator('aside.detail[aria-label="Next"]')).toHaveCount(0);
-    await expect(page.locator(".next-fab", { hasText: "Next" })).toHaveCount(0);
+    await expect(page.locator(".topbar .toolbtn", { hasText: "next" })).toBeDisabled();
   });
 
   test("opens the first project when none is named, and offers the others (VIEW-31)", async ({ page }) => {
@@ -1012,7 +1012,7 @@ test.describe("the project's context sections (VIEW-30)", () => {
     await expect(page.locator(".react-flow__node").first()).toBeVisible();
   });
 
-  const button = (page: Page) => page.locator(".next-fab", { hasText: "Context" });
+  const button = (page: Page) => page.locator(".topbar .toolbtn", { hasText: "context" });
   const pane = (page: Page) => page.locator('aside.detail[aria-label="Context"]');
 
   test("lists the headings, protocol first, and opens one in the pane with a link to it", async ({ page }) => {

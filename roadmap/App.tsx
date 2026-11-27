@@ -100,6 +100,10 @@ const withBack = (link: HTMLAnchorElement, path: string): void => {
 };
 // Two branches meeting: the usual sign for a pull request.
 const HostTabIcon = () => icon(<><circle cx="6" cy="5" r="2" /><circle cx="6" cy="19" r="2" /><circle cx="18" cy="19" r="2" /><path d="M6 7v10M18 17V10a3 3 0 0 0-3-3h-4M13 5l-2 2 2 2" /></>);
+// A numbered list: the agreed order.
+const NextIcon = () => icon(<><path d="M10 6h10M10 12h10M10 18h10" /><path d="M4 5l1.5-1v5M4 12h2.5L4 15h2.5M4 17.5h2.5l-1.2 1.2a1.2 1.2 0 1 1-1.3 1.6" /></>);
+// A page with lines on it: the project's written context.
+const ContextIcon = () => icon(<><path d="M6 3h9l4 4v14H6z" /><path d="M15 3v4h4M9 12h7M9 16h7" /></>);
 const CaretIcon = () => icon(<path d="M6 9l6 6 6-6" />);
 // A cog: every setting, at the sidebar's foot. Feather's "settings" icon (MIT).
 const GearIcon = () =>
@@ -1313,21 +1317,52 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
           </button>
             </>
           )}
-          {/* On a wide screen one gear at the sidebar's foot (VIEW-73) opens every setting in the right-hand pane, like
-              search and the next list: what is shown first, what is set rarely below it. */}
+          {/* The sidebar's foot on a wide screen (VIEW-73): the agreed order and the context sections, which open in the
+              right-hand pane, and one gear for every setting, opening there too (what is shown first, what is set
+              rarely below it). The canvas keeps only the project switcher and Move. */}
           {!narrow && (
-            <button
-              className="toolbtn toolbtn--settings"
-              data-on={listPane === "view"}
-              aria-label="Settings"
-              title="Settings"
-              onClick={() => (listPane === "view" ? setListShown(null) : openList("view"))}
-            >
-              <span className="toolbtn__main">
-                <GearIcon />
-              </span>
-              <span className="toolbtn__sub">settings</span>
-            </button>
+            <div className="rail-foot">
+              <button
+                className="toolbtn"
+                data-on={listPane === "next"}
+                disabled={next.length === 0}
+                title="The order agreed with set_next"
+                onClick={() => (listPane === "next" ? setListShown(null) : openList("next"))}
+              >
+                <span className="toolbtn__main">
+                  <NextIcon />
+                </span>
+                <span className="toolbtn__sub">next</span>
+                {next.length > 0 && <span className="toolbtn__badge">{next.length}</span>}
+              </button>
+              <button
+                className="toolbtn"
+                data-on={contextView !== null}
+                disabled={project === null || project.context.length === 0}
+                title="The project's context sections: what it is, and how it is worked on"
+                onClick={() => (contextView === null ? openContext(null) : setContextView(null))}
+              >
+                <span className="toolbtn__main">
+                  <ContextIcon />
+                </span>
+                <span className="toolbtn__sub">context</span>
+                {project !== null && project.context.length > 0 && (
+                  <span className="toolbtn__badge">{project.context.length}</span>
+                )}
+              </button>
+              <button
+                className="toolbtn"
+                data-on={listPane === "view"}
+                aria-label="Settings"
+                title="Settings"
+                onClick={() => (listPane === "view" ? setListShown(null) : openList("view"))}
+              >
+                <span className="toolbtn__main">
+                  <GearIcon />
+                </span>
+                <span className="toolbtn__sub">settings</span>
+              </button>
+            </div>
           )}
         </div>
         {settingsOpen && narrow && (
@@ -1426,7 +1461,7 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
           {view === "graph" && (project !== null || projectFab) && (
           <div className="fabs">
           {projectFab}
-          {next.length > 0 && (
+          {narrow && next.length > 0 && (
             <button
               className="next-fab"
               data-on={listPane === "next"}
@@ -1436,7 +1471,7 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
               Next<span className="chip__count">{next.length}</span>
             </button>
           )}
-          {contextFab}
+          {narrow && contextFab}
           {/* Move mode (VIEW-54): the only time cards and boxes drag or resize. */}
           {project !== null && (
           <button
@@ -1457,7 +1492,7 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
               corner={
                 <>
                   {projectFab}
-                  {contextFab}
+                  {narrow && contextFab}
                 </>
               }
               group={boardGroup}
