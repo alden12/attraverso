@@ -918,7 +918,7 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
               chosen - landing on the root of a multi-project store is exactly when you need it (VIEW-4). */}
           {/* The mark sits in the name's row rather than in a corner of its own spanning the subtitle too: on a phone
               the toolbar has no width to spare for a mark that tall. */}
-          <span className="picker-wrap">
+          <span className="picker-wrap" title={project?.name ?? "no project"}>
           <Logo className="picker__logo" crop="icon" />
           {/* The name reads as a title, and shows it is a switcher only when hovered, with the plan file as a faint
               caption after it: "which file is this?" is occasional, so it gets a whisper rather than a line. Absent
