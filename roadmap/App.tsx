@@ -100,8 +100,9 @@ const withBack = (link: HTMLAnchorElement, path: string): void => {
 };
 // Two branches meeting: the usual sign for a pull request.
 const HostTabIcon = () => icon(<><circle cx="6" cy="5" r="2" /><circle cx="6" cy="19" r="2" /><circle cx="18" cy="19" r="2" /><path d="M6 7v10M18 17V10a3 3 0 0 0-3-3h-4M13 5l-2 2 2 2" /></>);
-// A numbered list: the agreed order.
-const NextIcon = () => icon(<><path d="M10 6h10M10 12h10M10 18h10" /><path d="M4 5l1.5-1v5M4 12h2.5L4 15h2.5M4 17.5h2.5l-1.2 1.2a1.2 1.2 0 1 1-1.3 1.6" /></>);
+// Rows with a marker each, like Material's "view list": the agreed order.
+const NextIcon = () =>
+  icon(<><rect x="3" y="4.5" width="4" height="4" rx="1" /><rect x="3" y="10" width="4" height="4" rx="1" /><rect x="3" y="15.5" width="4" height="4" rx="1" /><path d="M10 6.5h11M10 12h11M10 17.5h11" /></>);
 // A page with lines on it: the project's written context.
 const ContextIcon = () => icon(<><path d="M6 3h9l4 4v14H6z" /><path d="M15 3v4h4M9 12h7M9 16h7" /></>);
 const CaretIcon = () => icon(<path d="M6 9l6 6 6-6" />);
@@ -1319,7 +1320,8 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
           )}
           {/* The sidebar's foot on a wide screen (VIEW-73): the agreed order and the context sections, which open in the
               right-hand pane, and one gear for every setting, opening there too (what is shown first, what is set
-              rarely below it). The canvas keeps only the project switcher and Move. */}
+              rarely below it). The canvas keeps only the project switcher. Next and context carry no counts, which cluttered
+              the rail; they are disabled when empty. */}
           {!narrow && (
             <div className="rail-foot">
               <button
@@ -1333,7 +1335,6 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
                   <NextIcon />
                 </span>
                 <span className="toolbtn__sub">next</span>
-                {next.length > 0 && <span className="toolbtn__badge">{next.length}</span>}
               </button>
               <button
                 className="toolbtn"
@@ -1346,9 +1347,6 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
                   <ContextIcon />
                 </span>
                 <span className="toolbtn__sub">context</span>
-                {project !== null && project.context.length > 0 && (
-                  <span className="toolbtn__badge">{project.context.length}</span>
-                )}
               </button>
               <button
                 className="toolbtn"
@@ -1472,19 +1470,6 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
             </button>
           )}
           {narrow && contextFab}
-          {/* Move mode (VIEW-54): the only time cards and boxes drag or resize. */}
-          {project !== null && (
-          <button
-            className="next-fab"
-            data-on={moving}
-            aria-pressed={moving}
-            title={moving ? "Done moving (Esc)" : "Move and resize cards and areas"}
-            onClick={() => setMoving(!moving)}
-          >
-            <MoveIcon />
-            {moving ? "Done" : "Move"}
-          </button>
-          )}
           </div>
           )}
           {view === "board" && project !== null ? (
@@ -1592,6 +1577,16 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
                     aria-label={minimap === "shown" ? "Hide the minimap" : "Show the minimap"}
                   >
                     <MapIcon />
+                  </ControlButton>
+                  {/* Move mode (VIEW-54), the only time cards and boxes drag or resize: with the other ways of handling
+                      the map rather than floating over it (VIEW-73). Lit while on. */}
+                  <ControlButton
+                    onClick={() => setMoving(!moving)}
+                    title={moving ? "Done moving (Esc)" : "Move and resize cards and areas"}
+                    aria-label="Move"
+                    aria-pressed={moving}
+                  >
+                    <MoveIcon />
                   </ControlButton>
                 </Controls>
               </ReactFlow>

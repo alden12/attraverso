@@ -394,7 +394,7 @@ test.describe("several projects in one store", () => {
     // exists, and the button opens it again.
     await list.getByRole("button", { name: "Close" }).click();
     await expect(list).toHaveCount(0);
-    await expect(page.locator(".topbar .toolbtn", { hasText: "next" })).toContainText("2");
+    await expect(page.locator(".topbar .toolbtn", { hasText: "next" })).toBeEnabled();
     await page.locator(".topbar .toolbtn", { hasText: "next" }).click();
     await expect(list.locator(".next__item")).toHaveCount(2);
   });
@@ -1016,7 +1016,7 @@ test.describe("the project's context sections (VIEW-30)", () => {
   const pane = (page: Page) => page.locator('aside.detail[aria-label="Context"]');
 
   test("lists the headings, protocol first, and opens one in the pane with a link to it", async ({ page }) => {
-    await expect(button(page)).toContainText("2");
+    await expect(button(page)).toBeEnabled();
     await button(page).click();
     await expect(pane(page).locator(".context__item")).toHaveText(["protocol", "Goals"]);
 
