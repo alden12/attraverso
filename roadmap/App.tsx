@@ -1177,7 +1177,8 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
               chosen option's text, so the caption could not sit inside it; replacing it with a custom dropdown would
               lose the phone's own picker, the keyboard and the screen reader for the sake of one caption. Clicking
               lands on the select, which opens the browser's own list, and the <label> is what ties the two. */}
-          {(() => {
+          {/* On a wide screen the logo stands alone (VIEW-73): the project switcher is the pill over each view. */}
+          {narrow && (() => {
             // The project's own plan file, relative to its repo (VIEW-48): a split plan has two, which the
             // basename alone named identically. An older server sends no map, so fall back to the basename.
             const file = project?.file ?? (plan.storePath === null ? null : plan.storePath.split(",")[0]!.split("/").pop()!);
