@@ -1324,6 +1324,8 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
               the rail; they are disabled when empty. */}
           {!narrow && (
             <div className="rail-foot">
+              {/* Not on the board, which has the agreed order as a lane of its own. */}
+              {view !== "board" && (
               <button
                 className="toolbtn"
                 data-on={listPane === "next"}
@@ -1336,6 +1338,7 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
                 </span>
                 <span className="toolbtn__sub">next</span>
               </button>
+              )}
               <button
                 className="toolbtn"
                 data-on={contextView !== null}
@@ -1513,8 +1516,9 @@ export function App({ plan, selection, focus, reload }: { plan: Plan; selection:
               }
               dates={calendarDates}
               onDates={setCalendarDates}
+              // The calendar's own Next button only on a phone: a wide screen has it in the sidebar (VIEW-73).
               nextList={
-                next.length === 0
+                next.length === 0 || !narrow
                   ? undefined
                   : { count: next.length, open: listPane === "next", toggle: () => (listPane === "next" ? setListShown(null) : openList("next")) }
               }

@@ -429,9 +429,9 @@ test.describe("several projects in one store", () => {
     const board = page.getByRole("grid", { name: "Board" });
     // The corner holds the project switcher on a wide screen (VIEW-73), with no context sections here to sit beside it.
     await expect(board.getByRole("columnheader")).toHaveText(["AI PM", /planning/i, /to-do/i, /in-progress/i, /review/i]);
-    // The board has the agreed order as a lane, so the pane doesn't open to repeat it there (the sidebar's button
-    // stays, the same in every view).
+    // The board has the agreed order as a lane, so neither the pane nor the sidebar's button repeats it there.
     await expect(page.locator('aside.detail[aria-label="Next"]')).toHaveCount(0);
+    await expect(page.locator(".topbar .toolbtn", { hasText: "next" })).toHaveCount(0);
     // The agreed order's own lane first, then the areas in the plan's order, as the graph has them.
     const heads = board.getByRole("rowheader");
     await expect(heads.locator(".board__lane-name")).toHaveText([/Next/, /MCP/, /DATA/]);
